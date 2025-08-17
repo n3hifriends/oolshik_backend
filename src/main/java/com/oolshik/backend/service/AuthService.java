@@ -6,6 +6,7 @@ import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtService;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
 @Service
+@DependsOn("entityManagerFactory")
 public class AuthService implements UserDetailsService {
 
     private final UserRepository userRepository;
