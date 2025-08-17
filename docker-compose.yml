@@ -24,6 +24,12 @@ services:
       ADMIN_EMAIL: admin@oolshik.app
       ADMIN_PASSWORD: Admin@123
       SPRING_PROFILES_ACTIVE: dev
+      # turn ON flyway
+      SPRING_FLYWAY_ENABLED: true
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: true
+      SPRING_FLYWAY_BASELINE_VERSION: 1
+      # hibernate: validate schema only
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
     ports:
       - "8080:8080"
     depends_on:
