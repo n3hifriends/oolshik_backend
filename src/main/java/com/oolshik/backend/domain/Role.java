@@ -1,0 +1,1 @@
+package com.oolshik.backend.domain; public enum Role { NETA, KARYAKARTA, ADMIN }

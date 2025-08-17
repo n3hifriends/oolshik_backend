@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: oolshik-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}
+    username: ${DB_USER:oolshik}
+    password: ${DB_PASSWORD:oolshik}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:CHANGEME_DEV_SECRET_32_CHARS_MINIMUM________}
+    accessTokenTtlMinutes: 60
+    refreshTokenTtlDays: 14
+  otp:
+    ttlSeconds: 300
+    cooldownSeconds: 30
+    maxAttempts: 5
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO

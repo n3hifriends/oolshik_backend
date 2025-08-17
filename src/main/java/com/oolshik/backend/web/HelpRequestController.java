@@ -1,0 +1,76 @@
+package com.oolshik.backend.web;
+
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/requests")
+public class HelpRequestController {
+
+    private final HelpRequestService service;
+    private final UserRepository userRepo;
+
+    public HelpRequestController(HelpRequestService service, UserRepository userRepo) {
+        this.service = service;
+        this.userRepo = userRepo;
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(@AuthenticationPrincipal User principal, @RequestBody @Valid CreateRequest req) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        HelpRequestEntity created = service.create(
+                requester.getId(),
+                req.title(), req.description(),
+                req.latitude(), req.longitude(),
+                req.radiusMeters()
+        );
+        return ResponseEntity.ok(view(created));
+    }
+
+    @GetMapping("/nearby")
+    public ResponseEntity<?> nearby(@RequestParam double lat, @RequestParam double lon, @RequestParam int radiusMeters) {
+        List<HelpRequestView> out = service.findNearby(lat, lon, radiusMeters).stream().map(this::view).toList();
+        return ResponseEntity.ok(out);
+    }
+
+    @PostMapping("/{id}/accept")
+    public ResponseEntity<?> accept(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var helper = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.accept(id, helper.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<?> complete(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.complete(id, requester.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.cancel(id, requester.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    private HelpRequestView view(HelpRequestEntity e) {
+        return new HelpRequestView(
+                e.getId(), e.getTitle(), e.getDescription(),
+                e.getLatitude(), e.getLongitude(),
+                e.getRadiusMeters(), e.getStatus(),
+                e.getRequesterId(), e.getHelperId(),
+                e.getCreatedAt()
+        );
+    }
+}
