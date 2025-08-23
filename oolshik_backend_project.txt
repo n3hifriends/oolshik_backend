@@ -1501,11 +1501,11 @@ public class HelpRequestController {
     public ResponseEntity<?> nearby(
         @RequestParam double lat,
         @RequestParam double lng,
-        @RequestParam double radiusKm) {
+        @RequestParam double radiusMeters) {
 
-        log.info("GET /nearby lat={} lng={} radiusKm={}", lat, lng, radiusKm);
+        log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
         try {
-        var list = service.findNearby(lat, lng, radiusKm);
+        var list = service.findNearby(lat, lng, radiusMeters);
         return ResponseEntity.ok(list);   // [] if none
         } catch (Exception e) {
         log.error("nearby failed", e);    // prints full stack to logs
@@ -1651,10 +1651,10 @@ public class HelpRequestService {
         return repo.save(e);
     }
 
-    public List<HelpRequestEntity> findNearby(double lat, double lng, double radiusKm) {
+    public List<HelpRequestEntity> findNearby(double lat, double lng, double radiusMeters) {
         // guard bad inputs
-        if (radiusKm <= 0) return List.of();
-        return repo.findNearby(lat, lng, radiusKm);
+        if (radiusMeters <= 0) return List.of();
+        return repo.findNearby(lat, lng, radiusMeters);
     }
 
     @Transactional
@@ -2015,7 +2015,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
                 sin(radians(:lat)) * sin(radians(h.latitude))
               , -1), 1)
             )
-          ) <= :radiusKm
+          ) <= :radiusMeters
         ORDER BY
           (6371 * acos(
             LEAST(GREATEST(
@@ -2029,6 +2029,6 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
   List<HelpRequestEntity> findNearby(
       @Param("lat") double lat,
       @Param("lng") double lng,
-      @Param("radiusKm") double radiusKm);
+      @Param("radiusMeters") double radiusMeters);
 }
 ===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRepository.java =====

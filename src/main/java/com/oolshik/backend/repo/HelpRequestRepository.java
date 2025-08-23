@@ -11,31 +11,33 @@ import java.util.UUID;
 public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
 
   @Query(
-      value = """
-        SELECT h.*
-        FROM help_request h
-        WHERE h.status = 'OPEN'
-          AND (
-            6371 * acos(
-              LEAST(GREATEST(
-                cos(radians(:lat)) * cos(radians(h.latitude)) *
-                cos(radians(h.longitude) - radians(:lng)) +
-                sin(radians(:lat)) * sin(radians(h.latitude))
-              , -1), 1)
-            )
-          ) <= :radiusKm
-        ORDER BY
-          (6371 * acos(
+    value = """
+      SELECT h.*
+      FROM help_request h
+      WHERE h.status = 'OPEN'
+        AND (
+          6371 * acos(
             LEAST(GREATEST(
               cos(radians(:lat)) * cos(radians(h.latitude)) *
               cos(radians(h.longitude) - radians(:lng)) +
               sin(radians(:lat)) * sin(radians(h.latitude))
             , -1), 1)
-          )) ASC
-        """,
-      nativeQuery = true)
+          )
+        ) <= (:radiusMeters / 1000.0)  -- ✅ convert meters → km
+      ORDER BY
+        (6371 * acos(
+          LEAST(GREATEST(
+            cos(radians(:lat)) * cos(radians(h.latitude)) *
+            cos(radians(h.longitude) - radians(:lng)) +
+            sin(radians(:lat)) * sin(radians(h.latitude))
+          , -1), 1)
+        )) ASC
+      """,
+    nativeQuery = true
+  )
   List<HelpRequestEntity> findNearby(
       @Param("lat") double lat,
       @Param("lng") double lng,
-      @Param("radiusKm") double radiusKm);
+      @Param("radiusMeters") int radiusMeters
+  );
 }

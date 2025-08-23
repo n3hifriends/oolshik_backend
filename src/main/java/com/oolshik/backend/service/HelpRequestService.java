@@ -35,10 +35,10 @@ public class HelpRequestService {
         return repo.save(e);
     }
 
-    public List<HelpRequestEntity> findNearby(double lat, double lng, double radiusKm) {
+    public List<HelpRequestEntity> findNearby(double lat, double lng, int radiusMeters) {
         // guard bad inputs
-        if (radiusKm <= 0) return List.of();
-        return repo.findNearby(lat, lng, radiusKm);
+        if (radiusMeters <= 0) return List.of();
+        return repo.findNearby(lat, lng, radiusMeters);
     }
 
     @Transactional

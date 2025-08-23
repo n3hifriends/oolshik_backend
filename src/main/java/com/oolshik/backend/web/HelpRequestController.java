@@ -11,12 +11,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/requests")
-@RequiredArgsConstructor
-@Slf4j
 public class HelpRequestController {
 
     private final HelpRequestService service;
@@ -44,14 +43,14 @@ public class HelpRequestController {
     public ResponseEntity<?> nearby(
         @RequestParam double lat,
         @RequestParam double lng,
-        @RequestParam double radiusKm) {
+        @RequestParam int radiusMeters) {
 
-        log.info("GET /nearby lat={} lng={} radiusKm={}", lat, lng, radiusKm);
+        // log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
         try {
-        var list = service.findNearby(lat, lng, radiusKm);
+        var list = service.findNearby(lat, lng, radiusMeters);
         return ResponseEntity.ok(list);   // [] if none
         } catch (Exception e) {
-        log.error("nearby failed", e);    // prints full stack to logs
+        // log.error("nearby failed", e);    // prints full stack to logs
         return ResponseEntity.status(500).body(Map.of("error", "internal_error"));
         }
     }
