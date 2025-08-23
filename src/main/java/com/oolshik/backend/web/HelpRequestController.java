@@ -6,6 +6,9 @@ import com.oolshik.backend.service.HelpRequestService;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
@@ -38,21 +41,27 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(created));
     }
 
+    // @GetMapping("/nearby")
+    // public ResponseEntity<Page<HelpRequestView>> nearby(
+    //     @RequestParam double lat,
+    //     @RequestParam double lng,
+    //     @RequestParam int radiusMeters,
+    //     @RequestParam(required = false, name = "statuses") List<String> statuses,
+    //     @PageableDefault(size = 50) Pageable pageable
+    // ) {
+    //     Page<HelpRequestEntity> page = service.nearby(lat, lng, radiusMeters, statuses, pageable);
+    //     return ResponseEntity.ok(page.map(this::view));
+    // }
 
     @GetMapping("/nearby")
-    public ResponseEntity<?> nearby(
+    public Page<HelpRequestEntity> nearby(
         @RequestParam double lat,
         @RequestParam double lng,
-        @RequestParam int radiusMeters) {
-
-        // log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
-        try {
-        var list = service.findNearby(lat, lng, radiusMeters);
-        return ResponseEntity.ok(list);   // [] if none
-        } catch (Exception e) {
-        // log.error("nearby failed", e);    // prints full stack to logs
-        return ResponseEntity.status(500).body(Map.of("error", "internal_error"));
-        }
+        @RequestParam int radiusMeters,
+        @RequestParam(required = false) List<String> statuses,
+        @PageableDefault(size = 50) Pageable pageable
+    ) {
+        return service.nearby(lat, lng, radiusMeters, statuses, pageable);
     }
 
     @PostMapping("/{id}/accept")
