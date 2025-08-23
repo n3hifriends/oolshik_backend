@@ -1,0 +1,2035 @@
+# Consolidated source export
+# Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
+# Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
+# Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
+# Git ignored entries skipped: 45 (if repo)
+# ---
+
+
+
+===== BEGIN FILE: flatten_code.py =====
+#!/usr/bin/env python3
+"""
+flatten_code.py — Walk a project directory and concatenate selected source files
+into a single text document with clear file headers/footers.
+
+NEW: Respects .gitignore WITHOUT extra dependencies by using the local `git` CLI.
+- If the directory is a Git repo and `git` is available, ignored files are skipped
+  using: git ls-files --ignored --exclude-standard --others -z
+- Tracked files are always included (even if patterns match .gitignore).
+- If not a Git repo (or git missing), falls back to exclude list only.
+
+Usage examples:
+  python flatten_code.py --root . --output project-code.txt
+  python flatten_code.py --root /path/to/repo --output all.txt --ext ".js,.ts,.tsx,.java,.kt,.py" --exclude ".git,node_modules,dist,build" --max-bytes 1048576
+"""
+import argparse, os, sys, subprocess, shutil
+from pathlib import Path
+
+DEFAULT_EXTS = [
+    ".js",".jsx",".ts",".tsx",".mjs",".cjs",
+    ".json",".jsonc",
+    ".py",
+    ".java",".kt",".kts",".gradle",".groovy",
+    ".rb",".go",".php",".swift",".m",".mm",".c",".h",".cpp",".hpp",
+    ".rs",".dart",".lua",
+    ".xml",".html",".htm",".css",".scss",".less",
+    ".yml",".yaml",".ini",".cfg",".conf",".properties",".env",
+    ".md",".mdx",".txt",
+    ".sh",".bash",".zsh",".ps1",".bat",
+    ".sql",".proto",
+    ".gitignore",".gitattributes",".editorconfig"
+]
+
+DEFAULT_EXCLUDES = [
+    ".git","node_modules","dist","build",".next",".expo",".idea",".vscode",
+    ".venv","venv","Pods","ios/build","android/build","coverage",".gradle"
+]
+
+def should_skip_dir(dirpath, excludes_set):
+    parts = Path(dirpath).parts
+    for token in excludes_set:
+        token_parts = Path(token).parts
+        if len(token_parts) > 1:
+            if tuple(token_parts) == tuple(parts[-len(token_parts):]):
+                return True
+        else:
+            if token in parts:
+                return True
+    return False
+
+def get_git_ignored(root: Path):
+    """
+    Return a set of POSIX-style relative paths that are ignored by git.
+    Uses: git ls-files --ignored --exclude-standard --others -z
+    Only returns files that are ignored AND untracked; tracked files won't appear here.
+    """
+    if not (root / ".git").exists():
+        return set()
+    if shutil.which("git") is None:
+        return set()
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files", "--ignored", "--exclude-standard", "--others", "-z"],
+            cwd=str(root)
+        )
+        items = out.decode("utf-8", errors="replace").split("\x00")
+        rels = [i for i in items if i]
+        # Normalize to POSIX-style
+        return set(Path(r).as_posix() for r in rels)
+    except Exception:
+        return set()
+
+def iter_files(root, exts_set, excludes_set, max_bytes, ignored_set):
+    root = Path(root).resolve()
+    for dirpath, dirnames, filenames in os.walk(root):
+        # prune disallowed dirs
+        pruned = []
+        for d in list(dirnames):
+            full = Path(dirpath) / d
+            if should_skip_dir(full, excludes_set):
+                pruned.append(d)
+        for d in pruned:
+            dirnames.remove(d)
+
+        for name in filenames:
+            p = Path(dirpath) / name
+            rel_posix = p.resolve().relative_to(root).as_posix()
+
+            # Skip git-ignored files if we have that info
+            if rel_posix in ignored_set:
+                continue
+
+            if exts_set and p.suffix.lower() not in exts_set and name not in exts_set:
+                continue
+            try:
+                if max_bytes and p.stat().st_size > max_bytes:
+                    continue
+            except OSError:
+                continue
+            yield p
+
+def main():
+    ap = argparse.ArgumentParser(description="Concatenate source files into a single doc with headers, honoring .gitignore if possible (no extra deps).")
+    ap.add_argument("--root", default=".", help="Root directory to scan (default: .)")
+    ap.add_argument("--output", default="project-code.txt", help="Output file path")
+    ap.add_argument("--ext", default=",".join(DEFAULT_EXTS),
+                    help="Comma-separated list of file extensions or exact filenames to include")
+    ap.add_argument("--exclude", default=",".join(DEFAULT_EXCLUDES),
+                    help="Comma-separated list of directories (or suffix paths) to exclude")
+    ap.add_argument("--max-bytes", type=int, default=2*1024*1024,
+                    help="Skip files larger than this (default 2 MiB)")
+    args = ap.parse_args()
+
+    exts = [e.strip() for e in args.ext.split(",") if e.strip()]
+    norm_exts = set()
+    for e in exts:
+        if e.startswith(".") or "." in e:
+            norm_exts.add(e.lower())
+        else:
+            norm_exts.add("." + e.lower())
+
+    excludes = set([e.strip() for e in args.exclude.split(",") if e.strip()])
+
+    root = Path(args.root).resolve()
+    ignored_set = get_git_ignored(root)
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_files = 0
+    with out_path.open("w", encoding="utf-8", errors="replace") as out:
+        out.write("# Consolidated source export\n")
+        out.write(f"# Root: {root}\n")
+        out.write(f"# Included: {sorted(norm_exts)}\n")
+        out.write(f"# Excluded dirs: {sorted(excludes)}\n")
+        out.write(f"# Git ignored entries skipped: {len(ignored_set)} (if repo)\n")
+        out.write("# ---\n\n")
+
+        for p in iter_files(root, norm_exts, excludes, args.max_bytes, ignored_set):
+            rel = p.resolve().relative_to(root)
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            out.write(f"\n\n===== BEGIN FILE: {rel} =====\n")
+            out.write(content)
+            if not content.endswith("\n"):
+                out.write("\n")
+            out.write(f"===== END FILE: {rel} =====\n")
+            total_files += 1
+
+    print(f"Done. Wrote {total_files} files into {out_path}")
+
+if __name__ == "__main__":
+    sys.exit(main())
+===== END FILE: flatten_code.py =====
+
+
+===== BEGIN FILE: pom.xml =====
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.2</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.oolshik</groupId>
+  <artifactId>oolshik-backend</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>oolshik-backend</name>
+  <description>Oolshik Phase 1 backend (OTP-first)</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <jjwt.version>0.11.5</jjwt.version>
+    <springdoc.version>2.6.0</springdoc.version>
+    <flyway.version>10.15.0</flyway.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>${flyway.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <version>${flyway.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!-- JWT -->
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+      <version>${jjwt.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- Swagger/OpenAPI -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
+    <!-- Test -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <image>
+            <name>oolshik/backend:${project.version}</name>
+          </image>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+===== END FILE: pom.xml =====
+
+
+===== BEGIN FILE: oolshik_backend_project.txt =====
+# Consolidated source export
+# Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
+# Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
+# Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
+# Git ignored entries skipped: 45 (if repo)
+# ---
+
+
+
+===== BEGIN FILE: flatten_code.py =====
+#!/usr/bin/env python3
+"""
+flatten_code.py — Walk a project directory and concatenate selected source files
+into a single text document with clear file headers/footers.
+
+NEW: Respects .gitignore WITHOUT extra dependencies by using the local `git` CLI.
+- If the directory is a Git repo and `git` is available, ignored files are skipped
+  using: git ls-files --ignored --exclude-standard --others -z
+- Tracked files are always included (even if patterns match .gitignore).
+- If not a Git repo (or git missing), falls back to exclude list only.
+
+Usage examples:
+  python flatten_code.py --root . --output project-code.txt
+  python flatten_code.py --root /path/to/repo --output all.txt --ext ".js,.ts,.tsx,.java,.kt,.py" --exclude ".git,node_modules,dist,build" --max-bytes 1048576
+"""
+import argparse, os, sys, subprocess, shutil
+from pathlib import Path
+
+DEFAULT_EXTS = [
+    ".js",".jsx",".ts",".tsx",".mjs",".cjs",
+    ".json",".jsonc",
+    ".py",
+    ".java",".kt",".kts",".gradle",".groovy",
+    ".rb",".go",".php",".swift",".m",".mm",".c",".h",".cpp",".hpp",
+    ".rs",".dart",".lua",
+    ".xml",".html",".htm",".css",".scss",".less",
+    ".yml",".yaml",".ini",".cfg",".conf",".properties",".env",
+    ".md",".mdx",".txt",
+    ".sh",".bash",".zsh",".ps1",".bat",
+    ".sql",".proto",
+    ".gitignore",".gitattributes",".editorconfig"
+]
+
+DEFAULT_EXCLUDES = [
+    ".git","node_modules","dist","build",".next",".expo",".idea",".vscode",
+    ".venv","venv","Pods","ios/build","android/build","coverage",".gradle"
+]
+
+def should_skip_dir(dirpath, excludes_set):
+    parts = Path(dirpath).parts
+    for token in excludes_set:
+        token_parts = Path(token).parts
+        if len(token_parts) > 1:
+            if tuple(token_parts) == tuple(parts[-len(token_parts):]):
+                return True
+        else:
+            if token in parts:
+                return True
+    return False
+
+def get_git_ignored(root: Path):
+    """
+    Return a set of POSIX-style relative paths that are ignored by git.
+    Uses: git ls-files --ignored --exclude-standard --others -z
+    Only returns files that are ignored AND untracked; tracked files won't appear here.
+    """
+    if not (root / ".git").exists():
+        return set()
+    if shutil.which("git") is None:
+        return set()
+    try:
+        out = subprocess.check_output(
+            ["git", "ls-files", "--ignored", "--exclude-standard", "--others", "-z"],
+            cwd=str(root)
+        )
+        items = out.decode("utf-8", errors="replace").split("\x00")
+        rels = [i for i in items if i]
+        # Normalize to POSIX-style
+        return set(Path(r).as_posix() for r in rels)
+    except Exception:
+        return set()
+
+def iter_files(root, exts_set, excludes_set, max_bytes, ignored_set):
+    root = Path(root).resolve()
+    for dirpath, dirnames, filenames in os.walk(root):
+        # prune disallowed dirs
+        pruned = []
+        for d in list(dirnames):
+            full = Path(dirpath) / d
+            if should_skip_dir(full, excludes_set):
+                pruned.append(d)
+        for d in pruned:
+            dirnames.remove(d)
+
+        for name in filenames:
+            p = Path(dirpath) / name
+            rel_posix = p.resolve().relative_to(root).as_posix()
+
+            # Skip git-ignored files if we have that info
+            if rel_posix in ignored_set:
+                continue
+
+            if exts_set and p.suffix.lower() not in exts_set and name not in exts_set:
+                continue
+            try:
+                if max_bytes and p.stat().st_size > max_bytes:
+                    continue
+            except OSError:
+                continue
+            yield p
+
+def main():
+    ap = argparse.ArgumentParser(description="Concatenate source files into a single doc with headers, honoring .gitignore if possible (no extra deps).")
+    ap.add_argument("--root", default=".", help="Root directory to scan (default: .)")
+    ap.add_argument("--output", default="project-code.txt", help="Output file path")
+    ap.add_argument("--ext", default=",".join(DEFAULT_EXTS),
+                    help="Comma-separated list of file extensions or exact filenames to include")
+    ap.add_argument("--exclude", default=",".join(DEFAULT_EXCLUDES),
+                    help="Comma-separated list of directories (or suffix paths) to exclude")
+    ap.add_argument("--max-bytes", type=int, default=2*1024*1024,
+                    help="Skip files larger than this (default 2 MiB)")
+    args = ap.parse_args()
+
+    exts = [e.strip() for e in args.ext.split(",") if e.strip()]
+    norm_exts = set()
+    for e in exts:
+        if e.startswith(".") or "." in e:
+            norm_exts.add(e.lower())
+        else:
+            norm_exts.add("." + e.lower())
+
+    excludes = set([e.strip() for e in args.exclude.split(",") if e.strip()])
+
+    root = Path(args.root).resolve()
+    ignored_set = get_git_ignored(root)
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_files = 0
+    with out_path.open("w", encoding="utf-8", errors="replace") as out:
+        out.write("# Consolidated source export\n")
+        out.write(f"# Root: {root}\n")
+        out.write(f"# Included: {sorted(norm_exts)}\n")
+        out.write(f"# Excluded dirs: {sorted(excludes)}\n")
+        out.write(f"# Git ignored entries skipped: {len(ignored_set)} (if repo)\n")
+        out.write("# ---\n\n")
+
+        for p in iter_files(root, norm_exts, excludes, args.max_bytes, ignored_set):
+            rel = p.resolve().relative_to(root)
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            out.write(f"\n\n===== BEGIN FILE: {rel} =====\n")
+            out.write(content)
+            if not content.endswith("\n"):
+                out.write("\n")
+            out.write(f"===== END FILE: {rel} =====\n")
+            total_files += 1
+
+    print(f"Done. Wrote {total_files} files into {out_path}")
+
+if __name__ == "__main__":
+    sys.exit(main())
+===== END FILE: flatten_code.py =====
+
+
+===== BEGIN FILE: pom.xml =====
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.2</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.oolshik</groupId>
+  <artifactId>oolshik-backend</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>oolshik-backend</name>
+  <description>Oolshik Phase 1 backend (OTP-first)</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <jjwt.version>0.11.5</jjwt.version>
+    <springdoc.version>2.6.0</springdoc.version>
+    <flyway.version>10.15.0</flyway.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>${flyway.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <version>${flyway.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!-- JWT -->
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+      <version>${jjwt.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- Swagger/OpenAPI -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
+    <!-- Test -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <image>
+            <name>oolshik/backend:${project.version}</name>
+          </image>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+===== END FILE: oolshik_backend_project.txt =====
+
+
+===== BEGIN FILE: README.md =====
+# Oolshik Backend — Phase 1 (OTP-first Auth) — Spring Boot 3, Java 21
+
+A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP login** as primary auth flow and **optional email** capture. Structured for easy extension into next phases.
+
+## Highlights
+- **OTP-first auth** (SMS). Email is optional during OTP verify or later via profile update
+- **JWT** access & refresh tokens
+- **Users & Roles**: NETA, KARYAKARTA, ADMIN
+- **Help Requests**: create, nearby search, accept, complete, cancel
+- **PostgreSQL + Flyway** schema migrations
+- **Swagger/OpenAPI** docs
+- **Docker compose** for 1-command local bring-up
+- **Clean structure**: domain, entity, repo, service, web, security, util
+
+## Quick Start
+
+### A) Docker (recommended)
+```bash
+docker compose up --build
+```
+- API: http://localhost:8080
+- Swagger: http://localhost:8080/swagger-ui/index.html
+- Dev mode returns OTP code in response payload (for easy mobile integration/testing).
+
+### B) Local (no Docker)
+1. Start PostgreSQL and create DB `oolshik` (user/pass `oolshik`), or set env vars below.
+2. Run:
+```bash
+JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
+```
+
+## API (Phase 1)
+
+### Auth (OTP-first)
+- `POST /api/auth/otp/request`
+  ```json
+  { "phone": "+919876543210" }
+  ```
+  Dev mode response includes `"devCode"`.
+- `POST /api/auth/otp/verify`
+  ```json
+  { "phone": "+919876543210", "code": "123456", "displayName": "Nitin", "email": "n@example.com" }
+  ```
+  Returns `{ "accessToken": "...", "refreshToken": "..." }`. Creates the user if needed and stores optional fields.
+- `POST /api/auth/refresh` → `{ "accessToken": "..." }`
+- `GET  /api/auth/me` → profile
+- `PUT  /api/auth/me` → update `displayName`, `languages`, `email`
+- `POST /api/auth/login` (email+password; **admin only** for ops)
+
+### Help Requests
+- `POST /api/requests`
+- `GET  /api/requests/nearby?lat=..&lon=..&radiusMeters=1000`
+- `POST /api/requests/{id}/accept`
+- `POST /api/requests/{id}/complete`
+- `POST /api/requests/{id}/cancel`
+
+## Configuration
+
+Environment variables (defaults in `application.yml`):
+- `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`
+- `JWT_SECRET` (**required**; 32+ chars recommended)
+- `SPRING_PROFILES_ACTIVE=dev`
+- `app.otp.ttlSeconds=300`, `app.otp.cooldownSeconds=30`, `app.otp.maxAttempts=5`
+
+**Admin seeding (ops):**
+```
+ADMIN_EMAIL=admin@oolshik.app
+ADMIN_PASSWORD=Admin@123
+```
+Seeds an admin with placeholder phone `+910000000000`. Admin can login via `/api/auth/login`.
+
+## Design Notes
+- **OTP codes** are stored **hashed** (BCrypt), with TTL, resend cooldown, and attempt throttling.
+- **Phone normalization**: simple E.164-ish helper defaults to +91 when obvious (10-digit input). Replace with libphonenumber later if needed.
+- **SMS sending**: pluggable `SmsSender` interface; dev profile logs messages; add Twilio/SNS later.
+- **Nearby search**: simple equirectangular distance in SQL; swap to PostGIS later without changing controller/service contracts.
+- **Clean layering**: Controllers → Services → Repos → Entities; DTOs for requests/responses; exception handler for neat API errors.
+
+## Build & Run
+```bash
+./mvnw -q -DskipTests package
+java -jar target/oolshik-backend-0.0.1-SNAPSHOT.jar
+```
+
+---
+This codebase is intentionally minimal yet production-leaning so you can extend it in next phases (chat, media, ratings, categories, payments) without refactoring auth or user domains.
+===== END FILE: README.md =====
+
+
+===== BEGIN FILE: .gitignore =====
+target/
+.idea/
+*.iml
+.mvn/wrapper/maven-wrapper.jar
+.DS_Store
+.env
+===== END FILE: .gitignore =====
+
+
+===== BEGIN FILE: docker-compose.yml =====
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: oolshik
+      POSTGRES_PASSWORD: oolshik
+      POSTGRES_DB: oolshik
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  api:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: oolshik
+      DB_USER: oolshik
+      DB_PASSWORD: oolshik
+      JWT_SECRET: devsecret_change_me_at_least_32_chars_long_123456
+      ADMIN_EMAIL: admin@oolshik.app
+      ADMIN_PASSWORD: Admin@123
+      SPRING_PROFILES_ACTIVE: dev
+      # turn ON flyway
+      SPRING_FLYWAY_ENABLED: true
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: true
+      SPRING_FLYWAY_BASELINE_VERSION: 1
+      # hibernate: validate schema only
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+===== END FILE: docker-compose.yml =====
+
+
+===== BEGIN FILE: .mvn/wrapper/maven-wrapper.properties =====
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.6/apache-maven-3.9.6-bin.zip
+wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.2.0/maven-wrapper-3.2.0.jar
+===== END FILE: .mvn/wrapper/maven-wrapper.properties =====
+
+
+===== BEGIN FILE: src/test/java/com/oolshik/backend/SanityTest.java =====
+package com.oolshik.backend;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class SanityTest {
+    @Test
+    void contextLoads() {}
+}
+===== END FILE: src/test/java/com/oolshik/backend/SanityTest.java =====
+
+
+===== BEGIN FILE: src/main/resources/application.yml =====
+spring:
+  application:
+    name: oolshik-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}
+    username: ${DB_USER:oolshik}
+    password: ${DB_PASSWORD:oolshik}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:CHANGEME_DEV_SECRET_32_CHARS_MINIMUM________}
+    accessTokenTtlMinutes: 60
+    refreshTokenTtlDays: 14
+  otp:
+    ttlSeconds: 300
+    cooldownSeconds: 30
+    maxAttempts: 5
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+===== END FILE: src/main/resources/application.yml =====
+
+
+===== BEGIN FILE: src/main/resources/db/migration/V1__init.sql =====
+CREATE TABLE IF NOT EXISTS app_user (
+    id UUID PRIMARY KEY,
+    phone_number VARCHAR(32) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    password_hash VARCHAR(255),
+    display_name VARCHAR(255),
+    roles TEXT NOT NULL,
+    languages TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS help_request (
+    id UUID PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    radius_meters INTEGER NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    requester_id UUID NOT NULL REFERENCES app_user(id),
+    helper_id UUID REFERENCES app_user(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS otp_code (
+    id UUID PRIMARY KEY,
+    phone_number VARCHAR(32) NOT NULL,
+    code_hash VARCHAR(255) NOT NULL,
+    purpose VARCHAR(32) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    resend_count INTEGER NOT NULL DEFAULT 0,
+    last_sent_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_help_request_status ON help_request(status);
+CREATE INDEX IF NOT EXISTS idx_help_request_geo ON help_request(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_code(phone_number);
+===== END FILE: src/main/resources/db/migration/V1__init.sql =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/OolshikApplication.java =====
+package com.oolshik.backend;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class OolshikApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(OolshikApplication.class, args);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/OolshikApplication.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/util/PhoneUtil.java =====
+package com.oolshik.backend.util;
+
+public class PhoneUtil {
+    // Normalize to E.164-like format: retain + and digits, strip spaces/dashes.
+    public static String normalize(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim().replace(" ", "").replace("-", "");
+    if (!s.startsWith("+")) {
+        // assume India if 10 digits or starts with 0/91; adapt as needed later
+        s = s.replaceFirst("^0+", "");
+        if (s.startsWith("91") && s.length() == 12) {
+            s = "+" + s;
+        } else if (s.length() == 10) {
+            s = "+91" + s;
+        } else if (s.matches("^\\d{1,15}$")) {
+            s = "+" + s;
+        }
+    }
+    return s;
+}
+}
+===== END FILE: src/main/java/com/oolshik/backend/util/PhoneUtil.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/config/OpenApiConfig.java =====
+package com.oolshik.backend.config;
+
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.OpenAPI;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class OpenApiConfig {
+    @Bean
+    public OpenAPI api() {
+        return new OpenAPI().info(new Info().title("Oolshik API (OTP-first)").version("v1").description("Oolshik Phase 1 backend"));
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/config/OpenApiConfig.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/config/CommonBeans.java =====
+package com.oolshik.backend.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.CorsConfigurationSource;
+import java.util.List;
+
+@Configuration
+public class CommonBeans {
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cfg = new CorsConfiguration();
+        cfg.setAllowedOrigins(List.of("*"));
+        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+        cfg.setAllowedHeaders(List.of("Authorization","Content-Type"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cfg);
+        return source;
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/config/CommonBeans.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/security/SecurityConfig.java =====
+package com.oolshik.backend.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
+    private final UserDetailsService uds;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, UserDetailsService uds) {
+        this.jwtAuthFilter = jwtAuthFilter;
+        this.uds = uds;
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.disable());
+        http.authorizeHttpRequests(auth -> auth
+            .requestMatchers(
+                "/api/auth/**",
+                "/v3/api-docs/**",
+                "/swagger-ui/**",
+                "/swagger-ui.html"
+            ).permitAll()
+            .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+            .anyRequest().authenticated()
+        );
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.cors(org.springframework.security.config.Customizer.withDefaults());
+        http.httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(uds);
+        provider.setPasswordEncoder(passwordEncoder);
+        return new ProviderManager(provider);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/security/SecurityConfig.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/security/JwtService.java =====
+package com.oolshik.backend.security;
+
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import java.security.Key;
+import java.time.Instant;
+import java.util.Date;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class JwtService {
+
+    private final Key key;
+    private final long accessTtlMinutes;
+    private final long refreshTtlDays;
+
+    public JwtService(
+            @Value("${app.jwt.secret}") String secret,
+            @Value("${app.jwt.accessTokenTtlMinutes}") long accessTtlMinutes,
+            @Value("${app.jwt.refreshTokenTtlDays}") long refreshTtlDays
+    ) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes());
+        this.accessTtlMinutes = accessTtlMinutes;
+        this.refreshTtlDays = refreshTtlDays;
+    }
+
+    public String generateAccessToken(UUID userId, String phone) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .setSubject(userId.toString())
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(now.plusSeconds(accessTtlMinutes * 60)))
+                .addClaims(Map.of("phone", phone, "typ", "access"))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateRefreshToken(UUID userId) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .setSubject(userId.toString())
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(now.plusSeconds(refreshTtlDays * 86400)))
+                .addClaims(Map.of("typ", "refresh"))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public Jws<Claims> parse(String token) {
+        return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/security/JwtService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/security/JwtAuthFilter.java =====
+package com.oolshik.backend.security;
+
+import io.jsonwebtoken.Claims;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import java.io.IOException;
+
+@Component
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+    private final UserDetailsService uds;
+
+    public JwtAuthFilter(JwtService jwtService, @Lazy UserDetailsService uds) {
+        this.jwtService = jwtService;
+        this.uds = uds;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
+            try {
+                var jws = jwtService.parse(token);
+                Claims c = jws.getBody();
+                String phone = c.get("phone", String.class);
+                if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails u = uds.loadUserByUsername(phone);
+                    var auth = new UsernamePasswordAuthenticationToken(u, null, u.getAuthorities());
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
+            } catch (Exception ignored) { }
+        }
+        chain.doFilter(request, response);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/security/JwtAuthFilter.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/HelpRequestEntity.java =====
+package com.oolshik.backend.entity;
+
+import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+import com.oolshik.backend.domain.HelpRequestStatus;
+
+@Entity
+@Table(name = "help_request")
+public class HelpRequestEntity {
+    @Id
+    private UUID id;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(nullable = false)
+    private double latitude;
+
+    @Column(nullable = false)
+    private double longitude;
+
+    @Column(nullable = false, name = "radius_meters")
+    private int radiusMeters;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private HelpRequestStatus status;
+
+    @Column(name = "requester_id", nullable = false)
+    private UUID requesterId;
+
+    @Column(name = "helper_id")
+    private UUID helperId;
+
+    @Column(nullable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = OffsetDateTime.now();
+        if (updatedAt == null) updatedAt = createdAt;
+        if (status == null) status = HelpRequestStatus.OPEN;
+    }
+
+    @PreUpdate
+    public void preUpdate() { updatedAt = OffsetDateTime.now(); }
+
+    // getters/setters
+    public UUID getId() { return id; }
+    public String getTitle() { return title; }
+    public String getDescription() { return description; }
+    public double getLatitude() { return latitude; }
+    public double getLongitude() { return longitude; }
+    public int getRadiusMeters() { return radiusMeters; }
+    public HelpRequestStatus getStatus() { return status; }
+    public UUID getRequesterId() { return requesterId; }
+    public UUID getHelperId() { return helperId; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setId(UUID id) { this.id = id; }
+    public void setTitle(String title) { this.title = title; }
+    public void setDescription(String description) { this.description = description; }
+    public void setLatitude(double latitude) { this.latitude = latitude; }
+    public void setLongitude(double longitude) { this.longitude = longitude; }
+    public void setRadiusMeters(int radiusMeters) { this.radiusMeters = radiusMeters; }
+    public void setStatus(HelpRequestStatus status) { this.status = status; }
+    public void setRequesterId(UUID requesterId) { this.requesterId = requesterId; }
+    public void setHelperId(UUID helperId) { this.helperId = helperId; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/entity/HelpRequestEntity.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/UserEntity.java =====
+package com.oolshik.backend.entity;
+
+import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.*;
+import com.oolshik.backend.domain.Role;
+
+@Entity
+@Table(name = "app_user")
+public class UserEntity {
+    @Id
+    private UUID id;
+
+    @Column(name = "phone_number", nullable = false, unique = true)
+    private String phoneNumber;
+
+    @Column(unique = true)
+    private String email;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    private String displayName;
+
+    @Column(nullable = false)
+    private String roles; // comma-separated
+
+    private String languages;
+
+    @Column(nullable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = OffsetDateTime.now();
+        if (updatedAt == null) updatedAt = createdAt;
+        if (roles == null || roles.isBlank()) roles = "NETA";
+    }
+
+    @PreUpdate
+    public void preUpdate() { updatedAt = OffsetDateTime.now(); }
+
+    public Set<Role> getRoleSet() {
+        Set<Role> set = new HashSet<>();
+        if (roles == null || roles.isBlank()) return set;
+        for (String r : roles.split(",")) {
+            try { set.add(Role.valueOf(r.trim())); } catch (Exception ignored) {}
+        }
+        return set;
+    }
+
+    public void setRoleSet(Set<Role> set) {
+        this.roles = String.join(",", set.stream().map(Enum::name).toList());
+    }
+
+    // getters/setters
+    public UUID getId() { return id; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public String getEmail() { return email; }
+    public String getPasswordHash() { return passwordHash; }
+    public String getDisplayName() { return displayName; }
+    public String getRoles() { return roles; }
+    public String getLanguages() { return languages; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setId(UUID id) { this.id = id; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public void setEmail(String email) { this.email = email; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+    public void setRoles(String roles) { this.roles = roles; }
+    public void setLanguages(String languages) { this.languages = languages; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/entity/UserEntity.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/OtpCodeEntity.java =====
+package com.oolshik.backend.entity;
+
+import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "otp_code")
+public class OtpCodeEntity {
+    @Id
+    private UUID id;
+
+    @Column(name = "phone_number", nullable = false)
+    private String phoneNumber;
+
+    @Column(name = "code_hash", nullable = false)
+    private String codeHash;
+
+    @Column(nullable = false)
+    private String purpose; // LOGIN
+
+    @Column(name = "expires_at", nullable = false)
+    private OffsetDateTime expiresAt;
+
+    @Column(name = "consumed_at")
+    private OffsetDateTime consumedAt;
+
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
+    @Column(name = "resend_count", nullable = false)
+    private int resendCount;
+
+    @Column(name = "last_sent_at", nullable = false)
+    private OffsetDateTime lastSentAt;
+
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = OffsetDateTime.now();
+        if (lastSentAt == null) lastSentAt = createdAt;
+        if (attemptCount < 0) attemptCount = 0;
+        if (resendCount < 0) resendCount = 0;
+    }
+
+    // getters/setters
+    public UUID getId() { return id; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public String getCodeHash() { return codeHash; }
+    public String getPurpose() { return purpose; }
+    public OffsetDateTime getExpiresAt() { return expiresAt; }
+    public OffsetDateTime getConsumedAt() { return consumedAt; }
+    public int getAttemptCount() { return attemptCount; }
+    public int getResendCount() { return resendCount; }
+    public OffsetDateTime getLastSentAt() { return lastSentAt; }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setId(UUID id) { this.id = id; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public void setCodeHash(String codeHash) { this.codeHash = codeHash; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+    public void setExpiresAt(OffsetDateTime expiresAt) { this.expiresAt = expiresAt; }
+    public void setConsumedAt(OffsetDateTime consumedAt) { this.consumedAt = consumedAt; }
+    public void setAttemptCount(int attemptCount) { this.attemptCount = attemptCount; }
+    public void setResendCount(int resendCount) { this.resendCount = resendCount; }
+    public void setLastSentAt(OffsetDateTime lastSentAt) { this.lastSentAt = lastSentAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/entity/OtpCodeEntity.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
+package com.oolshik.backend.web;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "validation_failed");
+        body.put("details", ex.getBindingResult().getAllErrors().stream().map(e -> e.getDefaultMessage()).toList());
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArg(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> handleIllegalState(IllegalStateException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleOther(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "internal_error"));
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/AuthController.java =====
+package com.oolshik.backend.web;
+
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.security.JwtService;
+import com.oolshik.backend.service.AuthService;
+import com.oolshik.backend.service.OtpService;
+import com.oolshik.backend.service.UserService;
+import com.oolshik.backend.web.dto.AuthDtos.*;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.web.bind.annotation.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final OtpService otp;
+    private final UserService userService;
+    private final AuthService authService;
+    private final UserRepository userRepository;
+    private final JwtService jwt;
+
+    public AuthController(OtpService otp, UserService userService, AuthService authService, UserRepository userRepository, JwtService jwt) {
+        this.otp = otp;
+        this.userService = userService;
+        this.authService = authService;
+        this.userRepository = userRepository;
+        this.jwt = jwt;
+    }
+
+    @PostMapping("/otp/request")
+    public ResponseEntity<?> otpRequest(@RequestBody @Valid OtpRequest req) {
+        var res = otp.requestLoginOtp(req.phone());
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<?> otpVerify(@RequestBody @Valid OtpVerify req) {
+        boolean ok = otp.verifyLoginOtp(req.phone(), req.code());
+        if (!ok) return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP"));
+        var user = userService.getOrCreateByPhone(req.phone(), req.displayName(), req.email());
+        String access = jwt.generateAccessToken(user.getId(), user.getPhoneNumber());
+        String refresh = jwt.generateRefreshToken(user.getId());
+        return ResponseEntity.ok(new TokenResponse(access, refresh));
+    }
+
+    // Admin password login (ops only)
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody @Valid LoginRequest req) {
+        var res = authService.loginWithPassword(req.email(), req.password());
+        return ResponseEntity.ok(new TokenResponse((String)res.get("accessToken"), (String)res.get("refreshToken")));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody @Valid RefreshRequest req) {
+        String access = authService.refreshAccessToken(req.refreshToken());
+        return ResponseEntity.ok(Map.of("accessToken", access));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> me(@AuthenticationPrincipal User principal) {
+        var u = userRepository.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", u.getId());
+        out.put("phone", u.getPhoneNumber());
+        out.put("email", u.getEmail());
+        out.put("displayName", u.getDisplayName());
+        out.put("roles", u.getRoles());
+        out.put("languages", u.getLanguages());
+        return ResponseEntity.ok(out);
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMe(@AuthenticationPrincipal User principal, @RequestBody Map<String, Object> patch) {
+        var u = userRepository.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        if (patch.containsKey("displayName")) u.setDisplayName(String.valueOf(patch.get("displayName")));
+        if (patch.containsKey("languages")) u.setLanguages(String.valueOf(patch.get("languages")));
+        if (patch.containsKey("email")) u.setEmail(String.valueOf(patch.get("email")));
+        userRepository.save(u);
+        return ResponseEntity.ok(Map.of("message", "updated"));
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/AuthController.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/HelpRequestController.java =====
+package com.oolshik.backend.web;
+
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/requests")
+public class HelpRequestController {
+
+    private final HelpRequestService service;
+    private final UserRepository userRepo;
+
+    public HelpRequestController(HelpRequestService service, UserRepository userRepo) {
+        this.service = service;
+        this.userRepo = userRepo;
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(@AuthenticationPrincipal User principal, @RequestBody @Valid CreateRequest req) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        HelpRequestEntity created = service.create(
+                requester.getId(),
+                req.title(), req.description(),
+                req.latitude(), req.longitude(),
+                req.radiusMeters()
+        );
+        return ResponseEntity.ok(view(created));
+    }
+
+
+    @GetMapping("/nearby")
+    public ResponseEntity<?> nearby(
+        @RequestParam double lat,
+        @RequestParam double lng,
+        @RequestParam int radiusMeters) {
+
+        // log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
+        try {
+        var list = service.findNearby(lat, lng, radiusMeters);
+        return ResponseEntity.ok(list);   // [] if none
+        } catch (Exception e) {
+        // log.error("nearby failed", e);    // prints full stack to logs
+        return ResponseEntity.status(500).body(Map.of("error", "internal_error"));
+        }
+    }
+
+    @PostMapping("/{id}/accept")
+    public ResponseEntity<?> accept(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var helper = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.accept(id, helper.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<?> complete(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.complete(id, requester.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var updated = service.cancel(id, requester.getId());
+        return ResponseEntity.ok(view(updated));
+    }
+
+    private HelpRequestView view(HelpRequestEntity e) {
+        return new HelpRequestView(
+                e.getId(), e.getTitle(), e.getDescription(),
+                e.getLatitude(), e.getLongitude(),
+                e.getRadiusMeters(), e.getStatus(),
+                e.getRequesterId(), e.getHelperId(),
+                e.getCreatedAt()
+        );
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/HelpRequestController.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/AuthDtos.java =====
+package com.oolshik.backend.web.dto;
+
+import jakarta.validation.constraints.*;
+
+public class AuthDtos {
+
+    public record OtpRequest(
+            @NotBlank @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Invalid phone format") String phone
+    ) {}
+
+    public record OtpVerify(
+            @NotBlank String phone,
+            @NotBlank @Size(min = 4, max = 8) String code,
+            String displayName,
+            @Email String email
+    ) {}
+
+    public record LoginRequest(
+            @Email @NotBlank String email,
+            @NotBlank String password
+    ) {}
+
+    public record TokenResponse(String accessToken, String refreshToken) {}
+    public record RefreshRequest(@NotBlank String refreshToken) {}
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/dto/AuthDtos.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/HelpRequestDtos.java =====
+package com.oolshik.backend.web.dto;
+
+import com.oolshik.backend.domain.HelpRequestStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+public class HelpRequestDtos {
+
+    public record CreateRequest(
+        @NotBlank String title,
+        String description,
+        @NotNull Double latitude,
+        @NotNull Double longitude,
+        @Min(50) @Max(10000) Integer radiusMeters
+    ) {}
+
+    public record HelpRequestView(
+        UUID id,
+        String title,
+        String description,
+        double latitude,
+        double longitude,
+        int radiusMeters,
+        HelpRequestStatus status,
+        UUID requesterId,
+        UUID helperId,
+        OffsetDateTime createdAt
+    ) {}
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/dto/HelpRequestDtos.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/HelpRequestService.java =====
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.repo.UserRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class HelpRequestService {
+
+    private final HelpRequestRepository repo;
+    private final UserRepository userRepo;
+
+    public HelpRequestService(HelpRequestRepository repo, UserRepository userRepo) {
+        this.repo = repo;
+        this.userRepo = userRepo;
+    }
+
+    @Transactional
+    public HelpRequestEntity create(UUID requesterId, String title, String description, double lat, double lon, int radiusMeters) {
+        UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
+        HelpRequestEntity e = new HelpRequestEntity();
+        e.setRequesterId(requester.getId());
+        e.setTitle(title);
+        e.setDescription(description);
+        e.setLatitude(lat);
+        e.setLongitude(lon);
+        e.setRadiusMeters(radiusMeters);
+        e.setStatus(HelpRequestStatus.OPEN);
+        return repo.save(e);
+    }
+
+    public List<HelpRequestEntity> findNearby(double lat, double lng, int radiusMeters) {
+        // guard bad inputs
+        if (radiusMeters <= 0) return List.of();
+        return repo.findNearby(lat, lng, radiusMeters);
+    }
+
+    @Transactional
+    public HelpRequestEntity accept(UUID requestId, UUID helperId) {
+        HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (e.getStatus() != HelpRequestStatus.OPEN) throw new IllegalStateException("Request not open");
+        e.setStatus(HelpRequestStatus.ASSIGNED);
+        e.setHelperId(helperId);
+        return repo.save(e);
+    }
+
+    @Transactional
+    public HelpRequestEntity complete(UUID requestId, UUID requesterId) {
+        HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can complete");
+        e.setStatus(HelpRequestStatus.COMPLETED);
+        return repo.save(e);
+    }
+
+    @Transactional
+    public HelpRequestEntity cancel(UUID requestId, UUID requesterId) {
+        HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can cancel");
+        e.setStatus(HelpRequestStatus.CANCELLED);
+        return repo.save(e);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/HelpRequestService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/UserService.java =====
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.domain.Role;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.util.PhoneUtil;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
+
+@Service
+public class UserService {
+
+    private final UserRepository repo;
+    public UserService(UserRepository repo) { this.repo = repo; }
+
+    @Transactional
+    public UserEntity getOrCreateByPhone(String rawPhone, String displayName, String email) {
+        String phone = PhoneUtil.normalize(rawPhone);
+        return repo.findByPhoneNumber(phone).orElseGet(() -> {
+            UserEntity ue = new UserEntity();
+            ue.setPhoneNumber(phone);
+            ue.setDisplayName(displayName);
+            ue.setEmail(email);
+            ue.setRoleSet(new HashSet<>(Collections.singletonList(Role.NETA)));
+            return repo.save(ue);
+        });
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/UserService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/OtpService.java =====
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.domain.OtpPurpose;
+import com.oolshik.backend.entity.OtpCodeEntity;
+import com.oolshik.backend.repo.OtpCodeRepository;
+import com.oolshik.backend.util.PhoneUtil;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+
+@Service
+public class OtpService {
+
+    private final OtpCodeRepository repo;
+    private final PasswordEncoder encoder;
+    private final SmsSender smsSender;
+
+    private final int ttlSeconds;
+    private final int cooldownSeconds;
+    private final int maxAttempts;
+    private final boolean dev;
+
+    public OtpService(
+            OtpCodeRepository repo,
+            PasswordEncoder encoder,
+            SmsSender smsSender,
+            @Value("${app.otp.ttlSeconds:300}") int ttlSeconds,
+            @Value("${app.otp.cooldownSeconds:30}") int cooldownSeconds,
+            @Value("${app.otp.maxAttempts:5}") int maxAttempts,
+            @Value("${spring.profiles.active:}") String activeProfile
+    ) {
+        this.repo = repo;
+        this.encoder = encoder;
+        this.smsSender = smsSender;
+        this.ttlSeconds = ttlSeconds;
+        this.cooldownSeconds = cooldownSeconds;
+        this.maxAttempts = maxAttempts;
+        this.dev = activeProfile != null && activeProfile.contains("dev");
+    }
+
+    private String genCode() {
+        int n = new Random().nextInt(900000) + 100000;
+        return String.valueOf(n);
+    }
+
+    @Transactional
+    public Map<String, Object> requestLoginOtp(String rawPhone) {
+        String phone = PhoneUtil.normalize(rawPhone);
+        OffsetDateTime now = OffsetDateTime.now();
+        var last = repo.findFirstByPhoneNumberOrderByCreatedAtDesc(phone).orElse(null);
+        if (last != null && last.getLastSentAt() != null &&
+            last.getLastSentAt().plusSeconds(cooldownSeconds).isAfter(now)) {
+            long wait = last.getLastSentAt().plusSeconds(cooldownSeconds).toEpochSecond() - now.toEpochSecond();
+            throw new IllegalStateException("Please wait " + Math.max(wait, 1) + "s before requesting another OTP");
+        }
+
+        String code = genCode();
+        String hash = encoder.encode(code);
+
+        OtpCodeEntity e = new OtpCodeEntity();
+        e.setPhoneNumber(phone);
+        e.setCodeHash(hash);
+        e.setPurpose(OtpPurpose.LOGIN.name());
+        e.setExpiresAt(now.plusSeconds(ttlSeconds));
+        e.setAttemptCount(0);
+        e.setResendCount(last == null ? 0 : last.getResendCount() + 1);
+        e.setLastSentAt(now);
+        repo.save(e);
+
+        smsSender.send(phone, "Your Oolshik login code: " + code + " (valid " + (ttlSeconds/60) + " min)");
+
+        if (dev) return Map.of("sent", true, "phone", phone, "devCode", code, "ttlSeconds", ttlSeconds);
+        return Map.of("sent", true, "phone", phone, "ttlSeconds", ttlSeconds);
+    }
+
+    @Transactional
+    public boolean verifyLoginOtp(String rawPhone, String code) {
+        String phone = PhoneUtil.normalize(rawPhone);
+        OffsetDateTime now = OffsetDateTime.now();
+        List<OtpCodeEntity> list = repo.findActive(phone, OtpPurpose.LOGIN.name(), now);
+        if (list.isEmpty()) return false;
+        OtpCodeEntity e = list.get(0);
+        if (e.getAttemptCount() >= maxAttempts) return false;
+        e.setAttemptCount(e.getAttemptCount() + 1);
+        boolean ok = encoder.matches(code, e.getCodeHash());
+        if (ok) e.setConsumedAt(now);
+        repo.save(e);
+        return ok;
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/OtpService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/AuthService.java =====
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.domain.Role;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.security.JwtService;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
+
+@Service
+@DependsOn("entityManagerFactory")
+public class AuthService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder encoder;
+    private final JwtService jwtService;
+
+    public AuthService(UserRepository userRepository, PasswordEncoder encoder, JwtService jwtService) {
+        this.userRepository = userRepository;
+        this.encoder = encoder;
+        this.jwtService = jwtService;
+    }
+
+    @Value("${ADMIN_EMAIL:}")
+    private String adminEmail;
+    @Value("${ADMIN_PASSWORD:}")
+    private String adminPassword;
+
+    @PostConstruct
+    public void seedAdmin() {
+        if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
+            userRepository.findByEmail(adminEmail).orElseGet(() -> {
+                UserEntity e = new UserEntity();
+                e.setEmail(adminEmail);
+                e.setPhoneNumber("+910000000000");
+                e.setPasswordHash(encoder.encode(adminPassword));
+                e.setDisplayName("Admin");
+                e.setRoleSet(new HashSet<>(Arrays.asList(Role.ADMIN, Role.NETA, Role.KARYAKARTA)));
+                return userRepository.save(e);
+            });
+        }
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String phone) throws UsernameNotFoundException {
+        UserEntity ue = userRepository.findByPhoneNumber(phone)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        // Use the concrete list type SimpleGrantedAuthority to avoid generics mismatch
+        java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority> auths =
+            ue.getRoleSet().stream()
+            .map(r -> new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + r.name()))
+            .toList();
+
+        return new org.springframework.security.core.userdetails.User(
+            ue.getPhoneNumber(),
+            ue.getPasswordHash() == null ? "" : ue.getPasswordHash(),
+            auths  // OK: constructor accepts Collection<? extends GrantedAuthority>
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> loginWithPassword(String email, String password) {
+        UserEntity ue = userRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+        if (ue.getPasswordHash() == null || !encoder.matches(password, ue.getPasswordHash())) {
+            throw new IllegalArgumentException("Invalid credentials");
+        }
+        String access = jwtService.generateAccessToken(ue.getId(), ue.getPhoneNumber());
+        String refresh = jwtService.generateRefreshToken(ue.getId());
+        return Map.of("userId", ue.getId(), "accessToken", access, "refreshToken", refresh);
+    }
+
+    public String refreshAccessToken(String refreshToken) {
+        var jws = jwtService.parse(refreshToken);
+        String typ = jws.getBody().get("typ", String.class);
+        if (!"refresh".equals(typ)) throw new IllegalArgumentException("Not a refresh token");
+        UUID userId = UUID.fromString(jws.getBody().getSubject());
+        UserEntity ue = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User missing"));
+        return jwtService.generateAccessToken(ue.getId(), ue.getPhoneNumber());
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/AuthService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/SmsSender.java =====
+package com.oolshik.backend.service; public interface SmsSender { void send(String phone, String message); }
+===== END FILE: src/main/java/com/oolshik/backend/service/SmsSender.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/DevSmsSender.java =====
+package com.oolshik.backend.service;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+@Component
+@Profile("dev")
+public class DevSmsSender implements SmsSender {
+    private static final Logger log = LoggerFactory.getLogger(DevSmsSender.class);
+    @Override
+    public void send(String phone, String message) { log.info("[DEV SMS] to {}: {}", phone, message); }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/DevSmsSender.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/domain/Role.java =====
+package com.oolshik.backend.domain; public enum Role { NETA, KARYAKARTA, ADMIN }
+===== END FILE: src/main/java/com/oolshik/backend/domain/Role.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/domain/HelpRequestStatus.java =====
+package com.oolshik.backend.domain; public enum HelpRequestStatus { OPEN, ASSIGNED, COMPLETED, CANCELLED }
+===== END FILE: src/main/java/com/oolshik/backend/domain/HelpRequestStatus.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/domain/OtpPurpose.java =====
+package com.oolshik.backend.domain; public enum OtpPurpose { LOGIN }
+===== END FILE: src/main/java/com/oolshik/backend/domain/OtpPurpose.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/OtpCodeRepository.java =====
+package com.oolshik.backend.repo;
+
+import com.oolshik.backend.entity.OtpCodeEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface OtpCodeRepository extends JpaRepository<OtpCodeEntity, UUID> {
+
+    @Query("SELECT o FROM OtpCodeEntity o WHERE o.phoneNumber = ?1 AND o.purpose = ?2 AND o.expiresAt > ?3 AND o.consumedAt IS NULL ORDER BY o.createdAt DESC")
+    List<OtpCodeEntity> findActive(String phone, String purpose, OffsetDateTime now);
+
+    Optional<OtpCodeEntity> findFirstByPhoneNumberOrderByCreatedAtDesc(String phone);
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/OtpCodeRepository.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/UserRepository.java =====
+package com.oolshik.backend.repo;
+
+import com.oolshik.backend.entity.UserEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface UserRepository extends JpaRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByPhoneNumber(String phoneNumber);
+    Optional<UserEntity> findByEmail(String email);
+    boolean existsByPhoneNumber(String phoneNumber);
+    boolean existsByEmail(String email);
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/UserRepository.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRepository.java =====
+package com.oolshik.backend.repo;
+
+import com.oolshik.backend.entity.HelpRequestEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
+import java.util.UUID;
+
+// HelpRequestRepository.java
+public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
+
+  @Query(
+    value = """
+      SELECT h.*
+      FROM help_request h
+      WHERE h.status = 'OPEN'
+        AND (
+          6371 * acos(
+            LEAST(GREATEST(
+              cos(radians(:lat)) * cos(radians(h.latitude)) *
+              cos(radians(h.longitude) - radians(:lng)) +
+              sin(radians(:lat)) * sin(radians(h.latitude))
+            , -1), 1)
+          )
+        ) <= (:radiusMeters / 1000.0)  -- ✅ convert meters → km
+      ORDER BY
+        (6371 * acos(
+          LEAST(GREATEST(
+            cos(radians(:lat)) * cos(radians(h.latitude)) *
+            cos(radians(h.longitude) - radians(:lng)) +
+            sin(radians(:lat)) * sin(radians(h.latitude))
+          , -1), 1)
+        )) ASC
+      """,
+    nativeQuery = true
+  )
+  List<HelpRequestEntity> findNearby(
+      @Param("lat") double lat,
+      @Param("lng") double lng,
+      @Param("radiusMeters") int radiusMeters
+  );
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRepository.java =====

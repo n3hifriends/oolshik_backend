@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -37,10 +38,21 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(created));
     }
 
+
     @GetMapping("/nearby")
-    public ResponseEntity<?> nearby(@RequestParam double lat, @RequestParam double lon, @RequestParam int radiusMeters) {
-        List<HelpRequestView> out = service.findNearby(lat, lon, radiusMeters).stream().map(this::view).toList();
-        return ResponseEntity.ok(out);
+    public ResponseEntity<?> nearby(
+        @RequestParam double lat,
+        @RequestParam double lng,
+        @RequestParam int radiusMeters) {
+
+        // log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
+        try {
+        var list = service.findNearby(lat, lng, radiusMeters);
+        return ResponseEntity.ok(list);   // [] if none
+        } catch (Exception e) {
+        // log.error("nearby failed", e);    // prints full stack to logs
+        return ResponseEntity.status(500).body(Map.of("error", "internal_error"));
+        }
     }
 
     @PostMapping("/{id}/accept")

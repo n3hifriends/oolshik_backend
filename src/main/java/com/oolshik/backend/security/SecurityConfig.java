@@ -40,6 +40,7 @@ public class SecurityConfig {
             .anyRequest().authenticated()
         );
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.cors(org.springframework.security.config.Customizer.withDefaults());
         http.httpBasic(Customizer.withDefaults());
         return http.build();
     }

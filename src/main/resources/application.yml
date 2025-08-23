@@ -33,7 +33,11 @@ app:
 logging:
   level:
     org.springframework.security: INFO
-    org.hibernate.SQL: INFO
+    org.hibernate.SQL: DEBUG
+    com.oolshik.backend: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
 management:
   endpoints:
     web:

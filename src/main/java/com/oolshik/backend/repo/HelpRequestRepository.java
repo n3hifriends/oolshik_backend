@@ -7,17 +7,37 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.UUID;
 
+// HelpRequestRepository.java
 public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
 
-    // Approx distance (meters) using equirectangular approximation
-    @Query(value = "SELECT * FROM help_request hr " +
-            "WHERE hr.status = :status " +
-            "AND (111320 * sqrt(power(hr.latitude - :lat, 2) + power((hr.longitude - :lon) * cos(radians(:lat)), 2))) <= :radiusMeters",
-            nativeQuery = true)
-    List<HelpRequestEntity> findNearbyOpen(
-        @Param("status") String status,
-        @Param("lat") double lat,
-        @Param("lon") double lon,
-        @Param("radiusMeters") int radiusMeters
-    );
+  @Query(
+    value = """
+      SELECT h.*
+      FROM help_request h
+      WHERE h.status = 'OPEN'
+        AND (
+          6371 * acos(
+            LEAST(GREATEST(
+              cos(radians(:lat)) * cos(radians(h.latitude)) *
+              cos(radians(h.longitude) - radians(:lng)) +
+              sin(radians(:lat)) * sin(radians(h.latitude))
+            , -1), 1)
+          )
+        ) <= (:radiusMeters / 1000.0)  -- ✅ convert meters → km
+      ORDER BY
+        (6371 * acos(
+          LEAST(GREATEST(
+            cos(radians(:lat)) * cos(radians(h.latitude)) *
+            cos(radians(h.longitude) - radians(:lng)) +
+            sin(radians(:lat)) * sin(radians(h.latitude))
+          , -1), 1)
+        )) ASC
+      """,
+    nativeQuery = true
+  )
+  List<HelpRequestEntity> findNearby(
+      @Param("lat") double lat,
+      @Param("lng") double lng,
+      @Param("radiusMeters") int radiusMeters
+  );
 }
