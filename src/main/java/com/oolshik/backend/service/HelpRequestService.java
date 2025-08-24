@@ -5,6 +5,9 @@ import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -35,10 +38,17 @@ public class HelpRequestService {
         return repo.save(e);
     }
 
-    public List<HelpRequestEntity> findNearby(double lat, double lng, int radiusMeters) {
-        // guard bad inputs
-        if (radiusMeters <= 0) return List.of();
-        return repo.findNearby(lat, lng, radiusMeters);
+    public Page<HelpRequestEntity> nearby(
+        double lat, double lng, int radiusMeters,
+        List<String> statuses, Pageable pageable
+    ) {
+
+        String statusesCsv = (statuses == null || statuses.isEmpty())
+            ? ""  // value ignored when statusesEmpty = true
+            : String.join(",", statuses);
+        // call repo:
+        Page<HelpRequestEntity> result = repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
+        return result;
     }
 
     @Transactional
