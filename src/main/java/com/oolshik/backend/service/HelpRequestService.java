@@ -42,17 +42,13 @@ public class HelpRequestService {
         double lat, double lng, int radiusMeters,
         List<String> statuses, Pageable pageable
     ) {
-        final List<String> normalized = (statuses == null) ? List.of() :
-            statuses.stream().filter(s -> s != null && !s.isBlank()).toList();
 
-        final boolean statusesEmpty = normalized.isEmpty();
-
-        return repo.findNearbyPaged(
-            lat, lng, radiusMeters,
-            statusesEmpty,
-            statusesEmpty ? List.of("") : normalized,
-            pageable
-        );
+        String statusesCsv = (statuses == null || statuses.isEmpty())
+            ? ""  // value ignored when statusesEmpty = true
+            : String.join(",", statuses);
+        // call repo:
+        Page<HelpRequestEntity> result = repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
+        return result;
     }
 
     @Transactional

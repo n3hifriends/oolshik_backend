@@ -41,18 +41,6 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(created));
     }
 
-    // @GetMapping("/nearby")
-    // public ResponseEntity<Page<HelpRequestView>> nearby(
-    //     @RequestParam double lat,
-    //     @RequestParam double lng,
-    //     @RequestParam int radiusMeters,
-    //     @RequestParam(required = false, name = "statuses") List<String> statuses,
-    //     @PageableDefault(size = 50) Pageable pageable
-    // ) {
-    //     Page<HelpRequestEntity> page = service.nearby(lat, lng, radiusMeters, statuses, pageable);
-    //     return ResponseEntity.ok(page.map(this::view));
-    // }
-
     @GetMapping("/nearby")
     public Page<HelpRequestEntity> nearby(
         @RequestParam double lat,
