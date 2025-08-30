@@ -1,8 +1,10 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
@@ -42,7 +44,7 @@ public class HelpRequestController {
     }
 
     @GetMapping("/nearby")
-    public Page<HelpRequestEntity> nearby(
+    public Page<HelpRequestRow> nearby(
         @RequestParam double lat,
         @RequestParam double lng,
         @RequestParam int radiusMeters,

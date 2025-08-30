@@ -33,6 +33,12 @@ public class HelpRequestEntity {
     @Column(name = "requester_id", nullable = false)
     private UUID requesterId;
 
+    @Transient
+    String displayName;
+
+    @Transient
+    String phoneNumber;
+
     @Column(name = "helper_id")
     private UUID helperId;
 
@@ -62,6 +68,8 @@ public class HelpRequestEntity {
     public int getRadiusMeters() { return radiusMeters; }
     public HelpRequestStatus getStatus() { return status; }
     public UUID getRequesterId() { return requesterId; }
+    public String getDisplayName() { return displayName; }
+    public String getPhoneNumber() { return phoneNumber; }
     public UUID getHelperId() { return helperId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
@@ -73,6 +81,8 @@ public class HelpRequestEntity {
     public void setRadiusMeters(int radiusMeters) { this.radiusMeters = radiusMeters; }
     public void setStatus(HelpRequestStatus status) { this.status = status; }
     public void setRequesterId(UUID requesterId) { this.requesterId = requesterId; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setHelperId(UUID helperId) { this.helperId = helperId; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }

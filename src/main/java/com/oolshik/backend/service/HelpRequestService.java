@@ -4,12 +4,15 @@ import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.web.error.ForbiddenOperationException;
+import com.oolshik.backend.web.error.ConflictOperationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +41,7 @@ public class HelpRequestService {
         return repo.save(e);
     }
 
-    public Page<HelpRequestEntity> nearby(
+    public Page<HelpRequestRow> nearby(
         double lat, double lng, int radiusMeters,
         List<String> statuses, Pageable pageable
     ) {
@@ -47,14 +50,16 @@ public class HelpRequestService {
             ? ""  // value ignored when statusesEmpty = true
             : String.join(",", statuses);
         // call repo:
-        Page<HelpRequestEntity> result = repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
-        return result;
+        return repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
     }
+    
 
     @Transactional
     public HelpRequestEntity accept(UUID requestId, UUID helperId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (e.getStatus() != HelpRequestStatus.OPEN) throw new IllegalStateException("Request not open");
+        if (e.getStatus() != HelpRequestStatus.OPEN) {
+            throw new ConflictOperationException("Request not open"); // 409
+        }
         e.setStatus(HelpRequestStatus.ASSIGNED);
         e.setHelperId(helperId);
         return repo.save(e);
@@ -63,7 +68,9 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity complete(UUID requestId, UUID requesterId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can complete");
+        if (!requesterId.equals(e.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can complete"); // -> 403
+        }
         e.setStatus(HelpRequestStatus.COMPLETED);
         return repo.save(e);
     }
@@ -71,7 +78,9 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity cancel(UUID requestId, UUID requesterId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can cancel");
+        if (!requesterId.equals(e.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can cancel"); // -> 403
+        }
         e.setStatus(HelpRequestStatus.CANCELLED);
         return repo.save(e);
     }

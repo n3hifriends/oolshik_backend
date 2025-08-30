@@ -2,7 +2,7 @@
 # Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
 # Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
 # Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
-# Git ignored entries skipped: 45 (if repo)
+# Git ignored entries skipped: 64 (if repo)
 # ---
 
 
@@ -230,7 +230,10 @@ if __name__ == "__main__":
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
-
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
     <!-- JWT -->
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
@@ -287,7 +290,7 @@ if __name__ == "__main__":
 # Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
 # Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
 # Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
-# Git ignored entries skipped: 45 (if repo)
+# Git ignored entries skipped: 64 (if repo)
 # ---
 
 
@@ -515,7 +518,10 @@ if __name__ == "__main__":
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
-
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
     <!-- JWT -->
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
@@ -728,6 +734,31 @@ class SanityTest {
 ===== END FILE: src/test/java/com/oolshik/backend/SanityTest.java =====
 
 
+===== BEGIN FILE: src/main/resources/logback-spring.xml =====
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+  <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="oolshik-backend"/>
+  <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] ${APP_NAME} %X{cid:-no-cid} %logger{36} - %msg%n"/>
+
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Project package log level -->
+  <logger name="com.oolshik.backend" level="INFO"/>
+  <!-- Optional Hibernate SQL logs -->
+  <!-- <logger name="org.hibernate.SQL" level="DEBUG"/> -->
+  <!-- <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE"/> -->
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>
+===== END FILE: src/main/resources/logback-spring.xml =====
+
+
 ===== BEGIN FILE: src/main/resources/application.yml =====
 spring:
   application:
@@ -764,7 +795,11 @@ app:
 logging:
   level:
     org.springframework.security: INFO
-    org.hibernate.SQL: INFO
+    org.hibernate.SQL: DEBUG
+    com.oolshik.backend: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
 management:
   endpoints:
     web:
@@ -1120,6 +1155,12 @@ public class HelpRequestEntity {
     @Column(name = "requester_id", nullable = false)
     private UUID requesterId;
 
+    @Transient
+    String displayName;
+
+    @Transient
+    String phoneNumber;
+
     @Column(name = "helper_id")
     private UUID helperId;
 
@@ -1149,6 +1190,8 @@ public class HelpRequestEntity {
     public int getRadiusMeters() { return radiusMeters; }
     public HelpRequestStatus getStatus() { return status; }
     public UUID getRequesterId() { return requesterId; }
+    public String getDisplayName() { return displayName; }
+    public String getPhoneNumber() { return phoneNumber; }
     public UUID getHelperId() { return helperId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
@@ -1160,6 +1203,8 @@ public class HelpRequestEntity {
     public void setRadiusMeters(int radiusMeters) { this.radiusMeters = radiusMeters; }
     public void setStatus(HelpRequestStatus status) { this.status = status; }
     public void setRequesterId(UUID requesterId) { this.requesterId = requesterId; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setHelperId(UUID helperId) { this.helperId = helperId; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
@@ -1327,38 +1372,43 @@ public class OtpCodeEntity {
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
 package com.oolshik.backend.web;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import java.util.LinkedHashMap;
+
+import java.util.HashMap;
 import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("error", "validation_failed");
-        body.put("details", ex.getBindingResult().getAllErrors().stream().map(e -> e.getDefaultMessage()).toList());
-        return ResponseEntity.badRequest().body(body);
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<?> handleIllegalArg(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
-    }
-
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<?> handleIllegalState(IllegalStateException ex) {
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("error", ex.getMessage()));
+        String cid = MDC.get("cid");
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "validation_error");
+        body.put("cid", cid);
+        body.put("message", ex.getMessage());
+        log.warn("[{}] Validation failed: {}", cid, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleOther(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "internal_error"));
+    public ResponseEntity<?> handleAny(Exception ex) {
+        String cid = MDC.get("cid");
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "internal_error");
+        body.put("cid", cid);
+        body.put("message", ex.getMessage());
+        log.error("[{}] Unhandled exception", cid, ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }
 ===== END FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
@@ -1458,11 +1508,16 @@ public class AuthController {
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
@@ -1495,21 +1550,15 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(created));
     }
 
-
     @GetMapping("/nearby")
-    public ResponseEntity<?> nearby(
+    public Page<HelpRequestRow> nearby(
         @RequestParam double lat,
         @RequestParam double lng,
-        @RequestParam int radiusMeters) {
-
-        // log.info("GET /nearby lat={} lng={} radiusMeters={}", lat, lng, radiusMeters);
-        try {
-        var list = service.findNearby(lat, lng, radiusMeters);
-        return ResponseEntity.ok(list);   // [] if none
-        } catch (Exception e) {
-        // log.error("nearby failed", e);    // prints full stack to logs
-        return ResponseEntity.status(500).body(Map.of("error", "internal_error"));
-        }
+        @RequestParam int radiusMeters,
+        @RequestParam(required = false) List<String> statuses,
+        @PageableDefault(size = 50) Pageable pageable
+    ) {
+        return service.nearby(lat, lng, radiusMeters, statuses, pageable);
     }
 
     @PostMapping("/{id}/accept")
@@ -1612,6 +1661,149 @@ public class HelpRequestDtos {
 ===== END FILE: src/main/java/com/oolshik/backend/web/dto/HelpRequestDtos.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/filter/CorrelationIdFilter.java =====
+package com.oolshik.backend.web.filter;
+
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.UUID;
+
+/**
+ * Ensures each request has a correlation id (cid) that propagates to logs.
+ */
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class CorrelationIdFilter extends OncePerRequestFilter {
+
+    public static final String CID = "cid";
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        String incoming = request.getHeader("X-Correlation-Id");
+        String cid = (incoming == null || incoming.isBlank()) ? UUID.randomUUID().toString() : incoming;
+        MDC.put(CID, cid);
+        response.setHeader("X-Correlation-Id", cid);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            MDC.remove(CID);
+        }
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/filter/CorrelationIdFilter.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/filter/RequestResponseLoggingFilter.java =====
+package com.oolshik.backend.web.filter;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
+public class RequestResponseLoggingFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(RequestResponseLoggingFilter.class);
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        long start = System.currentTimeMillis();
+        String cid = MDC.get("cid"); // set by CorrelationIdFilter
+        String method = request.getMethod();
+        String uri = request.getRequestURI();
+        String qs = request.getQueryString();
+        String full = (qs == null) ? uri : (uri + "?" + qs);
+        String auth = request.getHeader("Authorization");
+        String authShort = (auth == null) ? "none" : (auth.startsWith("Bearer ") ? "bearer" : "other");
+
+        log.info("[{}] ⇢ {} {} auth={}", cid, method, full, authShort);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            long dur = System.currentTimeMillis() - start;
+            log.info("[{}] ⇠ {} {} -> {} {}ms", cid, method, full, response.getStatus(), dur);
+        }
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/filter/RequestResponseLoggingFilter.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/aop/LoggingAspect.java =====
+package com.oolshik.backend.aop;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+
+@Aspect
+@Component
+public class LoggingAspect {
+
+    private static final Logger log = LoggerFactory.getLogger(LoggingAspect.class);
+
+    // Controllers, Services, Repositories under our base package
+    @Pointcut("within(com.oolshik.backend..*)")
+    public void applicationPackagePointcut() {}
+
+    // Only public methods
+    @Pointcut("execution(public * *(..))")
+    public void publicMethodPointcut() {}
+
+    @Around("applicationPackagePointcut() && publicMethodPointcut()")
+    public Object logAround(ProceedingJoinPoint joinPoint) throws Throwable {
+        String sig = joinPoint.getSignature().toShortString();
+        String args = Arrays.toString(joinPoint.getArgs());
+        String cid = MDC.get("cid");
+        long startNanos = System.nanoTime();
+        log.info("[{}] ▶ {} args={}", cid, sig, args);
+        try {
+            Object result = joinPoint.proceed();
+            long durMs = (System.nanoTime() - startNanos) / 1_000_000;
+            String resStr = (result == null) ? "null" : result.getClass().getSimpleName();
+            log.info("[{}] ◀ {} ok in {}ms -> {}", cid, sig, durMs, resStr);
+            return result;
+        } catch (Throwable ex) {
+            long durMs = (System.nanoTime() - startNanos) / 1_000_000;
+            log.error("[{}] ✖ {} failed in {}ms: {}", cid, sig, durMs, ex.toString(), ex);
+            throw ex;
+        }
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/aop/LoggingAspect.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/service/HelpRequestService.java =====
 package com.oolshik.backend.service;
 
@@ -1619,7 +1811,10 @@ import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -1650,11 +1845,18 @@ public class HelpRequestService {
         return repo.save(e);
     }
 
-    public List<HelpRequestEntity> findNearby(double lat, double lng, int radiusMeters) {
-        // guard bad inputs
-        if (radiusMeters <= 0) return List.of();
-        return repo.findNearby(lat, lng, radiusMeters);
+    public Page<HelpRequestRow> nearby(
+        double lat, double lng, int radiusMeters,
+        List<String> statuses, Pageable pageable
+    ) {
+
+        String statusesCsv = (statuses == null || statuses.isEmpty())
+            ? ""  // value ignored when statusesEmpty = true
+            : String.join(",", statuses);
+        // call repo:
+        return repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
     }
+    
 
     @Transactional
     public HelpRequestEntity accept(UUID requestId, UUID helperId) {
@@ -1950,6 +2152,30 @@ package com.oolshik.backend.domain; public enum OtpPurpose { LOGIN }
 ===== END FILE: src/main/java/com/oolshik/backend/domain/OtpPurpose.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRow.java =====
+package com.oolshik.backend.repo;
+
+import java.time.Instant;
+import java.util.UUID;
+
+public interface HelpRequestRow {
+    UUID getId();
+    String getTitle();
+    String getDescription();
+    Double getLatitude();
+    Double getLongitude();
+    Integer getRadiusMeters();
+    String getStatus();
+    UUID getRequesterId();
+    String getCreatedByName();
+    String getCreatedByPhoneNumber();
+    UUID getHelperId();
+    Instant getCreatedAt();
+    Instant getUpdatedAt();
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRow.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/OtpCodeRepository.java =====
 package com.oolshik.backend.repo;
 
@@ -1992,44 +2218,79 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 package com.oolshik.backend.repo;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.web.dto.HelpRequestDtos;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import java.util.List;
 import java.util.UUID;
 
-// HelpRequestRepository.java
 public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
 
   @Query(
-    value = """
-      SELECT h.*
-      FROM help_request h
-      WHERE h.status = 'OPEN'
-        AND (
-          6371 * acos(
-            LEAST(GREATEST(
-              cos(radians(:lat)) * cos(radians(h.latitude)) *
-              cos(radians(h.longitude) - radians(:lng)) +
-              sin(radians(:lat)) * sin(radians(h.latitude))
-            , -1), 1)
-          )
-        ) <= (:radiusMeters / 1000.0)  -- ✅ convert meters → km
-      ORDER BY
-        (6371 * acos(
+          value = """
+    SELECT
+      h.id,
+      h.title,
+      h.description,
+      h.latitude,
+      h.longitude,
+      h.radius_meters  AS radiusMeters,
+      h.status,
+      h.requester_id   AS requesterId,
+      u.display_name   AS createdByName,
+      u.phone_number   AS createdByPhoneNumber,
+      h.helper_id      AS helperId,
+      h.created_at     AS createdAt,
+      h.updated_at     AS updatedAt
+    FROM help_request h
+    JOIN app_user u ON u.id = h.requester_id
+    WHERE
+      (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+      AND (
+        6371.0 * acos(
           LEAST(GREATEST(
             cos(radians(:lat)) * cos(radians(h.latitude)) *
             cos(radians(h.longitude) - radians(:lng)) +
             sin(radians(:lat)) * sin(radians(h.latitude))
           , -1), 1)
-        )) ASC
-      """,
-    nativeQuery = true
+        )
+      ) <= (:radiusMeters / 1000.0)
+    ORDER BY
+      ( 6371.0 * acos(
+        LEAST(GREATEST(
+          cos(radians(:lat)) * cos(radians(h.latitude)) *
+          cos(radians(h.longitude) - radians(:lng)) +
+          sin(radians(:lat)) * sin(radians(h.latitude))
+        , -1), 1)
+      ) ) ASC,
+      h.created_at DESC
+  """,
+          countQuery = """
+    SELECT COUNT(*)
+    FROM help_request h
+    JOIN app_user u ON u.id = h.requester_id
+    WHERE
+      (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+      AND (
+        6371.0 * acos(
+          LEAST(GREATEST(
+            cos(radians(:lat)) * cos(radians(h.latitude)) *
+            cos(radians(h.longitude) - radians(:lng)) +
+            sin(radians(:lat)) * sin(radians(h.latitude))
+          , -1), 1)
+        )
+      ) <= (:radiusMeters / 1000.0)
+  """,
+          nativeQuery = true
   )
-  List<HelpRequestEntity> findNearby(
-      @Param("lat") double lat,
-      @Param("lng") double lng,
-      @Param("radiusMeters") int radiusMeters
+  Page<HelpRequestRow> findNearbyPaged(
+          @Param("lat") double lat,
+          @Param("lng") double lng,
+          @Param("radiusMeters") int radiusMeters,
+          @Param("statusesCsv") String statusesCsv,
+          Pageable pageable
   );
 }
 ===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRepository.java =====
