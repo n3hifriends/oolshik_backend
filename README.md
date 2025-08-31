@@ -22,6 +22,7 @@ docker compose build api
 docker compose up -d api
 docker compose logs -f api
 docker exec -it postgres psql -U oolshik -d oolshik
+docker exec -it oolshik-backend-otp-api-1 sh -lc 'ls -R ./data/audio || ls -R /data/audio'
 ```
 
 - API: http://localhost:8080

@@ -152,4 +152,23 @@ public class S3StorageService implements StorageService {
                 .bucket(bucket).key(objectKey).uploadId(uploadId).build();
         s3.abortMultipartUpload(req);
     }
+
+    public String presignPutUrl(String key, String contentType, Duration ttl) {
+        PutObjectRequest put = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(contentType)
+                .build();
+        PresignedPutObjectRequest pre = presigner.presignPutObject(b -> b
+                .signatureDuration(ttl)
+                .putObjectRequest(put));
+        return pre.url().toString();
+    }
+
+    public String toPublicUrl(String key) {
+        // naive S3 URL; if you use CloudFront, return that instead.
+        // Note: for private buckets this won’t be directly playable; you would need signed GETs.
+        String regionHost = "s3." + s3.serviceClientConfiguration().region().toString().toLowerCase() + ".amazonaws.com";
+        return "https://" + bucket + "." + regionHost + "/" + key;
+    }
 }
