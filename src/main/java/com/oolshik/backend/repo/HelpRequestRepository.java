@@ -26,7 +26,8 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
       u.phone_number   AS createdByPhoneNumber,
       h.helper_id      AS helperId,
       h.created_at     AS createdAt,
-      h.updated_at     AS updatedAt
+      h.updated_at     AS updatedAt,
+      h.voice_url AS voiceUrl
     FROM help_request h
     JOIN app_user u ON u.id = h.requester_id
     WHERE
@@ -66,7 +67,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         )
       ) <= (:radiusMeters / 1000.0)
   """,
-          nativeQuery = true
+          nativeQuery = true // ✅ IMPORTANT
   )
   Page<HelpRequestRow> findNearbyPaged(
           @Param("lat") double lat,

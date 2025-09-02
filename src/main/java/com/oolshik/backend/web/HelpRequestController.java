@@ -1,10 +1,10 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.media.AudioFileRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.service.HelpRequestService;
-import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
@@ -16,7 +16,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -25,10 +24,12 @@ public class HelpRequestController {
 
     private final HelpRequestService service;
     private final UserRepository userRepo;
+    private final AudioFileRepository audioRepo; // NEW
 
-    public HelpRequestController(HelpRequestService service, UserRepository userRepo) {
+    public HelpRequestController(HelpRequestService service, UserRepository userRepo, AudioFileRepository audioRepo) {
         this.service = service;
         this.userRepo = userRepo;
+        this.audioRepo = audioRepo;
     }
 
     @PostMapping
@@ -38,7 +39,8 @@ public class HelpRequestController {
                 requester.getId(),
                 req.title(), req.description(),
                 req.latitude(), req.longitude(),
-                req.radiusMeters()
+                req.radiusMeters(),
+                req.voiceUrl()
         );
         return ResponseEntity.ok(view(created));
     }
@@ -76,12 +78,18 @@ public class HelpRequestController {
     }
 
     private HelpRequestView view(HelpRequestEntity e) {
+        String url = audioRepo
+                .findFirstByRequestIdOrderByCreatedAtDesc(e.getId().toString())
+                .map(a -> "/api/media/audio/" + a.getId() + "/stream")
+                .orElse(null);
+
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
                 e.getLatitude(), e.getLongitude(),
                 e.getRadiusMeters(), e.getStatus(),
                 e.getRequesterId(), e.getHelperId(),
-                e.getCreatedAt()
+                e.getCreatedAt(),
+                url // NEW
         );
     }
 }

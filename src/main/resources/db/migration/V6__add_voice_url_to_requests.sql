@@ -1,0 +1,2 @@
+ALTER TABLE help_request
+    ADD COLUMN IF NOT EXISTS voice_url VARCHAR(500);

@@ -17,4 +17,5 @@ public interface HelpRequestRow {
     UUID getHelperId();
     Instant getCreatedAt();
     Instant getUpdatedAt();
+    String getVoiceUrl();
 }
