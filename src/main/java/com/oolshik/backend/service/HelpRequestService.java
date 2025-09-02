@@ -28,7 +28,7 @@ public class HelpRequestService {
     }
 
     @Transactional
-    public HelpRequestEntity create(UUID requesterId, String title, String description, double lat, double lon, int radiusMeters) {
+    public HelpRequestEntity create(UUID requesterId, String title, String description, double lat, double lon, int radiusMeters, String voiceUrl) {
         UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
         HelpRequestEntity e = new HelpRequestEntity();
         e.setRequesterId(requester.getId());
@@ -38,6 +38,7 @@ public class HelpRequestService {
         e.setLongitude(lon);
         e.setRadiusMeters(radiusMeters);
         e.setStatus(HelpRequestStatus.OPEN);
+        e.setVoiceUrl(voiceUrl);
         return repo.save(e);
     }
 

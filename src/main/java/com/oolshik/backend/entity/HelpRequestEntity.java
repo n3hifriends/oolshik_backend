@@ -48,6 +48,9 @@ public class HelpRequestEntity {
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(nullable = false)
+    private String voiceUrl;
+
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -86,4 +89,6 @@ public class HelpRequestEntity {
     public void setHelperId(UUID helperId) { this.helperId = helperId; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public String getVoiceUrl() { return voiceUrl; }
+    public void setVoiceUrl(String voiceUrl) { this.voiceUrl = voiceUrl; }
 }

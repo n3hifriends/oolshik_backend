@@ -13,6 +13,7 @@ public class HelpRequestDtos {
     public record CreateRequest(
         @NotBlank String title,
         String description,
+        String voiceUrl,
         @NotNull Double latitude,
         @NotNull Double longitude,
         @Min(50) @Max(10000) Integer radiusMeters
@@ -28,6 +29,7 @@ public class HelpRequestDtos {
         HelpRequestStatus status,
         UUID requesterId,
         UUID helperId,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        String voiceUrl
     ) {}
 }

@@ -2,7 +2,7 @@
 # Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
 # Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
 # Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
-# Git ignored entries skipped: 64 (if repo)
+# Git ignored entries skipped: 110 (if repo)
 # ---
 
 
@@ -172,7 +172,17 @@ if __name__ == "__main__":
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>2.25.66</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
@@ -265,6 +275,10 @@ if __name__ == "__main__":
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
     </dependency>
   </dependencies>
 
@@ -290,7 +304,7 @@ if __name__ == "__main__":
 # Root: /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp
 # Included: ['.bash', '.bat', '.c', '.cfg', '.cjs', '.conf', '.cpp', '.css', '.dart', '.editorconfig', '.env', '.gitattributes', '.gitignore', '.go', '.gradle', '.groovy', '.h', '.hpp', '.htm', '.html', '.ini', '.java', '.js', '.json', '.jsonc', '.jsx', '.kt', '.kts', '.less', '.lua', '.m', '.md', '.mdx', '.mjs', '.mm', '.php', '.properties', '.proto', '.ps1', '.py', '.rb', '.rs', '.scss', '.sh', '.sql', '.swift', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml', '.zsh']
 # Excluded dirs: ['.expo', '.git', '.gradle', '.idea', '.next', '.venv', '.vscode', 'Pods', 'android/build', 'build', 'coverage', 'dist', 'ios/build', 'node_modules', 'venv']
-# Git ignored entries skipped: 64 (if repo)
+# Git ignored entries skipped: 110 (if repo)
 # ---
 
 
@@ -460,7 +474,17 @@ if __name__ == "__main__":
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>2.25.66</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
@@ -553,6 +577,10 @@ if __name__ == "__main__":
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
     </dependency>
   </dependencies>
 
@@ -579,6 +607,7 @@ if __name__ == "__main__":
 A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP login** as primary auth flow and **optional email** capture. Structured for easy extension into next phases.
 
 ## Highlights
+
 - **OTP-first auth** (SMS). Email is optional during OTP verify or later via profile update
 - **JWT** access & refresh tokens
 - **Users & Roles**: NETA, KARYAKARTA, ADMIN
@@ -591,16 +620,24 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ## Quick Start
 
 ### A) Docker (recommended)
+
 ```bash
-docker compose up --build
+docker compose build api
+docker compose up -d api
+docker compose logs -f api
+docker exec -it postgres psql -U oolshik -d oolshik
+docker exec -it oolshik-backend-otp-api-1 sh -lc 'ls -R ./data/audio || ls -R /data/audio'
 ```
+
 - API: http://localhost:8080
 - Swagger: http://localhost:8080/swagger-ui/index.html
 - Dev mode returns OTP code in response payload (for easy mobile integration/testing).
 
 ### B) Local (no Docker)
+
 1. Start PostgreSQL and create DB `oolshik` (user/pass `oolshik`), or set env vars below.
 2. Run:
+
 ```bash
 JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 ```
@@ -608,6 +645,7 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 ## API (Phase 1)
 
 ### Auth (OTP-first)
+
 - `POST /api/auth/otp/request`
   ```json
   { "phone": "+919876543210" }
@@ -615,7 +653,12 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
   Dev mode response includes `"devCode"`.
 - `POST /api/auth/otp/verify`
   ```json
-  { "phone": "+919876543210", "code": "123456", "displayName": "Nitin", "email": "n@example.com" }
+  {
+    "phone": "+919876543210",
+    "code": "123456",
+    "displayName": "Nitin",
+    "email": "n@example.com"
+  }
   ```
   Returns `{ "accessToken": "...", "refreshToken": "..." }`. Creates the user if needed and stores optional fields.
 - `POST /api/auth/refresh` → `{ "accessToken": "..." }`
@@ -624,6 +667,7 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 - `POST /api/auth/login` (email+password; **admin only** for ops)
 
 ### Help Requests
+
 - `POST /api/requests`
 - `GET  /api/requests/nearby?lat=..&lon=..&radiusMeters=1000`
 - `POST /api/requests/{id}/accept`
@@ -633,19 +677,23 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 ## Configuration
 
 Environment variables (defaults in `application.yml`):
+
 - `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
 - `app.otp.ttlSeconds=300`, `app.otp.cooldownSeconds=30`, `app.otp.maxAttempts=5`
 
 **Admin seeding (ops):**
+
 ```
 ADMIN_EMAIL=admin@oolshik.app
 ADMIN_PASSWORD=Admin@123
 ```
+
 Seeds an admin with placeholder phone `+910000000000`. Admin can login via `/api/auth/login`.
 
 ## Design Notes
+
 - **OTP codes** are stored **hashed** (BCrypt), with TTL, resend cooldown, and attempt throttling.
 - **Phone normalization**: simple E.164-ish helper defaults to +91 when obvious (10-digit input). Replace with libphonenumber later if needed.
 - **SMS sending**: pluggable `SmsSender` interface; dev profile logs messages; add Twilio/SNS later.
@@ -653,12 +701,14 @@ Seeds an admin with placeholder phone `+910000000000`. Admin can login via `/api
 - **Clean layering**: Controllers → Services → Repos → Entities; DTOs for requests/responses; exception handler for neat API errors.
 
 ## Build & Run
+
 ```bash
 ./mvnw -q -DskipTests package
 java -jar target/oolshik-backend-0.0.1-SNAPSHOT.jar
 ```
 
 ---
+
 This codebase is intentionally minimal yet production-leaning so you can extend it in next phases (chat, media, ratings, categories, payments) without refactoring auth or user domains.
 ===== END FILE: README.md =====
 
@@ -779,6 +829,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  servlet:
+    multipart:
+      max-file-size: 45MB
+      max-request-size: 50MB
 server:
   port: 8080
 
@@ -808,7 +862,73 @@ management:
   endpoint:
     health:
       show-details: never
+
+media:
+  storage: local   # local | s3
+
+  local:
+    root: ./data/audio
+
+  s3:
+    bucket: your-bucket-name
+    region: ap-south-1
+    prefix: audio/
+    # endpoint: http://localhost:9000
+    # pathStyleAccessEnabled: true
 ===== END FILE: src/main/resources/application.yml =====
+
+
+===== BEGIN FILE: src/main/resources/db/migration/V3__phone_reveal_event_fix.sql =====
+-- V3__phone_reveal_event_fix.sql
+-- 1) add help_request_id
+ALTER TABLE phone_reveal_event ADD COLUMN IF NOT EXISTS help_request_id UUID;
+
+-- 2) backfill help_request_id from the incorrect requester_user_id that currently holds help_request.id
+--    and fix requester_user_id to the real user id
+UPDATE phone_reveal_event pre
+SET help_request_id = pre.requester_user_id
+WHERE pre.help_request_id IS NULL;
+
+UPDATE phone_reveal_event pre
+SET requester_user_id = hr.requester_id
+    FROM help_request hr
+WHERE pre.help_request_id = hr.id
+  AND pre.requester_user_id <> hr.requester_id;
+
+-- 3) defaults
+ALTER TABLE phone_reveal_event
+    ALTER COLUMN reveal_count SET DEFAULT 0;
+
+-- 4) uniqueness per (help_request_id, target_user_id)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname = 'uk_reveal_req_target'
+  ) THEN
+CREATE UNIQUE INDEX uk_reveal_req_target
+    ON phone_reveal_event (help_request_id, target_user_id);
+END IF;
+END$$;
+===== END FILE: src/main/resources/db/migration/V3__phone_reveal_event_fix.sql =====
+
+
+===== BEGIN FILE: src/main/resources/db/migration/V5__audio_tables.sql =====
+-- V30__audio_tables.sql
+CREATE TABLE IF NOT EXISTS audio_files (
+    id UUID PRIMARY KEY,
+    owner_user_id VARCHAR(100) NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    storage_key VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    duration_ms BIGINT NULL,
+    sample_rate INTEGER NULL,
+    request_id VARCHAR(100) NULL
+);
+===== END FILE: src/main/resources/db/migration/V5__audio_tables.sql =====
 
 
 ===== BEGIN FILE: src/main/resources/db/migration/V1__init.sql =====
@@ -855,6 +975,45 @@ CREATE INDEX IF NOT EXISTS idx_help_request_status ON help_request(status);
 CREATE INDEX IF NOT EXISTS idx_help_request_geo ON help_request(latitude, longitude);
 CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_code(phone_number);
 ===== END FILE: src/main/resources/db/migration/V1__init.sql =====
+
+
+===== BEGIN FILE: src/main/resources/db/migration/V4__report_event.sql =====
+-- Ensure UUID generator exists (Postgres)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Moderation reports table
+CREATE TABLE IF NOT EXISTS report_event (
+                                            id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_user_id   UUID NOT NULL REFERENCES app_user(id),
+    target_user_id     UUID NULL REFERENCES app_user(id),
+    help_request_id    UUID NULL REFERENCES help_request(id),
+    reason             TEXT NOT NULL CHECK (reason IN ('SPAM','INAPPROPRIATE','UNSAFE','OTHER')),
+    details            TEXT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+CREATE INDEX IF NOT EXISTS idx_report_event_help_request_id ON report_event(help_request_id);
+CREATE INDEX IF NOT EXISTS idx_report_event_target_user_id ON report_event(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_report_event_created_at ON report_event(created_at DESC);
+===== END FILE: src/main/resources/db/migration/V4__report_event.sql =====
+
+
+===== BEGIN FILE: src/main/resources/db/migration/V2__phone_reveal_event.sql =====
+
+-- V2__phone_reveal_event.sql
+CREATE TABLE phone_reveal_event (
+                                    id UUID PRIMARY KEY,
+                                    requester_user_id UUID NOT NULL,   -- 👈 Add this column
+                                    target_user_id UUID NOT NULL,
+                                    phone_number VARCHAR(20) NOT NULL,
+                                    revealed_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+                                    reveal_count INT DEFAULT 0
+);
+
+-- Optional: index for analytics
+CREATE INDEX idx_phone_reveal_event_requester ON phone_reveal_event(requester_user_id);
+CREATE INDEX idx_phone_reveal_event_target ON phone_reveal_event(target_user_id);
+===== END FILE: src/main/resources/db/migration/V2__phone_reveal_event.sql =====
 
 
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/OolshikApplication.java =====
@@ -946,6 +1105,43 @@ public class CommonBeans {
     }
 }
 ===== END FILE: src/main/java/com/oolshik/backend/config/CommonBeans.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/config/MediaStorageConfig.java =====
+package com.oolshik.backend.config;
+
+import com.oolshik.backend.media.LocalStorageService;
+import com.oolshik.backend.media.S3StorageService;
+import com.oolshik.backend.media.StorageService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MediaStorageConfig {
+
+    @Bean // name: storageService
+    @ConditionalOnProperty(name = "media.storage", havingValue = "local", matchIfMissing = true)
+    public StorageService storageServiceLocal(
+            @Value("${media.local.root:./data/audio}") String root
+    ) throws Exception {
+        return new LocalStorageService(root);
+    }
+
+    @Bean // name: storageService
+    @ConditionalOnProperty(name = "media.storage", havingValue = "s3")
+    public StorageService storageServiceS3(
+            @Value("${media.s3.bucket}") String bucket,
+            @Value("${media.s3.region}") String region,
+            @Value("${media.s3.prefix:audio/}") String prefix,
+            @Value("${media.s3.endpoint:}") String endpoint,
+            @Value("${media.s3.pathStyleAccessEnabled:false}") boolean pathStyle
+    ) throws Exception {
+        return new S3StorageService(bucket, region, prefix, endpoint, pathStyle);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/config/MediaStorageConfig.java =====
 
 
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/security/SecurityConfig.java =====
@@ -1212,6 +1408,106 @@ public class HelpRequestEntity {
 ===== END FILE: src/main/java/com/oolshik/backend/entity/HelpRequestEntity.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/PhoneRevealEventEntity.java =====
+package com.oolshik.backend.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.UuidGenerator;
+
+import java.time.Instant;
+import java.util.*;
+
+@Entity
+@Table(
+        name = "phone_reveal_event",
+        indexes = {
+                @Index(name = "idx_pre_requester", columnList = "requester_user_id"),
+                @Index(name = "idx_pre_target", columnList = "target_user_id"),
+                @Index(name = "idx_pre_revealed_at", columnList = "revealed_at")
+        }
+)
+public class PhoneRevealEventEntity {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator(style = UuidGenerator.Style.RANDOM)
+    @Column(name = "id", nullable = false, updatable = false, columnDefinition = "uuid")
+    private UUID id;
+
+    /** The user who clicked to reveal the phone number */
+    @Column(name = "requester_user_id", nullable = false)
+    private UUID requesterUserId;
+
+    /** The owner of the phone number being revealed */
+    @Column(name = "target_user_id", nullable = false)
+    private UUID targetUserId;
+
+    /** The phone number that was revealed (store the exact number shown) */
+    @Column(name = "phone_number", nullable = false, length = 20)
+    private String phoneNumber;
+
+    /** When the reveal happened */
+    @Column(name = "revealed_at", nullable = false)
+    private Instant revealedAt;
+
+    /** Optional counter if you choose to increment per target/number */
+    @Column(name = "reveal_count", nullable = false)
+    private Integer revealCount = 0;
+
+    // ---- Optional read-only associations (handy for joins / projections) ----
+    // They are read-only (insertable=false, updatable=false) because we persist via the *_user_id fields.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "requester_user_id", referencedColumnName = "id", insertable = false, updatable = false)
+    private UserEntity requesterUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_user_id", referencedColumnName = "id", insertable = false, updatable = false)
+    private UserEntity targetUser;
+
+    // ---- Constructors ----
+    public PhoneRevealEventEntity() {}
+
+    public PhoneRevealEventEntity(UUID requesterUserId, UUID targetUserId, String phoneNumber) {
+        this.requesterUserId = requesterUserId;
+        this.targetUserId = targetUserId;
+        this.phoneNumber = phoneNumber;
+    }
+
+    // ---- Lifecycle ----
+    @PrePersist
+    public void prePersist() {
+        if (this.revealedAt == null) {
+            this.revealedAt = Instant.now();
+        }
+        if (this.revealCount == null) {
+            this.revealCount = 0;
+        }
+    }
+
+    // ---- Getters / Setters ----
+    public UUID getId() { return id; }
+
+    public UUID getRequesterUserId() { return requesterUserId; }
+    public void setRequesterUserId(UUID requesterUserId) { this.requesterUserId = requesterUserId; }
+
+    public UUID getTargetUserId() { return targetUserId; }
+    public void setTargetUserId(UUID targetUserId) { this.targetUserId = targetUserId; }
+
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+
+    public Instant getRevealedAt() { return revealedAt; }
+    public void setRevealedAt(Instant revealedAt) { this.revealedAt = revealedAt; }
+
+    public Integer getRevealCount() { return revealCount; }
+    public void setRevealCount(Integer revealCount) { this.revealCount = revealCount; }
+
+    public UserEntity getRequesterUser() { return requesterUser; }
+    public UserEntity getTargetUser() { return targetUser; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/entity/PhoneRevealEventEntity.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/UserEntity.java =====
 package com.oolshik.backend.entity;
 
@@ -1369,46 +1665,205 @@ public class OtpCodeEntity {
 ===== END FILE: src/main/java/com/oolshik/backend/entity/OtpCodeEntity.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/entity/ReportEventEntity.java =====
+package com.oolshik.backend.entity;
+
+import com.oolshik.backend.domain.ReportReason;
+import jakarta.persistence.*;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "report_event")
+public class ReportEventEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(name = "reporter_user_id", nullable = false)
+    private UUID reporterUserId;
+
+    @Column(name = "target_user_id")
+    private UUID targetUserId;
+
+    @Column(name = "help_request_id")
+    private UUID helpRequestId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reason", nullable = false)
+    private ReportReason reason;
+
+    @Column(name = "details")
+    private String details;
+
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
+
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) createdAt = OffsetDateTime.now();
+    }
+
+    // getters/setters ...
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    public UUID getReporterUserId() { return reporterUserId; }
+    public void setReporterUserId(UUID reporterUserId) { this.reporterUserId = reporterUserId; }
+
+    public UUID getTargetUserId() { return targetUserId; }
+    public void setTargetUserId(UUID targetUserId) { this.targetUserId = targetUserId; }
+
+    public UUID getHelpRequestId() { return helpRequestId; }
+    public void setHelpRequestId(UUID helpRequestId) { this.helpRequestId = helpRequestId; }
+
+    public ReportReason getReason() { return reason; }
+    public void setReason(ReportReason reason) { this.reason = reason; }
+
+    public String getDetails() { return details; }
+    public void setDetails(String details) { this.details = details; }
+
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/entity/ReportEventEntity.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
 package com.oolshik.backend.web;
 
+import com.oolshik.backend.web.error.ConflictOperationException;
+import com.oolshik.backend.web.error.ForbiddenOperationException;
+import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.web.server.ResponseStatusException;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex) {
-        String cid = MDC.get("cid");
-        Map<String, Object> body = new HashMap<>();
-        body.put("error", "validation_error");
-        body.put("cid", cid);
-        body.put("message", ex.getMessage());
-        log.warn("[{}] Validation failed: {}", cid, ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    private record ApiError(String cid, String error, String message) {
     }
 
+    private String cid() {
+        return MDC.get("cid");
+    }
+
+    /* ---------------------------
+     *  400 – Validation / Bad input
+     * --------------------------- */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex) {
+        String msg = ex.getBindingResult().getAllErrors().stream()
+                .findFirst()
+                .map(err -> {
+                    if (err instanceof FieldError fe) {
+                        return fe.getField() + ": " + fe.getDefaultMessage();
+                    }
+                    return err.getDefaultMessage();
+                })
+                .orElse("Validation failed");
+        log.warn("[{}] 400 validation_error: {}", cid(), msg);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(cid(), "validation_error", msg));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
+        // Bad client input, not a server error
+        log.warn("[{}] 400 invalid_argument: {}", cid(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(cid(), "invalid_argument", ex.getMessage()));
+    }
+
+    /* ---------------------------
+     *  403 – Forbidden
+     * --------------------------- */
+    @ExceptionHandler({ForbiddenOperationException.class, AccessDeniedException.class})
+    public ResponseEntity<ApiError> handleForbidden(RuntimeException ex) {
+        log.warn("[{}] 403 forbidden: {}", cid(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(cid(), "forbidden", ex.getMessage()));
+    }
+
+    /* ---------------------------
+     *  404 – Not found
+     * --------------------------- */
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<ApiError> handleNotFound(EntityNotFoundException ex) {
+        log.warn("[{}] 404 not_found: {}", cid(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(cid(), "not_found", ex.getMessage()));
+    }
+
+    /* ---------------------------
+     *  409 – Conflict / Invalid state
+     * --------------------------- */
+    @ExceptionHandler(ConflictOperationException.class)
+    public ResponseEntity<ApiError> handleConflict(ConflictOperationException ex) {
+        log.warn("[{}] 409 conflict: {}", cid(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(cid(), "conflict", ex.getMessage()));
+    }
+
+    /* ---------------------------
+     *  Pass-through for ResponseStatus* exceptions
+     * --------------------------- */
+    @ExceptionHandler({ResponseStatusException.class, ErrorResponseException.class})
+    public ResponseEntity<ApiError> handleResponseStatus(Exception ex) {
+        HttpStatus status;
+        String message;
+
+        if (ex instanceof ResponseStatusException rse) {
+            status = HttpStatus.valueOf(rse.getStatusCode().value());
+            message = (rse.getReason() != null ? rse.getReason() : rse.getMessage());
+        } else {
+            ErrorResponseException ere = (ErrorResponseException) ex;
+            status = HttpStatus.valueOf(ere.getStatusCode().value());
+            message = ere.getBody() != null && ere.getBody().getDetail() != null
+                    ? ere.getBody().getDetail()
+                    : ere.getMessage();
+        }
+
+        String errorCode = switch (status) {
+            case BAD_REQUEST -> "bad_request";
+            case FORBIDDEN -> "forbidden";
+            case NOT_FOUND -> "not_found";
+            case CONFLICT -> "conflict";
+            default -> "error";
+        };
+
+        if (status.is4xxClientError()) {
+            log.warn("[{}] {} {}: {}", cid(), status.value(), errorCode, message);
+        } else {
+            log.error("[{}] {} {}: {}", cid(), status.value(), errorCode, message, ex);
+        }
+
+        return ResponseEntity.status(status)
+                .body(new ApiError(cid(), errorCode, message));
+    }
+
+    /* ---------------------------
+     *  Fallback – real 500s only
+     * --------------------------- */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleAny(Exception ex) {
-        String cid = MDC.get("cid");
-        Map<String, Object> body = new HashMap<>();
-        body.put("error", "internal_error");
-        body.put("cid", cid);
-        body.put("message", ex.getMessage());
-        log.error("[{}] Unhandled exception", cid, ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    public ResponseEntity<ApiError> handleAny(Exception ex) {
+        // Keep stacktrace in logs, short message to client
+        log.error("[{}] 500 internal_error", cid(), ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiError(cid(), "internal_error", "Unexpected error"));
     }
 }
 ===== END FILE: src/main/java/com/oolshik/backend/web/GlobalExceptionHandler.java =====
@@ -1504,6 +1959,47 @@ public class AuthController {
 ===== END FILE: src/main/java/com/oolshik/backend/web/AuthController.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/ReportController.java =====
+// src/main/java/com/oolshik/backend/web/ReportController.java
+package com.oolshik.backend.web;
+
+import com.oolshik.backend.service.ReportService;
+import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
+import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
+
+@RestController
+@RequestMapping("/api/reports")
+public class ReportController {
+
+    private final ReportService reportService;
+
+    public ReportController(ReportService reportService) {
+        this.reportService = reportService;
+    }
+
+//    @PostMapping
+//    public ResponseEntity<CreateResponse> create(User principal, @RequestBody @Valid CreateRequest body) {
+//        // principal.getUsername() is the phone number in your app
+//        var res = reportService.create(principal.getUsername(), body);
+//        return ResponseEntity.ok(res);
+//    }
+
+    @PostMapping
+    public ResponseEntity<CreateResponse> create(Principal principal, @RequestBody CreateRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(reportService.create(principal.getName(), req));
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/ReportController.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/HelpRequestController.java =====
 package com.oolshik.backend.web;
 
@@ -1595,6 +2091,48 @@ public class HelpRequestController {
 ===== END FILE: src/main/java/com/oolshik/backend/web/HelpRequestController.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/PhoneRevealController.java =====
+package com.oolshik.backend.web;
+
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.service.PhoneRevealService;
+import com.oolshik.backend.web.dto.PhoneRevealDtos.RevealPhoneResponse;
+import com.oolshik.backend.web.error.ConflictOperationException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/requests")
+public class PhoneRevealController {
+
+    private final PhoneRevealService phoneRevealService;
+    private final UserRepository userRepository;
+
+    public PhoneRevealController(PhoneRevealService phoneRevealService, UserRepository userRepository) {
+        this.phoneRevealService = phoneRevealService;
+        this.userRepository = userRepository;
+    }
+
+    @PostMapping("/{id}/revealPhone")
+    public ResponseEntity<RevealPhoneResponse> revealPhone(
+            @AuthenticationPrincipal User principal,
+            @PathVariable("id") UUID helpRequestId) {
+
+        // principal.getUsername() is the login (your project logs show it is phone)
+        var viewer = userRepository.findByPhoneNumber(principal.getUsername())
+                .orElseThrow(() -> new ConflictOperationException("Viewer not found"));
+
+        var body = phoneRevealService.revealPhone(helpRequestId, viewer.getId());
+        return ResponseEntity.ok(body);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/PhoneRevealController.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/AuthDtos.java =====
 package com.oolshik.backend.web.dto;
 
@@ -1622,6 +2160,28 @@ public class AuthDtos {
     public record RefreshRequest(@NotBlank String refreshToken) {}
 }
 ===== END FILE: src/main/java/com/oolshik/backend/web/dto/AuthDtos.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/ReportDtos.java =====
+// src/main/java/com/oolshik/backend/web/dto/ReportDtos.java
+package com.oolshik.backend.web.dto;
+
+import com.oolshik.backend.domain.ReportReason;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.util.UUID;
+
+public class ReportDtos {
+    public record CreateRequest(
+            UUID taskId,
+            UUID targetUserId,
+            @NotNull ReportReason reason,
+            @Size(max = 1000) String text
+    ) {}
+    public record CreateResponse(UUID id) {}
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/dto/ReportDtos.java =====
 
 
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/HelpRequestDtos.java =====
@@ -1659,6 +2219,15 @@ public class HelpRequestDtos {
     ) {}
 }
 ===== END FILE: src/main/java/com/oolshik/backend/web/dto/HelpRequestDtos.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/dto/PhoneRevealDtos.java =====
+package com.oolshik.backend.web.dto;
+
+public class PhoneRevealDtos {
+    public record RevealPhoneResponse(String phoneNumber, long revealCount) {}
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/dto/PhoneRevealDtos.java =====
 
 
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/web/filter/CorrelationIdFilter.java =====
@@ -1753,6 +2322,28 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 ===== END FILE: src/main/java/com/oolshik/backend/web/filter/RequestResponseLoggingFilter.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/error/ForbiddenOperationException.java =====
+package com.oolshik.backend.web.error;
+
+public class ForbiddenOperationException extends RuntimeException {
+    public ForbiddenOperationException(String message) {
+        super(message);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/error/ForbiddenOperationException.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/web/error/ConflictOperationException.java =====
+package com.oolshik.backend.web.error;
+
+public class ConflictOperationException extends RuntimeException {
+    public ConflictOperationException(String message) {
+        super(message);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/web/error/ConflictOperationException.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/aop/LoggingAspect.java =====
 package com.oolshik.backend.aop;
 
@@ -1804,6 +2395,181 @@ public class LoggingAspect {
 ===== END FILE: src/main/java/com/oolshik/backend/aop/LoggingAspect.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/common/ApiError.java =====
+package com.oolshik.backend.common;
+
+public record ApiError(String code, String message) {
+    public static ApiError of(String code, String message) { return new ApiError(code, message); }
+}
+===== END FILE: src/main/java/com/oolshik/backend/common/ApiError.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/PhoneRevealService.java =====
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.entity.PhoneRevealEventEntity;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.repo.PhoneRevealEventRepository;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.web.dto.PhoneRevealDtos.RevealPhoneResponse;
+import jakarta.persistence.EntityNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+@Service
+public class PhoneRevealService {
+
+    private final HelpRequestRepository helpRequestRepository;
+    private final UserRepository userRepository;
+    private final PhoneRevealEventRepository phoneRevealRepo;
+
+    public PhoneRevealService(
+            HelpRequestRepository helpRequestRepository,
+            UserRepository userRepository,
+            PhoneRevealEventRepository phoneRevealRepo) {
+        this.helpRequestRepository = helpRequestRepository;
+        this.userRepository = userRepository;
+        this.phoneRevealRepo = phoneRevealRepo;
+    }
+
+    @Transactional
+    public RevealPhoneResponse revealPhone(UUID helpRequestId, UUID viewerUserId) {
+        HelpRequestEntity hr = helpRequestRepository.findById(helpRequestId)
+                .orElseThrow(() -> new EntityNotFoundException("Request not found"));
+
+        UserEntity requester = userRepository.findById(hr.getRequesterId())
+                .orElseThrow(() -> new EntityNotFoundException("Requester not found"));
+
+        UserEntity viewer = userRepository.findById(viewerUserId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+
+        String fullNumber = requester.getPhoneNumber();
+
+
+        PhoneRevealEventEntity ev = new PhoneRevealEventEntity();
+        ev.setPhoneNumber(fullNumber);
+        ev.setRequesterUserId(helpRequestId);
+        ev.setTargetUserId(viewerUserId);
+        phoneRevealRepo.save(ev);
+
+        long count = phoneRevealRepo.countByRequesterUserId(helpRequestId);
+        return new RevealPhoneResponse(fullNumber, count);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/PhoneRevealService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/service/ReportService.java =====
+// src/main/java/com/oolshik/backend/service/ReportService.java
+package com.oolshik.backend.service;
+
+import com.oolshik.backend.domain.ReportReason;
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.entity.ReportEventEntity;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.repo.ReportEventRepository;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
+import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
+import jakarta.persistence.EntityNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+
+import java.util.UUID;
+
+@Service
+public class ReportService {
+
+    private final UserRepository userRepo;
+    private final HelpRequestRepository helpRepo;
+    private final ReportEventRepository reportRepo;
+
+    public ReportService(UserRepository userRepo,
+                         HelpRequestRepository helpRepo,
+                         ReportEventRepository reportRepo) {
+        this.userRepo = userRepo;
+        this.helpRepo = helpRepo;
+        this.reportRepo = reportRepo;
+    }
+
+    @Transactional
+    public CreateResponse create(String principalPhone, CreateRequest req) {
+        // Who is reporting?
+        UserEntity reporter = userRepo.findByPhoneNumber(principalPhone)
+                .orElseThrow(() -> new EntityNotFoundException("Reporter not found"));
+
+        // Validate context: **exactly one** of taskId or targetUserId
+        final UUID helpRequestId   = req.taskId();
+        final UUID explicitTarget  = req.targetUserId();
+
+        if (helpRequestId == null && explicitTarget == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Either taskId or targetUserId is required");
+        }
+        if (helpRequestId != null && explicitTarget != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Provide only one of taskId or targetUserId");
+        }
+
+        // If OTHER, details are required
+        if (req.reason() == ReportReason.OTHER && (req.text() == null || req.text().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Details are required when reason is OTHER");
+        }
+
+        // Resolve target user
+        UUID targetUserId;
+        if (helpRequestId != null) {
+            HelpRequestEntity hr = helpRepo.findById(helpRequestId)
+                    .orElseThrow(() -> new EntityNotFoundException("Task not found"));
+            targetUserId = hr.getRequesterId(); // inferred from the task
+            if (targetUserId == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Task has no requester to report");
+            }
+            // If you *want* to allow reporting the helper instead, add a switch here.
+        } else {
+            // targetUserId flow
+            userRepo.findById(explicitTarget)
+                    .orElseThrow(() -> new EntityNotFoundException("Target user not found"));
+            targetUserId = explicitTarget;
+        }
+
+        // Prevent self-reporting (optional but sensible)
+        if (reporter.getId().equals(targetUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You cannot report yourself");
+        }
+
+        // Optional: dedupe to avoid spam (uncomment if you add this repo method)
+        // boolean exists = reportRepo.existsByReporterUserIdAndTargetUserIdAndHelpRequestIdAndReason(
+        //         reporter.getId(), targetUserId, helpRequestId, req.reason());
+        // if (exists) {
+        //     throw new ResponseStatusException(HttpStatus.CONFLICT, "You already reported this");
+        // }
+
+        // Persist
+        ReportEventEntity ev = new ReportEventEntity();
+        ev.setReporterUserId(reporter.getId());
+        ev.setTargetUserId(targetUserId);
+        ev.setHelpRequestId(helpRequestId); // may be null in user-report flow
+        ev.setReason(req.reason());
+        ev.setDetails((req.text() != null && !req.text().isBlank()) ? req.text().trim() : null);
+
+        reportRepo.save(ev);
+        return new CreateResponse(ev.getId());
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/service/ReportService.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/service/HelpRequestService.java =====
 package com.oolshik.backend.service;
 
@@ -1813,10 +2579,13 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.web.error.ForbiddenOperationException;
+import com.oolshik.backend.web.error.ConflictOperationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -1861,7 +2630,9 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity accept(UUID requestId, UUID helperId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (e.getStatus() != HelpRequestStatus.OPEN) throw new IllegalStateException("Request not open");
+        if (e.getStatus() != HelpRequestStatus.OPEN) {
+            throw new ConflictOperationException("Request not open"); // 409
+        }
         e.setStatus(HelpRequestStatus.ASSIGNED);
         e.setHelperId(helperId);
         return repo.save(e);
@@ -1870,7 +2641,9 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity complete(UUID requestId, UUID requesterId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can complete");
+        if (!requesterId.equals(e.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can complete"); // -> 403
+        }
         e.setStatus(HelpRequestStatus.COMPLETED);
         return repo.save(e);
     }
@@ -1878,7 +2651,9 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity cancel(UUID requestId, UUID requesterId) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) throw new IllegalArgumentException("Only requester can cancel");
+        if (!requesterId.equals(e.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can cancel"); // -> 403
+        }
         e.setStatus(HelpRequestStatus.CANCELLED);
         return repo.save(e);
     }
@@ -2137,6 +2912,15 @@ public class DevSmsSender implements SmsSender {
 ===== END FILE: src/main/java/com/oolshik/backend/service/DevSmsSender.java =====
 
 
+===== BEGIN FILE: src/main/java/com/oolshik/backend/domain/ReportReason.java =====
+package com.oolshik.backend.domain;
+
+public enum ReportReason {
+    SPAM, INAPPROPRIATE, UNSAFE, OTHER
+}
+===== END FILE: src/main/java/com/oolshik/backend/domain/ReportReason.java =====
+
+
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/domain/Role.java =====
 package com.oolshik.backend.domain; public enum Role { NETA, KARYAKARTA, ADMIN }
 ===== END FILE: src/main/java/com/oolshik/backend/domain/Role.java =====
@@ -2174,6 +2958,20 @@ public interface HelpRequestRow {
     Instant getUpdatedAt();
 }
 ===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRow.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/PhoneRevealEventRepository.java =====
+package com.oolshik.backend.repo;
+
+import com.oolshik.backend.entity.PhoneRevealEventEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.UUID;
+
+public interface PhoneRevealEventRepository extends JpaRepository<PhoneRevealEventEntity, UUID> {
+    long countByRequesterUserId(UUID requesterUserId);
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/PhoneRevealEventRepository.java =====
 
 
 ===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/OtpCodeRepository.java =====
@@ -2294,3 +3092,623 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
   );
 }
 ===== END FILE: src/main/java/com/oolshik/backend/repo/HelpRequestRepository.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/repo/ReportEventRepository.java =====
+// src/main/java/com/oolshik/backend/repo/ReportEventRepository.java
+package com.oolshik.backend.repo;
+
+import com.oolshik.backend.entity.ReportEventEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.UUID;
+
+public interface ReportEventRepository extends JpaRepository<ReportEventEntity, UUID> {
+}
+===== END FILE: src/main/java/com/oolshik/backend/repo/ReportEventRepository.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/S3StorageService.java =====
+package com.oolshik.backend.media;
+
+import org.springframework.util.StringUtils;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.*;
+
+import java.io.*;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+
+public class S3StorageService implements StorageService {
+
+    private final S3Client s3;
+    private final S3Presigner presigner;
+    private final String bucket;
+    private final String prefix;
+    private final Path tmpRoot;
+
+    public S3StorageService(String bucket, String region, String prefix, String endpoint, boolean pathStyle) throws IOException {
+        this.bucket = bucket;
+        this.prefix = prefix != null ? prefix : "audio/";
+        var base = S3Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(DefaultCredentialsProvider.create());
+        var pre = S3Presigner.builder().region(Region.of(region)).credentialsProvider(DefaultCredentialsProvider.create());
+        if (StringUtils.hasText(endpoint)) {
+            var uri = URI.create(endpoint);
+            base = base.endpointOverride(uri);
+            pre = pre.endpointOverride(uri);
+        }
+        if (pathStyle) {
+            base = base.serviceConfiguration(cfg -> cfg.pathStyleAccessEnabled(true));
+        }
+        this.s3 = base.build();
+        this.presigner = pre.build();
+        this.tmpRoot = Paths.get("./data/audio/tmp-s3").toAbsolutePath();
+        Files.createDirectories(tmpRoot);
+    }
+
+    private String key(String finalKey) {
+        String k = (prefix.endsWith("/") ? prefix : prefix + "/") + finalKey;
+        return k.replace("//", "/");
+    }
+
+    @Override
+    public String writeTemp(String uploadId) throws IOException {
+        Path p = tmpRoot.resolve(uploadId + ".part");
+        Files.deleteIfExists(p);
+        Files.createFile(p);
+        return p.toString();
+    }
+
+    @Override
+    public void append(String tempKey, byte[] bytes) throws IOException {
+        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(tempKey, true))) {
+            out.write(bytes);
+        }
+    }
+
+    @Override
+    public String finalizeUpload(String tempKey, String finalKey) throws IOException {
+        Path src = Paths.get(tempKey);
+        String s3key = key(finalKey);
+        try (InputStream in = new BufferedInputStream(new FileInputStream(src.toFile()))) {
+            PutObjectRequest req = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(s3key)
+                    .contentType("audio/m4a")
+                    .build();
+            s3.putObject(req, RequestBody.fromInputStream(in, Files.size(src)));
+        } catch (S3Exception e) {
+            throw new IOException("S3 putObject failed: " + e.awsErrorDetails().errorMessage(), e);
+        } finally {
+            Files.deleteIfExists(src);
+        }
+        return s3key;
+    }
+
+    @Override
+    public InputStream readRange(String key, long start, long end) throws IOException {
+        String range = "bytes=" + start + "-" + end;
+        GetObjectRequest req = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .range(range)
+                .build();
+        try {
+            ResponseInputStream<GetObjectResponse> in = s3.getObject(req);
+            return in;
+        } catch (S3Exception e) {
+            throw new IOException("S3 getObject failed: " + e.awsErrorDetails().errorMessage(), e);
+        }
+    }
+
+    @Override
+    public long size(String key) throws IOException {
+        HeadObjectRequest req = HeadObjectRequest.builder().bucket(bucket).key(key).build();
+        try {
+            HeadObjectResponse head = s3.headObject(req);
+            return head.contentLength();
+        } catch (S3Exception e) {
+            throw new IOException("S3 headObject failed: " + e.awsErrorDetails().errorMessage(), e);
+        }
+    }
+
+    @Override
+    public void delete(String key) throws IOException {
+        try {
+            s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+        } catch (S3Exception e) {
+            throw new IOException("S3 deleteObject failed: " + e.awsErrorDetails().errorMessage(), e);
+        }
+    }
+
+    // ---- Presigned MPU helpers (Phase 2) ----
+    public CreateMultipartUploadResponse mpuCreate(String objectKey, String mimeType) {
+        CreateMultipartUploadRequest req = CreateMultipartUploadRequest.builder()
+                .bucket(bucket).key(objectKey).contentType(mimeType).build();
+        return s3.createMultipartUpload(req);
+    }
+
+    public String presignPartUrl(String uploadId, String objectKey, int partNumber, Duration ttl) {
+        UploadPartRequest upr = UploadPartRequest.builder()
+                .bucket(bucket).key(objectKey).uploadId(uploadId).partNumber(partNumber).build();
+        PresignedUploadPartRequest p = presigner.presignUploadPart(b -> b
+                .signatureDuration(ttl).uploadPartRequest(upr));
+        return p.url().toString();
+    }
+
+    public void mpuComplete(String uploadId, String objectKey, java.util.List<Dtos.PartETag> parts) {
+        CompletedMultipartUpload cmp = CompletedMultipartUpload.builder().parts(
+                parts.stream()
+                        .map(p -> CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build())
+                        .toList()
+        ).build();
+        CompleteMultipartUploadRequest req = CompleteMultipartUploadRequest.builder()
+                .bucket(bucket).key(objectKey).uploadId(uploadId).multipartUpload(cmp).build();
+        s3.completeMultipartUpload(req);
+    }
+
+    public void mpuAbort(String uploadId, String objectKey) {
+        AbortMultipartUploadRequest req = AbortMultipartUploadRequest.builder()
+                .bucket(bucket).key(objectKey).uploadId(uploadId).build();
+        s3.abortMultipartUpload(req);
+    }
+
+    public String presignPutUrl(String key, String contentType, Duration ttl) {
+        PutObjectRequest put = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(contentType)
+                .build();
+        PresignedPutObjectRequest pre = presigner.presignPutObject(b -> b
+                .signatureDuration(ttl)
+                .putObjectRequest(put));
+        return pre.url().toString();
+    }
+
+    public String toPublicUrl(String key) {
+        // naive S3 URL; if you use CloudFront, return that instead.
+        // Note: for private buckets this won’t be directly playable; you would need signed GETs.
+        String regionHost = "s3." + s3.serviceClientConfiguration().region().toString().toLowerCase() + ".amazonaws.com";
+        return "https://" + bucket + "." + regionHost + "/" + key;
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/S3StorageService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/MultipartUploadService.java =====
+package com.oolshik.backend.media;
+
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class MultipartUploadService {
+
+    private final StorageService storage;
+    private final Map<String, String> tempKeyByUploadId = new ConcurrentHashMap<>();
+
+    public MultipartUploadService(StorageService storage) {
+        this.storage = storage;
+    }
+
+    public String initUpload() throws IOException {
+        String uploadId = UUID.randomUUID().toString();
+        String tempKey = storage.writeTemp(uploadId);
+        tempKeyByUploadId.put(uploadId, tempKey);
+        return uploadId;
+    }
+
+    public void appendChunk(String uploadId, byte[] bytes) throws IOException {
+        String tempKey = tempKeyByUploadId.get(uploadId);
+        if (tempKey == null) throw new IllegalStateException("Unknown uploadId");
+        synchronized (tempKey.intern()) {
+            storage.append(tempKey, bytes);
+        }
+    }
+
+    public String finalizeUpload(String uploadId, String finalKey) throws IOException {
+        String tempKey = tempKeyByUploadId.remove(uploadId);
+        if (tempKey == null) throw new IllegalStateException("Unknown uploadId");
+        return storage.finalizeUpload(tempKey, finalKey);
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/MultipartUploadService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/AudioController.java =====
+package com.oolshik.backend.media;
+
+import com.oolshik.backend.media.Dtos.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+
+
+//# Oolshik Audio Backend (Aligned & Phase-ready)
+//
+//- **Phase 1**: Server-buffered chunk upload -> finalize to Local or S3 (same API)
+//- **Phase 2**: Optional client direct-to-S3 (presigned multipart) endpoints under `/mpu/*`
+//- **Phase 3+**: Add transcription, retention, sharing without changing upload APIs
+//
+//## Endpoints
+//- POST `/api/media/audio/init`, PUT `/api/media/audio/{uploadId}/chunk?index=N`, POST `/complete`
+//- GET `/api/media/audio/my`, GET `/api/media/audio/{id}/stream` (Range), DELETE `/{id}`
+//- POST `/api/media/audio/mpu/create|sign-part|complete|abort` (S3 only)
+
+//## Security
+//Protect `/api/media/**` for authenticated users (JWT). `auth.getName()` is used as `ownerUserId`.
+
+@RestController
+@RequestMapping("/api/media/audio")
+public class AudioController {
+
+    private final MultipartUploadService multipart;
+    private final StorageService storage;
+    private final AudioFileRepository repo;
+
+    public AudioController(MultipartUploadService multipart,
+                           StorageService storage,
+                           AudioFileRepository repo) {
+        this.multipart = multipart;
+        this.storage = storage; // single bean named 'storageService'
+        this.repo = repo;
+    }
+
+    // -------- Phase 1: Server-buffered chunk upload --------
+    @PostMapping("/init")
+    public InitUploadResp init(@RequestBody InitUploadReq req) throws IOException {
+        String uploadId = multipart.initUpload();
+        return new InitUploadResp(uploadId);
+    }
+
+    @PutMapping(value = "/{uploadId}/chunk", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public void chunk(@PathVariable String uploadId, @RequestBody byte[] body) throws IOException {
+        multipart.appendChunk(uploadId, body);
+    }
+
+    @Transactional
+    @PostMapping("/complete")
+    public AudioFile complete(@RequestBody CompleteUploadReq req, Authentication auth) throws IOException {
+        String userId = auth.getName();
+        String finalKey = userId + "/" + req.uploadId() + ".m4a";
+        String storageKey = multipart.finalizeUpload(req.uploadId(), finalKey);
+
+        AudioFile af = new AudioFile();
+        af.setOwnerUserId(userId);
+        af.setFilename(req.uploadId() + ".m4a");
+        af.setMimeType("audio/m4a");
+        af.setSizeBytes(storage.size(storageKey));
+        af.setStorageKey(storageKey);
+        af.setDurationMs(req.durationMs());
+        af.setSampleRate(req.sampleRate());
+        af.setRequestId(null);
+        return repo.save(af);
+    }
+
+    @GetMapping("/my")
+    public List<AudioFile> my(Authentication auth) {
+        return repo.findByOwnerUserIdOrderByCreatedAtDesc(auth.getName());
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable UUID id, Authentication auth) throws IOException {
+        AudioFile af = repo.findById(id).orElseThrow();
+        if (!af.getOwnerUserId().equals(auth.getName())) throw new RuntimeException("Forbidden");
+        storage.delete(af.getStorageKey());
+        repo.delete(af);
+    }
+
+    @GetMapping("/{id}/stream")
+    public void stream(@PathVariable UUID id, HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
+        AudioFile af = repo.findById(id).orElseThrow();
+        if (!af.getOwnerUserId().equals(auth.getName())) throw new RuntimeException("Forbidden");
+
+        long fileLength = storage.size(af.getStorageKey());
+        String range = request.getHeader("Range");
+        long start = 0, end = fileLength - 1;
+        if (range != null && range.startsWith("bytes=")) {
+            String[] parts = range.substring(6).split("-");
+            start = Long.parseLong(parts[0]);
+            if (parts.length > 1 && !parts[1].isEmpty()) end = Long.parseLong(parts[1]);
+            if (end >= fileLength) end = fileLength - 1;
+            response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+        } else {
+            response.setStatus(HttpServletResponse.SC_OK);
+        }
+
+        long contentLength = end - start + 1;
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setHeader("Content-Type", af.getMimeType());
+        response.setHeader("Content-Length", Long.toString(contentLength));
+        if (range != null) response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
+
+        try (InputStream in = storage.readRange(af.getStorageKey(), start, end)) {
+            in.transferTo(response.getOutputStream());
+        }
+    }
+
+    // -------- Phase 2: Direct-to-S3 MPU (presigned) --------
+    @PostMapping("/mpu/create")
+    public MpuCreateResp mpuCreate(@RequestBody MpuCreateReq req, Authentication auth) {
+        String userId = auth.getName();
+        String objectKey = userId + "/mpu/" + UUID.randomUUID() + "-" + req.filename();
+        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        var res = s3.mpuCreate(objectKey, req.mimeType());
+        return new MpuCreateResp(res.uploadId(), objectKey);
+    }
+
+    @PostMapping("/mpu/sign-part")
+    public MpuSignedPart mpuSign(@RequestBody MpuSignPartReq req) {
+        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        String url = s3.presignPartUrl(req.uploadId(), req.objectKey(), req.partNumber(), Duration.ofMinutes(15));
+        return new MpuSignedPart(req.partNumber(), url);
+    }
+
+    @PostMapping("/mpu/complete")
+    public void mpuComplete(@RequestBody MpuCompleteReq req) {
+        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        s3.mpuComplete(req.uploadId(), req.objectKey(), req.parts());
+    }
+
+    @PostMapping("/mpu/abort")
+    public void mpuAbort(@RequestBody MpuAbortReq req) {
+        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        s3.mpuAbort(req.uploadId(), req.objectKey());
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/AudioController.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/MediaPresignController.java =====
+// src/main/java/com/oolshik/backend/media/MediaPresignController.java
+package com.oolshik.backend.media;
+
+import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/media")
+public class MediaPresignController {
+
+    private final StorageService storage;
+
+    public MediaPresignController(StorageService storage) {
+        this.storage = storage;
+    }
+
+    public record PresignReq(String contentType) {}
+    public record PresignResp(String uploadUrl, String fileUrl, String objectKey) {}
+
+    @PostMapping("/pre-signed")
+    public PresignResp create(@RequestBody PresignReq req, Authentication auth) {
+        if (!(storage instanceof S3StorageService s3)) {
+            // In local/dev mode we don’t support presigned PUT. Frontend should fall back to chunked upload.
+            throw new UnsupportedOperationException("Presigned uploads require media.storage=s3");
+        }
+        String userId = auth.getName();
+        String ext = guessExt(req.contentType());
+        String objectKey = userId + "/direct/" + UUID.randomUUID() + ext;
+        String uploadUrl = s3.presignPutUrl(objectKey, req.contentType(), Duration.ofMinutes(15));
+        String fileUrl = s3.toPublicUrl(objectKey);
+        return new PresignResp(uploadUrl, fileUrl, objectKey);
+    }
+
+    private static String guessExt(String ct) {
+        if (ct == null) return ".bin";
+        String c = ct.toLowerCase();
+        if (c.contains("audio/m4a") || c.contains("audio/aac")) return ".m4a";
+        if (c.contains("audio/mp3") || c.contains("mpeg")) return ".mp3";
+        if (c.contains("audio/ogg") || c.contains("opus")) return ".ogg";
+        if (c.contains("wav")) return ".wav";
+        return ".bin";
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/MediaPresignController.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/Dtos.java =====
+package com.oolshik.backend.media;
+
+public class Dtos {
+    public record InitUploadReq(String filename, String mimeType, long size, String requestId) {}
+    public record InitUploadResp(String uploadId) {}
+    public record CompleteUploadReq(String uploadId, int totalChunks, Long durationMs, Integer sampleRate) {}
+
+    // MPU (Phase 2)
+    public record MpuCreateReq(String filename, String mimeType) {}
+    public record MpuCreateResp(String uploadId, String objectKey) {}
+    public record MpuSignPartReq(String uploadId, String objectKey, int partNumber) {}
+    public record MpuSignedPart(int partNumber, String url) {}
+    public record MpuCompleteReq(String uploadId, String objectKey, java.util.List<PartETag> parts) {}
+    public record PartETag(int partNumber, String eTag) {}
+    public record MpuAbortReq(String uploadId, String objectKey) {}
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/Dtos.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/LocalStorageService.java =====
+package com.oolshik.backend.media;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public class LocalStorageService implements StorageService {
+
+    private final Path root;
+
+    public LocalStorageService(@Value("${media.local.root:./data/audio}") String rootDir) throws IOException {
+        this.root = Paths.get(rootDir).toAbsolutePath();
+        Files.createDirectories(this.root.resolve("tmp"));
+        Files.createDirectories(this.root.resolve("store"));
+    }
+
+    @Override
+    public String writeTemp(String uploadId) throws IOException {
+        Path p = root.resolve("tmp").resolve(uploadId + ".part");
+        Files.deleteIfExists(p);
+        Files.createFile(p);
+        return "tmp/" + uploadId + ".part";
+    }
+
+    @Override
+    public void append(String tempKey, byte[] bytes) throws IOException {
+        Path p = root.resolve(tempKey);
+        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(p.toFile(), true))) {
+            out.write(bytes);
+        }
+    }
+
+    @Override
+    public String finalizeUpload(String tempKey, String finalKey) throws IOException {
+        Path src = root.resolve(tempKey);
+        Path dst = root.resolve("store").resolve(finalKey);
+        Files.createDirectories(dst.getParent());
+        Files.move(src, dst);
+        return "store/" + finalKey;
+    }
+
+    @Override
+    public InputStream readRange(String key, long start, long end) throws IOException {
+        File f = root.resolve(key).toFile();
+        RandomAccessFile raf = new RandomAccessFile(f, "r");
+        raf.seek(start);
+        long length = end - start + 1;
+        InputStream is = new BufferedInputStream(new FileInputStream(raf.getFD())) {
+            long remaining = length;
+            @Override public int read() throws IOException {
+                if (remaining <= 0) return -1;
+                int b = super.read();
+                if (b >= 0) remaining--;
+                return b;
+            }
+            @Override public int read(byte[] b, int off, int len) throws IOException {
+                if (remaining <= 0) return -1;
+                len = (int)Math.min(len, remaining);
+                int n = super.read(b, off, len);
+                if (n > 0) remaining -= n;
+                return n;
+            }
+        };
+        return is;
+    }
+
+    @Override
+    public long size(String key) throws IOException {
+        return Files.size(root.resolve(key));
+    }
+
+    @Override
+    public void delete(String key) throws IOException {
+        Files.deleteIfExists(root.resolve(key));
+    }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/LocalStorageService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/AudioFileRepository.java =====
+package com.oolshik.backend.media;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+import java.util.UUID;
+
+public interface AudioFileRepository extends JpaRepository<AudioFile, UUID> {
+    List<AudioFile> findByOwnerUserIdOrderByCreatedAtDesc(String ownerUserId);
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/AudioFileRepository.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/StorageService.java =====
+package com.oolshik.backend.media;
+
+import java.io.IOException;
+import java.io.InputStream;
+
+public interface StorageService {
+    String writeTemp(String uploadId) throws IOException;
+    void append(String tempKey, byte[] bytes) throws IOException;
+    String finalizeUpload(String tempKey, String finalKey) throws IOException;
+    InputStream readRange(String key, long start, long end) throws IOException;
+    long size(String key) throws IOException;
+    void delete(String key) throws IOException;
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/StorageService.java =====
+
+
+===== BEGIN FILE: src/main/java/com/oolshik/backend/media/AudioFile.java =====
+package com.oolshik.backend.media;
+
+import jakarta.persistence.*;
+import java.time.Instant;
+import java.util.UUID;
+
+@Entity
+@Table(name = "audio_files")
+public class AudioFile {
+    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(nullable = false) private String ownerUserId;
+    @Column(nullable = false) private String filename;
+    @Column(nullable = false) private String mimeType;
+    @Column(nullable = false) private long sizeBytes;
+    @Column(nullable = false) private String storageKey;
+    @Column(nullable = false) private Instant createdAt = Instant.now();
+    private Long durationMs;
+    private Integer sampleRate;
+    @Column private String requestId;
+
+    public UUID getId() { return id; }
+    public String getOwnerUserId() { return ownerUserId; }
+    public void setOwnerUserId(String ownerUserId) { this.ownerUserId = ownerUserId; }
+    public String getFilename() { return filename; }
+    public void setFilename(String filename) { this.filename = filename; }
+    public String getMimeType() { return mimeType; }
+    public void setMimeType(String mimeType) { this.mimeType = mimeType; }
+    public long getSizeBytes() { return sizeBytes; }
+    public void setSizeBytes(long sizeBytes) { this.sizeBytes = sizeBytes; }
+    public String getStorageKey() { return storageKey; }
+    public void setStorageKey(String storageKey) { this.storageKey = storageKey; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Long getDurationMs() { return durationMs; }
+    public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
+    public Integer getSampleRate() { return sampleRate; }
+    public void setSampleRate(Integer sampleRate) { this.sampleRate = sampleRate; }
+    public String getRequestId() { return requestId; }
+    public void setRequestId(String requestId) { this.requestId = requestId; }
+}
+===== END FILE: src/main/java/com/oolshik/backend/media/AudioFile.java =====
