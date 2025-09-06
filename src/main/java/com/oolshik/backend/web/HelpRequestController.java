@@ -5,9 +5,12 @@ import com.oolshik.backend.media.AudioFileRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import org.apache.coyote.BadRequestException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -15,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +43,6 @@ public class HelpRequestController {
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
-                req.latitude(), req.longitude(),
                 req.radiusMeters(),
                 req.voiceUrl()
         );
@@ -56,6 +60,15 @@ public class HelpRequestController {
         return service.nearby(lat, lng, radiusMeters, statuses, pageable);
     }
 
+    @GetMapping("/{taskId}")
+    public HelpRequestRow findTaskByTaskId(
+            @PathVariable UUID taskId
+    ) {
+        return service.findTaskByTaskId(taskId);
+    }
+
+
+
     @PostMapping("/{id}/accept")
     public ResponseEntity<?> accept(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
         var helper = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
@@ -63,12 +76,41 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(updated));
     }
 
+//    @PostMapping("/{id}/complete")
+//    public ResponseEntity<?> complete(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+//        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+//        var updated = service.complete(id, requester.getId());
+//        return ResponseEntity.ok(view(updated));
+//    }
+
     @PostMapping("/{id}/complete")
-    public ResponseEntity<?> complete(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
+    public ResponseEntity<?> complete(@PathVariable UUID id,
+                                                    @AuthenticationPrincipal User principal,
+                                                    @RequestBody(required = false) CompletePayload payload) {
         var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
-        var updated = service.complete(id, requester.getId());
+        HelpRequestEntity updated  = null;
+        try {
+            updated = service.complete(id, requester.getId(), payload);
+        } catch (BadRequestException e) {
+            throw new RuntimeException(e);
+        }
         return ResponseEntity.ok(view(updated));
     }
+
+    @PostMapping("/{id}/rate")
+    public ResponseEntity<?> rate(@PathVariable UUID id,
+                                               @AuthenticationPrincipal User principal,
+                                               @RequestBody RatePayload body) {
+        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        HelpRequestEntity updated = null;
+        try {
+            updated = service.rate(id, requester.getId(), body);
+        } catch (BadRequestException e) {
+            throw new RuntimeException(e);
+        }
+        return ResponseEntity.ok(view(updated));
+    }
+
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<?> cancel(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
@@ -85,11 +127,16 @@ public class HelpRequestController {
 
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
-                e.getLatitude(), e.getLongitude(),
                 e.getRadiusMeters(), e.getStatus(),
                 e.getRequesterId(), e.getHelperId(),
                 e.getCreatedAt(),
-                url // NEW
+                url, // NEW
+                e.getRatingValue()
         );
     }
+
+    // payloads
+    public static class CompletePayload { public BigDecimal rating; public String feedback; }
+    public static class RatePayload { @NotNull
+    public BigDecimal rating; public String feedback; }
 }
