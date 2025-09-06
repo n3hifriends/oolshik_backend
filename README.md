@@ -21,8 +21,14 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 docker compose build api
 docker compose up -d api
 docker compose logs -f api
-docker exec -it postgres psql -U oolshik -d oolshik
+docker exec -it oolshik-backend-otp-db-1 psql -U oolshik -d oolshik
 docker exec -it oolshik-backend-otp-api-1 sh -lc 'ls -R ./data/audio || ls -R /data/audio'
+docker compose exec -T db \
+  pg_dump -U oolshik -d oolshik \
+  --schema-only --no-owner --no-privileges > ./postgres_V1__baseline_schema.sql
+docker compose exec -T db \
+  pg_dump -U oolshik -d oolshik \
+  --data-only --inserts --no-owner --no-privileges > ./postgres_V2__seed_data.sql
 ```
 
 - API: http://localhost:8080

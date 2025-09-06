@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import com.oolshik.backend.domain.HelpRequestStatus;
+import org.locationtech.jts.geom.Point;
 
 @Entity
 @Table(name = "help_request")
@@ -19,11 +20,8 @@ public class HelpRequestEntity {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
-    private double latitude;
-
-    @Column(nullable = false)
-    private double longitude;
+    @Column(columnDefinition = "geography(Point,4326)")
+    private Point location;
 
     @Column(nullable = false, name = "radius_meters")
     private int radiusMeters;
@@ -77,8 +75,6 @@ public class HelpRequestEntity {
     public UUID getId() { return id; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
-    public double getLatitude() { return latitude; }
-    public double getLongitude() { return longitude; }
     public int getRadiusMeters() { return radiusMeters; }
     public HelpRequestStatus getStatus() { return status; }
     public UUID getRequesterId() { return requesterId; }
@@ -90,8 +86,6 @@ public class HelpRequestEntity {
     public void setId(UUID id) { this.id = id; }
     public void setTitle(String title) { this.title = title; }
     public void setDescription(String description) { this.description = description; }
-    public void setLatitude(double latitude) { this.latitude = latitude; }
-    public void setLongitude(double longitude) { this.longitude = longitude; }
     public void setRadiusMeters(int radiusMeters) { this.radiusMeters = radiusMeters; }
     public void setStatus(HelpRequestStatus status) { this.status = status; }
     public void setRequesterId(UUID requesterId) { this.requesterId = requesterId; }
@@ -111,5 +105,13 @@ public class HelpRequestEntity {
     }
     public void setRatedAt(OffsetDateTime ratedAt) {
         this.ratedAt = ratedAt;
+    }
+
+    public Point getLocation() {
+        return location;
+    }
+
+    public void setLocation(Point location) {
+        this.location = location;
     }
 }

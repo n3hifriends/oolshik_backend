@@ -25,8 +25,6 @@ public class HelpRequestDtos {
             UUID id,
             String title,
             String description,
-            double latitude,
-            double longitude,
             int radiusMeters,
             HelpRequestStatus status,
             UUID requesterId,

@@ -34,14 +34,12 @@ public class HelpRequestService {
     }
 
     @Transactional
-    public HelpRequestEntity create(UUID requesterId, String title, String description, double lat, double lon, int radiusMeters, String voiceUrl) {
+    public HelpRequestEntity create(UUID requesterId, String title, String description, int radiusMeters, String voiceUrl) {
         UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
         HelpRequestEntity e = new HelpRequestEntity();
         e.setRequesterId(requester.getId());
         e.setTitle(title);
         e.setDescription(description);
-        e.setLatitude(lat);
-        e.setLongitude(lon);
         e.setRadiusMeters(radiusMeters);
         e.setStatus(HelpRequestStatus.OPEN);
         e.setVoiceUrl(voiceUrl);

@@ -43,7 +43,6 @@ public class HelpRequestController {
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
-                req.latitude(), req.longitude(),
                 req.radiusMeters(),
                 req.voiceUrl()
         );
@@ -128,7 +127,6 @@ public class HelpRequestController {
 
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
-                e.getLatitude(), e.getLongitude(),
                 e.getRadiusMeters(), e.getStatus(),
                 e.getRequesterId(), e.getHelperId(),
                 e.getCreatedAt(),

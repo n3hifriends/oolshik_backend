@@ -8,8 +8,6 @@ public interface HelpRequestRow {
     UUID getId();
     String getTitle();
     String getDescription();
-    Double getLatitude();
-    Double getLongitude();
     Integer getRadiusMeters();
     String getStatus();
     UUID getRequesterId();
@@ -21,4 +19,5 @@ public interface HelpRequestRow {
     String getVoiceUrl();
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)
+    Double getDistanceKm();                    // computed in SELECT for ordering
 }
