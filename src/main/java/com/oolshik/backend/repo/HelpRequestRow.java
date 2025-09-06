@@ -1,5 +1,6 @@
 package com.oolshik.backend.repo;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,4 +19,6 @@ public interface HelpRequestRow {
     Instant getCreatedAt();
     Instant getUpdatedAt();
     String getVoiceUrl();
+    BigDecimal getRatingValue();     // this task’s rating (nullable)
+    BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)
 }

@@ -27,7 +27,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
       h.helper_id      AS helperId,
       h.created_at     AS createdAt,
       h.updated_at     AS updatedAt,
-      h.voice_url AS voiceUrl
+      h.voice_url AS voiceUrl,
+      h.rating_value AS ratingValue,
+      3.9 AS helperAvgRating
     FROM help_request h
     JOIN app_user u ON u.id = h.requester_id
     WHERE
@@ -75,5 +77,35 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("radiusMeters") int radiusMeters,
           @Param("statusesCsv") String statusesCsv,
           Pageable pageable
+  );
+
+
+  @Query(
+          value = """
+    SELECT
+      h.id,
+      h.title,
+      h.description,
+      h.latitude,
+      h.longitude,
+      h.radius_meters  AS radiusMeters,
+      h.status,
+      h.requester_id   AS requesterId,
+      u.display_name   AS createdByName,
+      u.phone_number   AS createdByPhoneNumber,
+      h.helper_id      AS helperId,
+      h.created_at     AS createdAt,
+      h.updated_at     AS updatedAt,
+      h.voice_url AS voiceUrl,
+      h.rating_value AS ratingValue,
+      3.9 AS helperAvgRating
+    FROM help_request h
+    JOIN app_user u ON u.id = h.requester_id
+    WHERE h.id = :taskId
+    """,
+    nativeQuery = true // ✅ IMPORTANT
+  )
+  HelpRequestRow findTaskByTaskId(
+          @Param("taskId") UUID taskId
   );
 }

@@ -1,6 +1,8 @@
 package com.oolshik.backend.entity;
 
 import jakarta.persistence.*;
+
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import com.oolshik.backend.domain.HelpRequestStatus;
@@ -51,6 +53,15 @@ public class HelpRequestEntity {
     @Column(nullable = false)
     private String voiceUrl;
 
+    @Column(name = "rating_value")
+    private BigDecimal ratingValue; // scale 1
+
+    @Column(name = "rated_by_user_id")
+    private UUID ratedByUserId;
+
+    @Column(name = "rated_at")
+    private OffsetDateTime ratedAt;
+
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -91,4 +102,14 @@ public class HelpRequestEntity {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getVoiceUrl() { return voiceUrl; }
     public void setVoiceUrl(String voiceUrl) { this.voiceUrl = voiceUrl; }
+    public BigDecimal getRatingValue() { return ratingValue; }
+    public void setRatingValue(BigDecimal ratingValue) { this.ratingValue = ratingValue; }
+    public UUID getRatedByUserId() { return ratedByUserId; }
+    public OffsetDateTime getRatedAt() { return ratedAt; }
+    public void setRatedByUserId(UUID ratedByUserId) {
+        this.ratedByUserId = ratedByUserId;
+    }
+    public void setRatedAt(OffsetDateTime ratedAt) {
+        this.ratedAt = ratedAt;
+    }
 }
