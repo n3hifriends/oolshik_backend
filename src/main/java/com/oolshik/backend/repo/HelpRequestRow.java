@@ -19,5 +19,5 @@ public interface HelpRequestRow {
     String getVoiceUrl();
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)
-    Double getDistanceKm();                    // computed in SELECT for ordering
+    Double getDistanceMtr();                    // computed in SELECT for ordering
 }
