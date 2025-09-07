@@ -39,7 +39,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           ST_Distance(
             h.location,
             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
-          ) / 1000.0                       AS distanceKm
+          )                                AS distanceMtr
         FROM help_request h
         JOIN app_user u ON u.id = h.requester_id
         LEFT JOIN helper_avg ha ON ha.helper_id = h.helper_id
@@ -51,7 +51,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
             :radiusMeters
           )
         ORDER BY
-          distanceKm ASC,
+          distanceMtr ASC,
           h.created_at DESC
         """,
           countQuery = """

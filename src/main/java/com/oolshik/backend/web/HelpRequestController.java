@@ -11,6 +11,10 @@ import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.apache.coyote.BadRequestException;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -31,6 +35,12 @@ public class HelpRequestController {
     private final UserRepository userRepo;
     private final AudioFileRepository audioRepo; // NEW
 
+    private static final GeometryFactory GEOMETRY_FACTORY =
+            new GeometryFactory(new PrecisionModel(), 4326); // SRID 4326 = WGS84
+
+    public static Point toPoint(double lat, double lon) {
+        return GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat));
+    }
     public HelpRequestController(HelpRequestService service, UserRepository userRepo, AudioFileRepository audioRepo) {
         this.service = service;
         this.userRepo = userRepo;
@@ -40,11 +50,12 @@ public class HelpRequestController {
     @PostMapping
     public ResponseEntity<?> create(@AuthenticationPrincipal User principal, @RequestBody @Valid CreateRequest req) {
         var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        Point point = toPoint(req.latitude(), req.longitude()); // 4326
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
                 req.radiusMeters(),
-                req.voiceUrl()
+                req.voiceUrl(), point
         );
         return ResponseEntity.ok(view(created));
     }
@@ -75,13 +86,6 @@ public class HelpRequestController {
         var updated = service.accept(id, helper.getId());
         return ResponseEntity.ok(view(updated));
     }
-
-//    @PostMapping("/{id}/complete")
-//    public ResponseEntity<?> complete(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
-//        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
-//        var updated = service.complete(id, requester.getId());
-//        return ResponseEntity.ok(view(updated));
-//    }
 
     @PostMapping("/{id}/complete")
     public ResponseEntity<?> complete(@PathVariable UUID id,

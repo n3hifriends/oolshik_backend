@@ -10,6 +10,7 @@ import com.oolshik.backend.web.HelpRequestController;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import org.apache.coyote.BadRequestException;
+import org.locationtech.jts.geom.Point;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -34,7 +35,7 @@ public class HelpRequestService {
     }
 
     @Transactional
-    public HelpRequestEntity create(UUID requesterId, String title, String description, int radiusMeters, String voiceUrl) {
+    public HelpRequestEntity create(UUID requesterId, String title, String description, int radiusMeters, String voiceUrl, Point location) {
         UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
         HelpRequestEntity e = new HelpRequestEntity();
         e.setRequesterId(requester.getId());
@@ -43,6 +44,7 @@ public class HelpRequestService {
         e.setRadiusMeters(radiusMeters);
         e.setStatus(HelpRequestStatus.OPEN);
         e.setVoiceUrl(voiceUrl);
+        e.setLocation(location);
         return repo.save(e);
     }
 
