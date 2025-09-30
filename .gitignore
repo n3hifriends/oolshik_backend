@@ -4,3 +4,4 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 .DS_Store
 .env
+/secrets/*.json
