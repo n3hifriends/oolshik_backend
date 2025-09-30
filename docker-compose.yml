@@ -30,6 +30,10 @@ services:
       SPRING_FLYWAY_BASELINE_VERSION: 1
       # hibernate: validate schema only
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
+    volumes:
+      # LEFT side = host path, RIGHT side = container path
+      - ./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json:/secrets/firebase-sa.json:ro
     ports:
       - "8080:8080"
     depends_on:
