@@ -73,6 +73,9 @@ public class HelpRequestService {
         if (e.getStatus() != HelpRequestStatus.OPEN) {
             throw new ConflictOperationException("Request not open"); // 409
         }
+        if (helperId.equals(e.getRequesterId())) {
+            throw new ForbiddenOperationException("Requester can't accept"); // -> 403
+        }
         e.setStatus(HelpRequestStatus.ASSIGNED);
         e.setHelperId(helperId);
         e.setHelperAcceptLocation(acceptorPoint);
