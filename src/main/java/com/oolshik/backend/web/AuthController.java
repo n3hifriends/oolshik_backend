@@ -1,6 +1,8 @@
 package com.oolshik.backend.web;
 
+import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.service.AuthService;
 import com.oolshik.backend.service.OtpService;
@@ -48,6 +50,19 @@ public class AuthController {
         return ResponseEntity.ok(new TokenResponse(access, refresh));
     }
 
+    @PostMapping("/complete")
+    public ResponseEntity<?> complete(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @RequestBody CompleteProfileReq req
+    ) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        UserEntity me = userService.getOrCreate(principal, req.displayName(), req.email());
+        // optionally update email/phone if allowed
+        return ResponseEntity.ok(me);
+    }
+
+    public record CompleteProfileReq(String displayName, String email) {}
+
     // Admin password login (ops only)
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody @Valid LoginRequest req) {
@@ -62,8 +77,8 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> me(@AuthenticationPrincipal User principal) {
-        var u = userRepository.findByPhoneNumber(principal.getUsername()).orElseThrow();
+    public ResponseEntity<?> me(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+        var u = userRepository.findByPhoneNumber(principal.phone()).orElseThrow();
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("id", u.getId());
         out.put("phone", u.getPhoneNumber());
@@ -75,8 +90,8 @@ public class AuthController {
     }
 
     @PutMapping("/me")
-    public ResponseEntity<?> updateMe(@AuthenticationPrincipal User principal, @RequestBody Map<String, Object> patch) {
-        var u = userRepository.findByPhoneNumber(principal.getUsername()).orElseThrow();
+    public ResponseEntity<?> updateMe(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @RequestBody Map<String, Object> patch) {
+        var u = userRepository.findByPhoneNumber(principal.phone()).orElseThrow();
         if (patch.containsKey("displayName")) u.setDisplayName(String.valueOf(patch.get("displayName")));
         if (patch.containsKey("languages")) u.setLanguages(String.valueOf(patch.get("languages")));
         if (patch.containsKey("email")) u.setEmail(String.valueOf(patch.get("email")));

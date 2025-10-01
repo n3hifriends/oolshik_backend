@@ -60,6 +60,31 @@ public class HelpRequestEntity {
     @Column(name = "rated_at")
     private OffsetDateTime ratedAt;
 
+    public Point getHelperAcceptLocation() {
+        return helperAcceptLocation;
+    }
+
+    public void setHelperAcceptLocation(Point helperAcceptLocation) {
+        this.helperAcceptLocation = helperAcceptLocation;
+    }
+
+    public OffsetDateTime getHelperAcceptedAt() {
+        return helperAcceptedAt;
+    }
+
+    public void setHelperAcceptedAt(OffsetDateTime helperAcceptedAt) {
+        this.helperAcceptedAt = helperAcceptedAt;
+    }
+
+    // NEW: Karyakarta’s location at accept time
+    @Column(name = "helper_accept_location", columnDefinition = "geography(Point,4326)")
+    private Point helperAcceptLocation;
+
+    // NEW: When it was accepted
+    @Column(name = "helper_accepted_at")
+    private OffsetDateTime helperAcceptedAt;
+
+
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();

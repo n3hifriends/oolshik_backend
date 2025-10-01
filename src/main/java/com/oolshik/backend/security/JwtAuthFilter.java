@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
-@Component
+//@Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -33,7 +33,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
             try {
-                var jws = jwtService.parse(token);
+                var jws = jwtService.parse(token); // HS256
                 Claims c = jws.getBody();
                 String phone = c.get("phone", String.class);
                 if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {

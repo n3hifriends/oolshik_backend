@@ -11,6 +11,9 @@ public class UserEntity {
     @Id
     private UUID id;
 
+    @Column(name = "firebase_uid", unique = true)
+    private String firebaseUid;
+
     @Column(name = "phone_number", nullable = false, unique = true)
     private String phoneNumber;
 
@@ -76,4 +79,14 @@ public class UserEntity {
     public void setLanguages(String languages) { this.languages = languages; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+
+    public String getFirebaseUid() {
+        return firebaseUid;
+    }
+
+    public void setFirebaseUid(String firebaseUid) {
+        this.firebaseUid = firebaseUid;
+    }
+
 }

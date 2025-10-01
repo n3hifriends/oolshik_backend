@@ -30,6 +30,8 @@ services:
       SPRING_FLYWAY_BASELINE_VERSION: 1
       # hibernate: validate schema only
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      FIREBASE_PROJECT_ID: oolshik
+      FIREBASE_CHECK_REVOKED: false
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
     volumes:
       # LEFT side = host path, RIGHT side = container path
