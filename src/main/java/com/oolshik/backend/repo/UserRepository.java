@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<UserEntity, UUID> {
+    Optional<UserEntity> findByFirebaseUid(String firebaseUid);
     Optional<UserEntity> findByPhoneNumber(String phoneNumber);
     Optional<UserEntity> findByEmail(String email);
     boolean existsByPhoneNumber(String phoneNumber);

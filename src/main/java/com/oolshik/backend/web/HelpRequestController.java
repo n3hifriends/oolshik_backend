@@ -4,7 +4,9 @@ import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.media.AudioFileRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.web.dto.AcceptHelpRequestReq;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
@@ -48,8 +50,8 @@ public class HelpRequestController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@AuthenticationPrincipal User principal, @RequestBody @Valid CreateRequest req) {
-        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+    public ResponseEntity<?> create(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(req.latitude(), req.longitude()); // 4326
         HelpRequestEntity created = service.create(
                 requester.getId(),
@@ -79,19 +81,19 @@ public class HelpRequestController {
     }
 
 
-
     @PostMapping("/{id}/accept")
-    public ResponseEntity<?> accept(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
-        var helper = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
-        var updated = service.accept(id, helper.getId());
+    public ResponseEntity<?> accept(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id, @RequestBody AcceptHelpRequestReq acceptReq) {
+        var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        Point point = toPoint(acceptReq.latitude(), acceptReq.longitude()); // 4326
+        var updated = service.accept(id, helper.getId(), point);
         return ResponseEntity.ok(view(updated));
     }
 
     @PostMapping("/{id}/complete")
     public ResponseEntity<?> complete(@PathVariable UUID id,
-                                                    @AuthenticationPrincipal User principal,
+                                                    @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                     @RequestBody(required = false) CompletePayload payload) {
-        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         HelpRequestEntity updated  = null;
         try {
             updated = service.complete(id, requester.getId(), payload);
@@ -103,9 +105,9 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/rate")
     public ResponseEntity<?> rate(@PathVariable UUID id,
-                                               @AuthenticationPrincipal User principal,
+                                               @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                @RequestBody RatePayload body) {
-        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         HelpRequestEntity updated = null;
         try {
             updated = service.rate(id, requester.getId(), body);
@@ -117,8 +119,8 @@ public class HelpRequestController {
 
 
     @PostMapping("/{id}/cancel")
-    public ResponseEntity<?> cancel(@AuthenticationPrincipal User principal, @PathVariable UUID id) {
-        var requester = userRepo.findByPhoneNumber(principal.getUsername()).orElseThrow();
+    public ResponseEntity<?> cancel(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.cancel(id, requester.getId());
         return ResponseEntity.ok(view(updated));
     }

@@ -1,42 +1,41 @@
 package com.oolshik.backend.security;
 
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
-import com.google.auth.oauth2.GoogleCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
 
 import javax.annotation.PostConstruct;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 
-// FirebaseAdminConfig.java
 @Configuration
 public class FirebaseAdminConfig {
     private static final Logger log = LoggerFactory.getLogger(FirebaseAdminConfig.class);
 
     @PostConstruct
     public void init() throws IOException {
+        // Prefer ADC; falls back to explicit path if set
         String path = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
         if (path == null || path.isBlank()) {
-            log.warn("GOOGLE_APPLICATION_CREDENTIALS not set; skipping Firebase Admin init");
+            GoogleCredentials creds = GoogleCredentials.getApplicationDefault();
+            initWith(creds, "ADC");
             return;
         }
         File f = new File(path);
-        if (!f.exists()) {
-            throw new FileNotFoundException("Firebase SA file not found at " + f.getAbsolutePath());
-        }
+        if (!f.exists()) throw new FileNotFoundException("Firebase SA file not found at " + f.getAbsolutePath());
         try (FileInputStream in = new FileInputStream(f)) {
-            FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(in))
-                    .build();
-            if (FirebaseApp.getApps().isEmpty()) {
-                FirebaseApp.initializeApp(options);
-            }
-            log.info("Initialized Firebase Admin with credentials at {}", f.getAbsolutePath());
+            GoogleCredentials creds = GoogleCredentials.fromStream(in);
+            initWith(creds, f.getAbsolutePath());
+        }
+    }
+
+    private void initWith(GoogleCredentials creds, String source) throws IOException {
+        if (FirebaseApp.getApps().isEmpty()) {
+            FirebaseOptions opts = FirebaseOptions.builder().setCredentials(creds).build();
+            FirebaseApp.initializeApp(opts);
+            log.info("Initialized Firebase Admin using {}", source);
         }
     }
 }

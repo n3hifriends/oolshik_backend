@@ -68,13 +68,17 @@ public class HelpRequestService {
 
 
     @Transactional
-    public HelpRequestEntity accept(UUID requestId, UUID helperId) {
+    public HelpRequestEntity accept(UUID requestId, UUID helperId, Point acceptorPoint) {
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
         if (e.getStatus() != HelpRequestStatus.OPEN) {
             throw new ConflictOperationException("Request not open"); // 409
         }
         e.setStatus(HelpRequestStatus.ASSIGNED);
         e.setHelperId(helperId);
+        e.setHelperAcceptLocation(acceptorPoint);
+        e.setHelperAcceptedAt(OffsetDateTime.now());
+        // (optional) store helper name if you keep it on entity
+        // hr.setHelperName(helperName);
         return repo.save(e);
     }
 
