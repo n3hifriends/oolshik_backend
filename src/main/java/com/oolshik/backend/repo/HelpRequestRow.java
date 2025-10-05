@@ -20,4 +20,6 @@ public interface HelpRequestRow {
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)
     Double getDistanceMtr();                    // computed in SELECT for ordering
+    Double getLatitude();
+    Double getLongitude();
 }
