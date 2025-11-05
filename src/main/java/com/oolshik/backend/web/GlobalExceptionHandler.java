@@ -14,7 +14,11 @@ import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -131,5 +135,23 @@ public class GlobalExceptionHandler {
         log.error("[{}] 500 internal_error", cid(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiError(cid(), "internal_error", "Unexpected error"));
+    }
+
+
+     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException exception) {
+        Map<String, Object> responseBody = new HashMap<>();
+        responseBody.put("error", "invalid_request");
+        responseBody.put(
+                "message",
+                String.format(
+                        "Parameter '%s' has invalid value '%s'. Expected %s.",
+                        exception.getName(),
+                        exception.getValue(),
+                        exception.getRequiredType() != null
+                                ? exception.getRequiredType().getSimpleName()
+                                : "required type"));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(responseBody);
     }
 }
