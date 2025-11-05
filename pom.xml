@@ -120,6 +120,12 @@
       <artifactId>firebase-admin</artifactId>
       <version>9.2.0</version>
     </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>1.18.42</version> <!-- Latest stable -->
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
   <build>
