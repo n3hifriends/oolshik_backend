@@ -3,7 +3,6 @@ package com.oolshik.backend.web.dto;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -13,7 +12,7 @@ import java.util.UUID;
 public class HelpRequestDtos {
 
     public record CreateRequest(
-        @NotBlank String title,
+        String title,
         String description,
         String voiceUrl,
         @NotNull Double latitude,
@@ -31,6 +30,7 @@ public class HelpRequestDtos {
             UUID helperId,
             OffsetDateTime createdAt,
             String voiceUrl,
-            BigDecimal ratingValue
+            BigDecimal ratingValue,
+            UUID transcriptionJobId
     ) {}
 }

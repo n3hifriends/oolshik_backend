@@ -39,14 +39,7 @@ INSERT INTO public.audio_files VALUES ('a1f56203-e1be-48dc-82dc-c7b6b6362a4a', '
 INSERT INTO public.audio_files VALUES ('ae689262-3185-4534-bc24-03961a918fda', '+919762279667', '5b9b7890-f7d6-4e1f-bcf2-6721d572350c.m4a', 'audio/m4a', 55170, 'store/+919762279667/5b9b7890-f7d6-4e1f-bcf2-6721d572350c.m4a', '2025-09-07 06:05:45.585473', 4000, NULL, NULL);
 
 
---
--- Data for Name: flyway_schema_history; Type: TABLE DATA; Schema: public; Owner: -
---
-
-INSERT INTO public.flyway_schema_history VALUES (1, '1', 'baseline schema', 'SQL', 'V1__baseline_schema.sql', 1794570997, 'oolshik', '2025-09-06 19:04:30.94706', 97, true);
-INSERT INTO public.flyway_schema_history VALUES (2, '2', 'seed data', 'SQL', 'V2__seed_data.sql', -1183295584, 'oolshik', '2025-09-06 19:04:31.074097', 39, true);
-INSERT INTO public.flyway_schema_history VALUES (3, '3', 'add location geography', 'SQL', 'V3__add_location_geography.sql', 166539043, 'oolshik', '2025-09-06 19:50:54.643499', 105, true);
-INSERT INTO public.flyway_schema_history VALUES (4, '4', 'drop lat lon columns', 'SQL', 'V4__drop_lat_lon_columns.sql', 504915030, 'oolshik', '2025-09-06 19:50:54.773104', 7, true);
+-- flyway_schema_history is managed by Flyway at runtime.
 
 
 --
@@ -260,4 +253,3 @@ SELECT pg_catalog.setval('topology.topology_id_seq', 1, false);
 --
 -- PostgreSQL database dump complete
 --
-

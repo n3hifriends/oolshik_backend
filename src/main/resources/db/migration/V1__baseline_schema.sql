@@ -20,21 +20,21 @@ SET row_security = off;
 -- Name: tiger; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA tiger;
+CREATE SCHEMA IF NOT EXISTS tiger;
 
 
 --
 -- Name: tiger_data; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA tiger_data;
+CREATE SCHEMA IF NOT EXISTS tiger_data;
 
 
 --
 -- Name: topology; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA topology;
+CREATE SCHEMA IF NOT EXISTS topology;
 
 
 --
@@ -170,19 +170,7 @@ CREATE TABLE public.audio_files (
 --
 -- Name: flyway_schema_history; Type: TABLE; Schema: public; Owner: -
 --
-
-CREATE TABLE public.flyway_schema_history (
-                                              installed_rank integer NOT NULL,
-                                              version character varying(50),
-                                              description character varying(200) NOT NULL,
-                                              type character varying(20) NOT NULL,
-                                              script character varying(1000) NOT NULL,
-                                              checksum integer,
-                                              installed_by character varying(100) NOT NULL,
-                                              installed_on timestamp without time zone DEFAULT now() NOT NULL,
-                                              execution_time integer NOT NULL,
-                                              success boolean NOT NULL
-);
+-- flyway_schema_history is managed by Flyway at runtime.
 
 
 --
@@ -291,9 +279,7 @@ ALTER TABLE ONLY public.audio_files
 --
 -- Name: flyway_schema_history flyway_schema_history_pk; Type: CONSTRAINT; Schema: public; Owner: -
 --
-
-ALTER TABLE ONLY public.flyway_schema_history
-    ADD CONSTRAINT flyway_schema_history_pk PRIMARY KEY (installed_rank);
+-- flyway_schema_history constraints are managed by Flyway at runtime.
 
 
 --
@@ -331,8 +317,7 @@ ALTER TABLE ONLY public.report_event
 --
 -- Name: flyway_schema_history_s_idx; Type: INDEX; Schema: public; Owner: -
 --
-
-CREATE INDEX flyway_schema_history_s_idx ON public.flyway_schema_history USING btree (success);
+-- flyway_schema_history indexes are managed by Flyway at runtime.
 
 
 --
@@ -455,4 +440,3 @@ ALTER TABLE ONLY public.report_event
 --
 -- PostgreSQL database dump complete
 --
-

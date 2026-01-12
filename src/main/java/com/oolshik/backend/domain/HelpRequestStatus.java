@@ -1,1 +1,9 @@
-package com.oolshik.backend.domain; public enum HelpRequestStatus { OPEN, ASSIGNED, COMPLETED, CANCELLED }
+package com.oolshik.backend.domain;
+
+public enum HelpRequestStatus {
+    DRAFT,
+    OPEN,
+    ASSIGNED,
+    COMPLETED,
+    CANCELLED
+}
