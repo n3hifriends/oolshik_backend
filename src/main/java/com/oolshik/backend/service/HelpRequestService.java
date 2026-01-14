@@ -37,12 +37,25 @@ public class HelpRequestService {
     @Transactional
     public HelpRequestEntity create(UUID requesterId, String title, String description, int radiusMeters, String voiceUrl, Point location) {
         UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
+        boolean titleBlank = (title == null || title.isBlank());
+        boolean descriptionBlank = (description == null || description.isBlank());
+        boolean hasVoice = voiceUrl != null && !voiceUrl.isBlank();
+        if (titleBlank && !hasVoice) {
+            throw new IllegalArgumentException("voiceUrl is required when title is empty");
+        }
+
+        if (titleBlank) {
+            title = "";
+        }
+        if (descriptionBlank) {
+            description = null;
+        }
         HelpRequestEntity e = new HelpRequestEntity();
         e.setRequesterId(requester.getId());
         e.setTitle(title);
         e.setDescription(description);
         e.setRadiusMeters(radiusMeters);
-        e.setStatus(HelpRequestStatus.OPEN);
+        e.setStatus(titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN);
         e.setVoiceUrl(voiceUrl);
         e.setLocation(location);
         return repo.save(e);

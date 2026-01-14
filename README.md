@@ -18,8 +18,8 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
-docker compose build api
-docker compose up -d api
+docker compose build api OR can be done after docker compose down
+docker compose up -d api OR docker ompose up -d --build
 docker compose logs -f api
 docker exec -it oolshik-backend-otp-db-1 psql -U oolshik -d oolshik
 docker exec -it oolshik-backend-otp-api-1 sh -lc 'ls -R ./data/audio || ls -R /data/audio'
@@ -76,6 +76,10 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 - `POST /api/requests/{id}/complete`
 - `POST /api/requests/{id}/cancel`
 
+### Transcription (STT)
+
+- `GET /api/transcriptions/{jobId}` → returns job status + transcript when ready
+
 ## Configuration
 
 Environment variables (defaults in `application.yml`):
@@ -84,6 +88,10 @@ Environment variables (defaults in `application.yml`):
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
 - `app.otp.ttlSeconds=300`, `app.otp.cooldownSeconds=30`, `app.otp.maxAttempts=5`
+- `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
+- `KAFKA_CONSUMER_GROUP=oolshik-stt-backend`
+- `KAFKA_TOPIC_STT_JOBS=stt.jobs`, `KAFKA_TOPIC_STT_RESULTS=stt.results`, `KAFKA_TOPIC_STT_DLQ=stt.jobs.dlq`
+- `STT_REPUBLISH_DELAY_MS=30000`
 
 **Admin seeding (ops):**
 

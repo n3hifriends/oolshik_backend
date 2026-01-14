@@ -1,0 +1,19 @@
+services:
+  worker:
+    build: .
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - STT_JOBS_TOPIC=stt.jobs
+      - STT_RESULTS_TOPIC=stt.results
+      - STT_DLQ_TOPIC=stt.jobs.dlq
+      - LOG_LEVEL=INFO
+      - MODEL_SIZE=small
+    ports:
+      - "9108:9108"
+      - "8081:8081"
+    networks:
+      - oolshik-backend-otp_default
+
+networks:
+  oolshik-backend-otp_default:
+    external: true

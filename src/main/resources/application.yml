@@ -18,12 +18,32 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:oolshik-stt-backend}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.oolshik.backend.transcription
+        spring.json.use.type.headers: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
   servlet:
     multipart:
       max-file-size: 45MB
       max-request-size: 50MB
 server:
   port: 8080
+
+firebase:
+  project-id: ${FIREBASE_PROJECT_ID:dev-project}
+  check-revoked: ${FIREBASE_CHECK_REVOKED:false}
 
 app:
   jwt:
@@ -34,6 +54,13 @@ app:
     ttlSeconds: 300
     cooldownSeconds: 30
     maxAttempts: 5
+  transcription:
+    republishDelayMs: ${STT_REPUBLISH_DELAY_MS:30000}
+  kafka:
+    topics:
+      sttJobs: ${KAFKA_TOPIC_STT_JOBS:stt.jobs}
+      sttResults: ${KAFKA_TOPIC_STT_RESULTS:stt.results}
+      sttDlq: ${KAFKA_TOPIC_STT_DLQ:stt.jobs.dlq}
 
 logging:
   level:

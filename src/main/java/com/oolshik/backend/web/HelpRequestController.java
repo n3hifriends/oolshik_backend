@@ -6,6 +6,9 @@ import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.transcription.TranscriptionJobEntity;
+import com.oolshik.backend.transcription.TranscriptionJobPublisher;
+import com.oolshik.backend.transcription.TranscriptionJobService;
 import com.oolshik.backend.web.dto.AcceptHelpRequestReq;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
@@ -17,6 +20,8 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -33,9 +38,16 @@ import java.util.UUID;
 @RequestMapping("/api/requests")
 public class HelpRequestController {
 
+    private static final Logger log = LoggerFactory.getLogger(HelpRequestController.class);
+
     private final HelpRequestService service;
     private final UserRepository userRepo;
     private final AudioFileRepository audioRepo; // NEW
+    private final TranscriptionJobService transcriptionJobService;
+    private final TranscriptionJobPublisher transcriptionJobPublisher;
+
+    private static final String TRANSCRIPTION_ENGINE = "faster-whisper";
+    private static final String TRANSCRIPTION_MODEL_VERSION = "unknown";
 
     private static final GeometryFactory GEOMETRY_FACTORY =
             new GeometryFactory(new PrecisionModel(), 4326); // SRID 4326 = WGS84
@@ -43,10 +55,16 @@ public class HelpRequestController {
     public static Point toPoint(double lat, double lon) {
         return GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat));
     }
-    public HelpRequestController(HelpRequestService service, UserRepository userRepo, AudioFileRepository audioRepo) {
+    public HelpRequestController(HelpRequestService service,
+                                 UserRepository userRepo,
+                                 AudioFileRepository audioRepo,
+                                 TranscriptionJobService transcriptionJobService,
+                                 TranscriptionJobPublisher transcriptionJobPublisher) {
         this.service = service;
         this.userRepo = userRepo;
         this.audioRepo = audioRepo;
+        this.transcriptionJobService = transcriptionJobService;
+        this.transcriptionJobPublisher = transcriptionJobPublisher;
     }
 
     @PostMapping
@@ -59,7 +77,23 @@ public class HelpRequestController {
                 req.radiusMeters(),
                 req.voiceUrl(), point
         );
-        return ResponseEntity.ok(view(created));
+        TranscriptionJobEntity job = null;
+        if (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank()) {
+            job = transcriptionJobService.createOrGet(
+                    created.getId(),
+                    created.getVoiceUrl(),
+                    null,
+                    TRANSCRIPTION_ENGINE,
+                    TRANSCRIPTION_MODEL_VERSION
+            );
+            try {
+                transcriptionJobPublisher.publishJob(job);
+            } catch (Exception ex) {
+                log.warn("Failed to publish transcription job jobId={} taskId={}: {}",
+                        job.getJobId(), job.getTaskId(), ex.toString());
+            }
+        }
+        return ResponseEntity.ok(view(created, job));
     }
 
     @GetMapping("/nearby")
@@ -86,7 +120,7 @@ public class HelpRequestController {
         var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(acceptReq.latitude(), acceptReq.longitude()); // 4326
         var updated = service.accept(id, helper.getId(), point);
-        return ResponseEntity.ok(view(updated));
+        return ResponseEntity.ok(view(updated, null));
     }
 
     @PostMapping("/{id}/complete")
@@ -100,7 +134,7 @@ public class HelpRequestController {
         } catch (BadRequestException e) {
             throw new RuntimeException(e);
         }
-        return ResponseEntity.ok(view(updated));
+        return ResponseEntity.ok(view(updated, null));
     }
 
     @PostMapping("/{id}/rate")
@@ -114,7 +148,7 @@ public class HelpRequestController {
         } catch (BadRequestException e) {
             throw new RuntimeException(e);
         }
-        return ResponseEntity.ok(view(updated));
+        return ResponseEntity.ok(view(updated, null));
     }
 
 
@@ -122,14 +156,14 @@ public class HelpRequestController {
     public ResponseEntity<?> cancel(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.cancel(id, requester.getId());
-        return ResponseEntity.ok(view(updated));
+        return ResponseEntity.ok(view(updated, null));
     }
 
-    private HelpRequestView view(HelpRequestEntity e) {
+    private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job) {
         String url = audioRepo
                 .findFirstByRequestIdOrderByCreatedAtDesc(e.getId().toString())
                 .map(a -> "/api/media/audio/" + a.getId() + "/stream")
-                .orElse(null);
+                .orElse(e.getVoiceUrl());
 
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
@@ -137,7 +171,8 @@ public class HelpRequestController {
                 e.getRequesterId(), e.getHelperId(),
                 e.getCreatedAt(),
                 url, // NEW
-                e.getRatingValue()
+                e.getRatingValue(),
+                job == null ? null : job.getJobId()
         );
     }
 
