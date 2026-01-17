@@ -71,11 +71,18 @@ public class HelpRequestController {
     public ResponseEntity<?> create(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(req.latitude(), req.longitude()); // 4326
+        // HelpRequestEntity created = service.create(
+        //         requester.getId(),
+        //         req.title(), req.description(),
+        //         req.radiusMeters(),
+        //         req.voiceUrl(), point
+        // );
+        final String demoUrl = "https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav";
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
                 req.radiusMeters(),
-                req.voiceUrl(), point
+                demoUrl, point
         );
         TranscriptionJobEntity job = null;
         if (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank()) {

@@ -87,9 +87,9 @@ public class TranscriptionResultService {
         }
 
         String transcript = transcriptText.strip();
-        if (titleMissing) {
+        // if (titleMissing) {
             task.setTitle(buildTitle(transcript));
-        }
+        // }
         if (descriptionMissing) {
             task.setDescription(transcript);
         }
