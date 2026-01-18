@@ -16,6 +16,11 @@ public interface HelpRequestRow {
     UUID getHelperId();
     Instant getCreatedAt();
     Instant getUpdatedAt();
+    Instant getHelperAcceptedAt();
+    Instant getAssignmentExpiresAt();
+    Instant getCancelledAt();
+    Integer getReassignedCount();
+    Integer getReleasedCount();
     String getVoiceUrl();
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)

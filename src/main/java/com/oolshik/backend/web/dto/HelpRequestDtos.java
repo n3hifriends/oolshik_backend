@@ -1,6 +1,8 @@
 package com.oolshik.backend.web.dto;
 
 import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.domain.HelpRequestCancelReason;
+import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -31,6 +33,22 @@ public class HelpRequestDtos {
             OffsetDateTime createdAt,
             String voiceUrl,
             BigDecimal ratingValue,
-            UUID transcriptionJobId
+            UUID transcriptionJobId,
+            OffsetDateTime helperAcceptedAt,
+            OffsetDateTime assignmentExpiresAt,
+            OffsetDateTime cancelledAt,
+            UUID cancelledBy,
+            Integer reassignedCount,
+            Integer releasedCount
+    ) {}
+
+    public record CancelRequest(
+            @NotNull HelpRequestCancelReason reasonCode,
+            String reasonText
+    ) {}
+
+    public record ReleaseRequest(
+            HelpRequestReleaseReason reasonCode,
+            String reasonText
     ) {}
 }
