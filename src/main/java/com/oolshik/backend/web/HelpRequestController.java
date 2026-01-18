@@ -10,9 +10,10 @@ import com.oolshik.backend.transcription.TranscriptionJobEntity;
 import com.oolshik.backend.transcription.TranscriptionJobPublisher;
 import com.oolshik.backend.transcription.TranscriptionJobService;
 import com.oolshik.backend.web.dto.AcceptHelpRequestReq;
-import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
+import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.ReleaseRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.apache.coyote.BadRequestException;
@@ -27,7 +28,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -160,9 +160,34 @@ public class HelpRequestController {
 
 
     @PostMapping("/{id}/cancel")
-    public ResponseEntity<?> cancel(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id) {
+    public ResponseEntity<?> cancel(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable UUID id,
+            @RequestBody(required = false) @Valid CancelRequest body
+    ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
-        var updated = service.cancel(id, requester.getId());
+        var updated = service.cancel(id, requester.getId(), body);
+        return ResponseEntity.ok(view(updated, null));
+    }
+
+    @PostMapping("/{id}/release")
+    public ResponseEntity<?> release(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable UUID id,
+            @RequestBody(required = false) ReleaseRequest body
+    ) {
+        var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.release(id, helper.getId(), body);
+        return ResponseEntity.ok(view(updated, null));
+    }
+
+    @PostMapping("/{id}/reassign")
+    public ResponseEntity<?> reassign(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.reassign(id, requester.getId());
         return ResponseEntity.ok(view(updated, null));
     }
 
@@ -179,7 +204,13 @@ public class HelpRequestController {
                 e.getCreatedAt(),
                 url, // NEW
                 e.getRatingValue(),
-                job == null ? null : job.getJobId()
+                job == null ? null : job.getJobId(),
+                e.getHelperAcceptedAt(),
+                e.getAssignmentExpiresAt(),
+                e.getCancelledAt(),
+                e.getCancelledBy(),
+                e.getReassignedCount(),
+                e.getReleasedCount()
         );
     }
 

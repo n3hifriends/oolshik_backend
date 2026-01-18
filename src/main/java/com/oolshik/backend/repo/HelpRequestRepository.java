@@ -1,12 +1,14 @@
 package com.oolshik.backend.repo;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
-import com.oolshik.backend.web.dto.HelpRequestDtos;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
@@ -33,6 +35,11 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.helper_id                      AS helperId,
           h.created_at                     AS createdAt,
           h.updated_at                     AS UpdatedAt,
+          h.helper_accepted_at             AS helperAcceptedAt,
+          h.assignment_expires_at          AS assignmentExpiresAt,
+          h.cancelled_at                   AS cancelledAt,
+          h.reassigned_count               AS reassignedCount,
+          h.released_count                 AS releasedCount,
           h.voice_url                      AS voiceUrl,
           h.rating_value                   AS ratingValue,
           ha.avg_rating                    AS helperAvgRating,
@@ -92,6 +99,11 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.helper_id                      AS helperId,
         h.created_at                     AS createdAt,
         h.updated_at                     AS updatedAt,
+        h.helper_accepted_at             AS helperAcceptedAt,
+        h.assignment_expires_at          AS assignmentExpiresAt,
+        h.cancelled_at                   AS cancelledAt,
+        h.reassigned_count               AS reassignedCount,
+        h.released_count                 AS releasedCount,
         h.voice_url                      AS voiceUrl,
         h.rating_value                   AS ratingValue,
         COALESCE((
@@ -107,4 +119,149 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           nativeQuery = true
   )
   HelpRequestRow findTaskByTaskId(@Param("taskId") java.util.UUID taskId);
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = :helperId,
+             h.helperAcceptLocation = :acceptLocation,
+             h.helperAcceptedAt = :acceptedAt,
+             h.assignmentExpiresAt = :expiresAt,
+             h.lastStateChangeAt = :acceptedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :acceptedAt
+       where h.id = :id
+         and h.status = :expectedStatus
+      """)
+  int updateAccept(
+          @Param("id") UUID id,
+          @Param("helperId") UUID helperId,
+          @Param("acceptLocation") org.locationtech.jts.geom.Point acceptLocation,
+          @Param("acceptedAt") OffsetDateTime acceptedAt,
+          @Param("expiresAt") OffsetDateTime expiresAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.cancelledAt = :now,
+             h.cancelledBy = :actorId,
+             h.cancelReasonCode = :reasonCode,
+             h.cancelReasonText = :reasonText,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status in :allowedStatuses
+      """)
+  int updateCancel(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("actorId") UUID actorId,
+          @Param("now") OffsetDateTime now,
+          @Param("reasonCode") String reasonCode,
+          @Param("reasonText") String reasonText,
+          @Param("stateReason") String stateReason,
+          @Param("allowedStatuses") List<com.oolshik.backend.domain.HelpRequestStatus> allowedStatuses,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.releasedAt = :now,
+             h.releasedCount = coalesce(h.releasedCount, 0) + 1,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.helperId = :helperId
+         and h.status in :allowedStatuses
+      """)
+  int updateRelease(
+          @Param("id") UUID id,
+          @Param("helperId") UUID helperId,
+          @Param("now") OffsetDateTime now,
+          @Param("stateReason") String stateReason,
+          @Param("allowedStatuses") List<com.oolshik.backend.domain.HelpRequestStatus> allowedStatuses,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+         and h.helperAcceptedAt <= :minAcceptedAt
+         and coalesce(h.reassignedCount, 0) < :maxReassign
+      """)
+  int updateReassign(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("now") OffsetDateTime now,
+          @Param("minAcceptedAt") OffsetDateTime minAcceptedAt,
+          @Param("maxReassign") int maxReassign,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.assignmentExpiresAt is not null
+         and h.assignmentExpiresAt <= :now
+      """)
+  int updateAutoRelease(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.assignmentExpiresAt is not null
+         and h.assignmentExpiresAt <= :now
+      """)
+  List<UUID> findExpiredAssignments(
+          @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
+          @Param("now") OffsetDateTime now,
+          Pageable pageable
+  );
 }

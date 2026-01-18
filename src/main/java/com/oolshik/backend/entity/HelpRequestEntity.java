@@ -60,6 +60,36 @@ public class HelpRequestEntity {
     @Column(name = "rated_at")
     private OffsetDateTime ratedAt;
 
+    @Column(name = "assignment_expires_at")
+    private OffsetDateTime assignmentExpiresAt;
+
+    @Column(name = "cancelled_at")
+    private OffsetDateTime cancelledAt;
+
+    @Column(name = "cancelled_by")
+    private UUID cancelledBy;
+
+    @Column(name = "cancel_reason_code")
+    private String cancelReasonCode;
+
+    @Column(name = "cancel_reason_text", columnDefinition = "TEXT")
+    private String cancelReasonText;
+
+    @Column(name = "released_at")
+    private OffsetDateTime releasedAt;
+
+    @Column(name = "reassigned_count")
+    private Integer reassignedCount;
+
+    @Column(name = "released_count")
+    private Integer releasedCount;
+
+    @Column(name = "last_state_change_at")
+    private OffsetDateTime lastStateChangeAt;
+
+    @Column(name = "last_state_change_reason")
+    private String lastStateChangeReason;
+
     public Point getHelperAcceptLocation() {
         return helperAcceptLocation;
     }
@@ -91,6 +121,7 @@ public class HelpRequestEntity {
         if (createdAt == null) createdAt = OffsetDateTime.now();
         if (updatedAt == null) updatedAt = createdAt;
         if (status == null) status = HelpRequestStatus.OPEN;
+        if (lastStateChangeAt == null) lastStateChangeAt = createdAt;
     }
 
     @PreUpdate
@@ -131,6 +162,29 @@ public class HelpRequestEntity {
     public void setRatedAt(OffsetDateTime ratedAt) {
         this.ratedAt = ratedAt;
     }
+
+    public OffsetDateTime getAssignmentExpiresAt() { return assignmentExpiresAt; }
+    public void setAssignmentExpiresAt(OffsetDateTime assignmentExpiresAt) {
+        this.assignmentExpiresAt = assignmentExpiresAt;
+    }
+    public OffsetDateTime getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(OffsetDateTime cancelledAt) { this.cancelledAt = cancelledAt; }
+    public UUID getCancelledBy() { return cancelledBy; }
+    public void setCancelledBy(UUID cancelledBy) { this.cancelledBy = cancelledBy; }
+    public String getCancelReasonCode() { return cancelReasonCode; }
+    public void setCancelReasonCode(String cancelReasonCode) { this.cancelReasonCode = cancelReasonCode; }
+    public String getCancelReasonText() { return cancelReasonText; }
+    public void setCancelReasonText(String cancelReasonText) { this.cancelReasonText = cancelReasonText; }
+    public OffsetDateTime getReleasedAt() { return releasedAt; }
+    public void setReleasedAt(OffsetDateTime releasedAt) { this.releasedAt = releasedAt; }
+    public Integer getReassignedCount() { return reassignedCount; }
+    public void setReassignedCount(Integer reassignedCount) { this.reassignedCount = reassignedCount; }
+    public Integer getReleasedCount() { return releasedCount; }
+    public void setReleasedCount(Integer releasedCount) { this.releasedCount = releasedCount; }
+    public OffsetDateTime getLastStateChangeAt() { return lastStateChangeAt; }
+    public void setLastStateChangeAt(OffsetDateTime lastStateChangeAt) { this.lastStateChangeAt = lastStateChangeAt; }
+    public String getLastStateChangeReason() { return lastStateChangeReason; }
+    public void setLastStateChangeReason(String lastStateChangeReason) { this.lastStateChangeReason = lastStateChangeReason; }
 
     public Point getLocation() {
         return location;
