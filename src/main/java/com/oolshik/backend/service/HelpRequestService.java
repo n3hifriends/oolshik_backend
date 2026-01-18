@@ -38,19 +38,25 @@ public class HelpRequestService {
     private final HelpRequestEventService eventService;
     private final TaskRecoveryProperties recoveryProperties;
     private final HelpRequestNotificationService notificationService;
+    private final HelpRequestRadiusExpansionService radiusExpansionService;
+    private final HelperLocationService helperLocationService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
             UserRepository userRepo,
             HelpRequestEventService eventService,
             TaskRecoveryProperties recoveryProperties,
-            HelpRequestNotificationService notificationService
+            HelpRequestNotificationService notificationService,
+            HelpRequestRadiusExpansionService radiusExpansionService,
+            HelperLocationService helperLocationService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
         this.eventService = eventService;
         this.recoveryProperties = recoveryProperties;
         this.notificationService = notificationService;
+        this.radiusExpansionService = radiusExpansionService;
+        this.helperLocationService = helperLocationService;
     }
 
     @Transactional
@@ -77,6 +83,12 @@ public class HelpRequestService {
         e.setStatus(titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN);
         e.setVoiceUrl(voiceUrl);
         e.setLocation(location);
+        e.setRadiusStage(0);
+        if (titleBlank) {
+            e.setNextEscalationAt(null);
+        } else {
+            e.setNextEscalationAt(radiusExpansionService.initialNextEscalationAt(OffsetDateTime.now(), radiusMeters));
+        }
         return repo.save(e);
     }
 
@@ -129,6 +141,7 @@ public class HelpRequestService {
                 null,
                 null
         );
+        helperLocationService.upsert(helperId, acceptorPoint);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -143,6 +156,7 @@ public class HelpRequestService {
         }
         e.setStatus(HelpRequestStatus.COMPLETED);
         e.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        e.setNextEscalationAt(null);
         e.setLastStateChangeAt(OffsetDateTime.now(ZoneOffset.UTC));
         e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
         if (completePayload != null && completePayload.rating != null) {
@@ -173,6 +187,7 @@ public class HelpRequestService {
         }
         e.setStatus(HelpRequestStatus.COMPLETED);
         e.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        e.setNextEscalationAt(null);
         e.setLastStateChangeAt(OffsetDateTime.now(ZoneOffset.UTC));
         e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
         if (ratePayload != null && ratePayload.rating != null) {
@@ -277,11 +292,19 @@ public class HelpRequestService {
         }
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nextEscalationAt = radiusExpansionService
+                .findNextRadius(existing.getRadiusMeters())
+                .map(r -> radiusExpansionService.nextEscalationAtForStage(
+                        now,
+                        (existing.getRadiusStage() == null ? 0 : existing.getRadiusStage()) + 1
+                ))
+                .orElse(null);
         List<HelpRequestStatus> allowed = List.of(HelpRequestStatus.ASSIGNED);
         int updated = repo.updateRelease(
                 requestId,
                 helperId,
                 now,
+                nextEscalationAt,
                 HelpRequestEventType.RELEASED.name(),
                 allowed,
                 HelpRequestStatus.OPEN
@@ -320,12 +343,20 @@ public class HelpRequestService {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime minAcceptedAt = now.minusSeconds(recoveryProperties.getAcceptToStartSlaSeconds());
+        OffsetDateTime nextEscalationAt = radiusExpansionService
+                .findNextRadius(existing.getRadiusMeters())
+                .map(r -> radiusExpansionService.nextEscalationAtForStage(
+                        now,
+                        (existing.getRadiusStage() == null ? 0 : existing.getRadiusStage()) + 1
+                ))
+                .orElse(null);
         int updated = repo.updateReassign(
                 requestId,
                 requesterId,
                 now,
                 minAcceptedAt,
                 recoveryProperties.getMaxReassign(),
+                nextEscalationAt,
                 HelpRequestStatus.ASSIGNED,
                 HelpRequestStatus.OPEN,
                 HelpRequestEventType.REASSIGNED.name()
@@ -355,9 +386,17 @@ public class HelpRequestService {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         HelpRequestEntity existing = repo.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        OffsetDateTime nextEscalationAt = radiusExpansionService
+                .findNextRadius(existing.getRadiusMeters())
+                .map(r -> radiusExpansionService.nextEscalationAtForStage(
+                        now,
+                        (existing.getRadiusStage() == null ? 0 : existing.getRadiusStage()) + 1
+                ))
+                .orElse(null);
         int updated = repo.updateAutoRelease(
                 requestId,
                 now,
+                nextEscalationAt,
                 HelpRequestStatus.ASSIGNED,
                 HelpRequestStatus.OPEN,
                 HelpRequestEventType.TIMEOUT.name()

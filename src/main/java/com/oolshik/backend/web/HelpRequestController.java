@@ -210,7 +210,9 @@ public class HelpRequestController {
                 e.getCancelledAt(),
                 e.getCancelledBy(),
                 e.getReassignedCount(),
-                e.getReleasedCount()
+                e.getReleasedCount(),
+                e.getRadiusStage(),
+                e.getNextEscalationAt()
         );
     }
 

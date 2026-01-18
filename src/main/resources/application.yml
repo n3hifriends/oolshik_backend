@@ -62,6 +62,13 @@ app:
     maxReassign: ${MAX_REASSIGN:2}
     schedulerBatchSize: ${TASK_RECOVERY_BATCH_SIZE:100}
     schedulerDelayMs: ${TASK_RECOVERY_DELAY_MS:60000}
+  radius-expansion:
+    scheduleMeters: ${RADIUS_SCHEDULE_METERS:1000,2000,3000,5000}
+    escalationDelaysSeconds: ${ESCALATION_DELAYS_SECONDS:0,120,300,600}
+    maxRadiusMeters: ${MAX_RADIUS_METERS:5000}
+    locationFreshnessHours: ${LOCATION_FRESHNESS_HOURS:24}
+    jobIntervalSeconds: ${JOB_INTERVAL_SECONDS:30}
+    batchSize: ${RADIUS_EXPANSION_BATCH_SIZE:100}
   kafka:
     topics:
       sttJobs: ${KAFKA_TOPIC_STT_JOBS:stt.jobs}

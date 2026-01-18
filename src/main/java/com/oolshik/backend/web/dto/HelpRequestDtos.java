@@ -39,7 +39,9 @@ public class HelpRequestDtos {
             OffsetDateTime cancelledAt,
             UUID cancelledBy,
             Integer reassignedCount,
-            Integer releasedCount
+            Integer releasedCount,
+            Integer radiusStage,
+            OffsetDateTime nextEscalationAt
     ) {}
 
     public record CancelRequest(

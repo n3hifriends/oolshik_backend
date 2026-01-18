@@ -40,6 +40,8 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.cancelled_at                   AS cancelledAt,
           h.reassigned_count               AS reassignedCount,
           h.released_count                 AS releasedCount,
+          h.radius_stage                   AS radiusStage,
+          h.next_escalation_at             AS nextEscalationAt,
           h.voice_url                      AS voiceUrl,
           h.rating_value                   AS ratingValue,
           ha.avg_rating                    AS helperAvgRating,
@@ -104,6 +106,8 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.cancelled_at                   AS cancelledAt,
         h.reassigned_count               AS reassignedCount,
         h.released_count                 AS releasedCount,
+        h.radius_stage                   AS radiusStage,
+        h.next_escalation_at             AS nextEscalationAt,
         h.voice_url                      AS voiceUrl,
         h.rating_value                   AS ratingValue,
         COALESCE((
@@ -128,6 +132,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = :acceptLocation,
              h.helperAcceptedAt = :acceptedAt,
              h.assignmentExpiresAt = :expiresAt,
+             h.nextEscalationAt = null,
              h.lastStateChangeAt = :acceptedAt,
              h.lastStateChangeReason = :stateReason,
              h.updatedAt = :acceptedAt
@@ -153,6 +158,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.cancelledBy = :actorId,
              h.cancelReasonCode = :reasonCode,
              h.cancelReasonText = :reasonText,
+             h.nextEscalationAt = null,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
              h.updatedAt = :now
@@ -182,6 +188,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.assignmentExpiresAt = null,
              h.releasedAt = :now,
              h.releasedCount = coalesce(h.releasedCount, 0) + 1,
+             h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
              h.updatedAt = :now
@@ -193,6 +200,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("id") UUID id,
           @Param("helperId") UUID helperId,
           @Param("now") OffsetDateTime now,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
           @Param("stateReason") String stateReason,
           @Param("allowedStatuses") List<com.oolshik.backend.domain.HelpRequestStatus> allowedStatuses,
           @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus
@@ -207,6 +215,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
+             h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
              h.updatedAt = :now
@@ -222,6 +231,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("now") OffsetDateTime now,
           @Param("minAcceptedAt") OffsetDateTime minAcceptedAt,
           @Param("maxReassign") int maxReassign,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
           @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
           @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
           @Param("stateReason") String stateReason
@@ -236,6 +246,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
+             h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
              h.updatedAt = :now
@@ -247,9 +258,68 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
   int updateAutoRelease(
           @Param("id") UUID id,
           @Param("now") OffsetDateTime now,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
           @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
           @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
           @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.radiusStage = :newStage,
+             h.radiusMeters = :newRadius,
+             h.nextEscalationAt = :nextEscalationAt,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.radiusStage = :expectedStage
+         and h.nextEscalationAt is not null
+         and h.nextEscalationAt <= :now
+      """)
+  int updateRadiusEscalation(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("expectedStage") int expectedStage,
+          @Param("newStage") int newStage,
+          @Param("newRadius") int newRadius,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.nextEscalationAt = null,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.nextEscalationAt is not null
+         and h.nextEscalationAt <= :now
+      """)
+  int stopRadiusEscalation(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.nextEscalationAt is not null
+         and h.nextEscalationAt <= :now
+      """)
+  List<UUID> findRadiusEscalationCandidates(
+          @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
+          @Param("now") OffsetDateTime now,
+          Pageable pageable
   );
 
   @Query("""

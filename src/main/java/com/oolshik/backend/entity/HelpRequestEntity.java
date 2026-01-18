@@ -90,6 +90,12 @@ public class HelpRequestEntity {
     @Column(name = "last_state_change_reason")
     private String lastStateChangeReason;
 
+    @Column(name = "radius_stage")
+    private Integer radiusStage;
+
+    @Column(name = "next_escalation_at")
+    private OffsetDateTime nextEscalationAt;
+
     public Point getHelperAcceptLocation() {
         return helperAcceptLocation;
     }
@@ -122,6 +128,9 @@ public class HelpRequestEntity {
         if (updatedAt == null) updatedAt = createdAt;
         if (status == null) status = HelpRequestStatus.OPEN;
         if (lastStateChangeAt == null) lastStateChangeAt = createdAt;
+        if (reassignedCount == null) reassignedCount = 0;
+        if (releasedCount == null) releasedCount = 0;
+        if (radiusStage == null) radiusStage = 0;
     }
 
     @PreUpdate
@@ -185,6 +194,10 @@ public class HelpRequestEntity {
     public void setLastStateChangeAt(OffsetDateTime lastStateChangeAt) { this.lastStateChangeAt = lastStateChangeAt; }
     public String getLastStateChangeReason() { return lastStateChangeReason; }
     public void setLastStateChangeReason(String lastStateChangeReason) { this.lastStateChangeReason = lastStateChangeReason; }
+    public Integer getRadiusStage() { return radiusStage; }
+    public void setRadiusStage(Integer radiusStage) { this.radiusStage = radiusStage; }
+    public OffsetDateTime getNextEscalationAt() { return nextEscalationAt; }
+    public void setNextEscalationAt(OffsetDateTime nextEscalationAt) { this.nextEscalationAt = nextEscalationAt; }
 
     public Point getLocation() {
         return location;
