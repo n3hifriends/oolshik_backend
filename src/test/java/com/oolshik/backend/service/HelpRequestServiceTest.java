@@ -35,6 +35,10 @@ class HelpRequestServiceTest {
     private HelpRequestEventService eventService;
     @Mock
     private HelpRequestNotificationService notificationService;
+    @Mock
+    private HelpRequestRadiusExpansionService radiusExpansionService;
+    @Mock
+    private HelperLocationService helperLocationService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -42,7 +46,15 @@ class HelpRequestServiceTest {
     @BeforeEach
     void setUp() {
         recoveryProperties = new TaskRecoveryProperties();
-        service = new HelpRequestService(repo, userRepo, eventService, recoveryProperties, notificationService);
+        service = new HelpRequestService(
+                repo,
+                userRepo,
+                eventService,
+                recoveryProperties,
+                notificationService,
+                radiusExpansionService,
+                helperLocationService
+        );
     }
 
     @Test
@@ -54,6 +66,7 @@ class HelpRequestServiceTest {
         entity.setRequesterId(requesterId);
         entity.setStatus(HelpRequestStatus.OPEN);
         when(repo.findById(requestId)).thenReturn(Optional.of(entity));
+        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
 
         HelpRequestDtos.CancelRequest body =
                 new HelpRequestDtos.CancelRequest(HelpRequestCancelReason.OTHER, " ");
@@ -75,7 +88,8 @@ class HelpRequestServiceTest {
         entity.setHelperAcceptedAt(OffsetDateTime.now());
 
         when(repo.findById(requestId)).thenReturn(Optional.of(entity));
-        when(repo.updateReassign(any(), any(), any(), any(), anyInt(), any(), any(), any()))
+        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
+        when(repo.updateReassign(any(), any(), any(), any(), anyInt(), any(), any(), any(), any()))
                 .thenReturn(0);
 
         assertThrows(ConflictOperationException.class, () -> service.reassign(requestId, requesterId));
@@ -94,6 +108,7 @@ class HelpRequestServiceTest {
         entity.setStatus(HelpRequestStatus.ASSIGNED);
 
         when(repo.findById(requestId)).thenReturn(Optional.of(entity));
+        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
 
         assertThrows(ForbiddenOperationException.class, () -> service.release(requestId, helperId, null));
     }

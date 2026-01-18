@@ -6,5 +6,6 @@ public enum HelpRequestEventType {
     REASSIGNED,
     CANCELLED,
     TIMEOUT,
-    COMPLETED
+    COMPLETED,
+    RADIUS_EXPANDED
 }

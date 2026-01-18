@@ -21,6 +21,8 @@ public interface HelpRequestRow {
     Instant getCancelledAt();
     Integer getReassignedCount();
     Integer getReleasedCount();
+    Integer getRadiusStage();
+    Instant getNextEscalationAt();
     String getVoiceUrl();
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)
