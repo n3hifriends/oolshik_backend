@@ -80,16 +80,16 @@ public class TranscriptionResultService {
             return;
         }
 
-        boolean titleMissing = task.getTitle() == null || task.getTitle().isBlank();
+        boolean titleMissing = task.getTitle() == null || task.getTitle().isBlank() || task.getTitle().equals("...");
         boolean descriptionMissing = task.getDescription() == null || task.getDescription().isBlank();
         if (!(task.getStatus() == HelpRequestStatus.DRAFT || titleMissing || descriptionMissing)) {
             return;
         }
 
         String transcript = transcriptText.strip();
-        // if (titleMissing) {
+        if (titleMissing) {
             task.setTitle(buildTitle(transcript));
-        // }
+        }
         if (descriptionMissing) {
             task.setDescription(transcript);
         }
