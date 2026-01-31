@@ -9,6 +9,7 @@ public class TaskRecoveryProperties {
 
     private long acceptToStartSlaSeconds = 420;
     private long assignmentTtlSeconds = 2700;
+    private long authTtlSeconds = 120;
     private int maxReassign = 2;
     private int schedulerBatchSize = 100;
     private long schedulerDelayMs = 60000;
@@ -21,6 +22,8 @@ public class TaskRecoveryProperties {
     public void setAssignmentTtlSeconds(long assignmentTtlSeconds) {
         this.assignmentTtlSeconds = assignmentTtlSeconds;
     }
+    public long getAuthTtlSeconds() { return authTtlSeconds; }
+    public void setAuthTtlSeconds(long authTtlSeconds) { this.authTtlSeconds = authTtlSeconds; }
     public int getMaxReassign() { return maxReassign; }
     public void setMaxReassign(int maxReassign) { this.maxReassign = maxReassign; }
     public int getSchedulerBatchSize() { return schedulerBatchSize; }

@@ -14,6 +14,7 @@ import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.ReleaseRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.RejectRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.apache.coyote.BadRequestException;
@@ -31,6 +32,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,25 +102,30 @@ public class HelpRequestController {
                         job.getJobId(), job.getTaskId(), ex.toString());
             }
         }
-        return ResponseEntity.ok(view(created, job));
+        return ResponseEntity.ok(view(created, job, requester.getId()));
     }
 
     @GetMapping("/nearby")
-    public Page<HelpRequestRow> nearby(
+    public Page<HelpRequestRowView> nearby(
+        @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
         @RequestParam double lat,
         @RequestParam double lng,
         @RequestParam int radiusMeters,
         @RequestParam(required = false) List<String> statuses,
         @PageableDefault(size = 50) Pageable pageable
     ) {
-        return service.nearby(lat, lng, radiusMeters, statuses, pageable);
+        UUID viewerId = resolveViewerId(principal);
+        return service.nearby(lat, lng, radiusMeters, statuses, pageable)
+                .map(row -> view(row, viewerId));
     }
 
     @GetMapping("/{taskId}")
-    public HelpRequestRow findTaskByTaskId(
+    public HelpRequestRowView findTaskByTaskId(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
             @PathVariable UUID taskId
     ) {
-        return service.findTaskByTaskId(taskId);
+        UUID viewerId = resolveViewerId(principal);
+        return view(service.findTaskByTaskId(taskId), viewerId);
     }
 
 
@@ -127,7 +134,25 @@ public class HelpRequestController {
         var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(acceptReq.latitude(), acceptReq.longitude()); // 4326
         var updated = service.accept(id, helper.getId(), point);
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, helper.getId()));
+    }
+
+    @PostMapping("/{id}/authorize")
+    public ResponseEntity<?> authorize(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.authorize(id, requester.getId());
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<?> reject(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable UUID id,
+            @RequestBody @Valid RejectRequest body
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.reject(id, requester.getId(), body);
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
     @PostMapping("/{id}/complete")
@@ -141,7 +166,7 @@ public class HelpRequestController {
         } catch (BadRequestException e) {
             throw new RuntimeException(e);
         }
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
     @PostMapping("/{id}/rate")
@@ -155,7 +180,7 @@ public class HelpRequestController {
         } catch (BadRequestException e) {
             throw new RuntimeException(e);
         }
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
 
@@ -167,7 +192,7 @@ public class HelpRequestController {
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.cancel(id, requester.getId(), body);
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
     @PostMapping("/{id}/release")
@@ -178,7 +203,7 @@ public class HelpRequestController {
     ) {
         var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.release(id, helper.getId(), body);
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, helper.getId()));
     }
 
     @PostMapping("/{id}/reassign")
@@ -188,25 +213,28 @@ public class HelpRequestController {
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.reassign(id, requester.getId());
-        return ResponseEntity.ok(view(updated, null));
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
-    private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job) {
+    private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job, UUID viewerId) {
         String url = audioRepo
                 .findFirstByRequestIdOrderByCreatedAtDesc(e.getId().toString())
                 .map(a -> "/api/media/audio/" + a.getId() + "/stream")
                 .orElse(e.getVoiceUrl());
 
+        UUID pendingHelperId = maskPendingHelperId(e.getPendingHelperId(), e.getRequesterId(), viewerId);
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
                 e.getRadiusMeters(), e.getStatus(),
                 e.getRequesterId(), e.getHelperId(),
+                pendingHelperId,
                 e.getCreatedAt(),
                 url, // NEW
                 e.getRatingValue(),
                 job == null ? null : job.getJobId(),
                 e.getHelperAcceptedAt(),
                 e.getAssignmentExpiresAt(),
+                e.getPendingAuthExpiresAt(),
                 e.getCancelledAt(),
                 e.getCancelledBy(),
                 e.getReassignedCount(),
@@ -216,8 +244,82 @@ public class HelpRequestController {
         );
     }
 
+    private HelpRequestRowView view(HelpRequestRow row, UUID viewerId) {
+        UUID pendingHelperId = maskPendingHelperId(row.getPendingHelperId(), row.getRequesterId(), viewerId);
+        return new HelpRequestRowView(
+                row.getId(),
+                row.getTitle(),
+                row.getDescription(),
+                row.getLatitude(),
+                row.getLongitude(),
+                row.getRadiusMeters(),
+                row.getStatus(),
+                row.getRequesterId(),
+                row.getCreatedByName(),
+                row.getCreatedByPhoneNumber(),
+                row.getHelperId(),
+                pendingHelperId,
+                row.getCreatedAt(),
+                row.getUpdatedAt(),
+                row.getHelperAcceptedAt(),
+                row.getAssignmentExpiresAt(),
+                row.getPendingAuthExpiresAt(),
+                row.getCancelledAt(),
+                row.getReassignedCount(),
+                row.getReleasedCount(),
+                row.getRadiusStage(),
+                row.getNextEscalationAt(),
+                row.getVoiceUrl(),
+                row.getRatingValue(),
+                row.getHelperAvgRating(),
+                row.getDistanceMtr()
+        );
+    }
+
+    private UUID maskPendingHelperId(UUID pendingHelperId, UUID requesterId, UUID viewerId) {
+        if (pendingHelperId == null || viewerId == null) return null;
+        if (viewerId.equals(requesterId) || viewerId.equals(pendingHelperId)) return pendingHelperId;
+        return null;
+    }
+
+    private UUID resolveViewerId(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+        if (principal == null || principal.phone() == null) return null;
+        return userRepo.findByPhoneNumber(principal.phone())
+                .map(u -> u.getId())
+                .orElse(null);
+    }
+
     // payloads
     public static class CompletePayload { public BigDecimal rating; public String feedback; }
     public static class RatePayload { @NotNull
     public BigDecimal rating; public String feedback; }
+
+    public record HelpRequestRowView(
+            UUID id,
+            String title,
+            String description,
+            Double latitude,
+            Double longitude,
+            Integer radiusMeters,
+            String status,
+            UUID requesterId,
+            String createdByName,
+            String createdByPhoneNumber,
+            UUID helperId,
+            UUID pendingHelperId,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant helperAcceptedAt,
+            Instant assignmentExpiresAt,
+            Instant pendingAuthExpiresAt,
+            Instant cancelledAt,
+            Integer reassignedCount,
+            Integer releasedCount,
+            Integer radiusStage,
+            Instant nextEscalationAt,
+            String voiceUrl,
+            BigDecimal ratingValue,
+            BigDecimal helperAvgRating,
+            Double distanceMtr
+    ) {}
 }

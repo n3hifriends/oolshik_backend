@@ -3,6 +3,7 @@ package com.oolshik.backend.web.dto;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestReleaseReason;
+import com.oolshik.backend.domain.HelpRequestRejectReason;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -30,12 +31,14 @@ public class HelpRequestDtos {
             HelpRequestStatus status,
             UUID requesterId,
             UUID helperId,
+            UUID pendingHelperId,
             OffsetDateTime createdAt,
             String voiceUrl,
             BigDecimal ratingValue,
             UUID transcriptionJobId,
             OffsetDateTime helperAcceptedAt,
             OffsetDateTime assignmentExpiresAt,
+            OffsetDateTime pendingAuthExpiresAt,
             OffsetDateTime cancelledAt,
             UUID cancelledBy,
             Integer reassignedCount,
@@ -51,6 +54,11 @@ public class HelpRequestDtos {
 
     public record ReleaseRequest(
             HelpRequestReleaseReason reasonCode,
+            String reasonText
+    ) {}
+
+    public record RejectRequest(
+            @NotNull HelpRequestRejectReason reasonCode,
             String reasonText
     ) {}
 }

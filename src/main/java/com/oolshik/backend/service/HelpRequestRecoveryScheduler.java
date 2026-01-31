@@ -47,4 +47,25 @@ public class HelpRequestRecoveryScheduler {
             log.info("Auto-released {} expired assignments", released);
         }
     }
+
+    @Scheduled(fixedDelayString = "${app.task-recovery.schedulerDelayMs:60000}")
+    public void autoExpirePendingAuthorizations() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        List<UUID> expired = helpRequestService.findExpiredPendingAuth(
+                now,
+                recoveryProperties.getSchedulerBatchSize()
+        );
+        if (expired.isEmpty()) {
+            return;
+        }
+        int reopened = 0;
+        for (UUID id : expired) {
+            if (helpRequestService.autoExpirePendingAuth(id)) {
+                reopened++;
+            }
+        }
+        if (reopened > 0) {
+            log.info("Auto-expired {} pending authorizations", reopened);
+        }
+    }
 }

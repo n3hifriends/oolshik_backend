@@ -33,10 +33,12 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           u.display_name                   AS createdByName,
           u.phone_number                   AS createdByPhoneNumber,
           h.helper_id                      AS helperId,
+          h.pending_helper_id              AS pendingHelperId,
           h.created_at                     AS createdAt,
           h.updated_at                     AS UpdatedAt,
           h.helper_accepted_at             AS helperAcceptedAt,
           h.assignment_expires_at          AS assignmentExpiresAt,
+          h.pending_auth_expires_at        AS pendingAuthExpiresAt,
           h.cancelled_at                   AS cancelledAt,
           h.reassigned_count               AS reassignedCount,
           h.released_count                 AS releasedCount,
@@ -99,10 +101,12 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         u.display_name                   AS createdByName,
         u.phone_number                   AS createdByPhoneNumber,
         h.helper_id                      AS helperId,
+        h.pending_helper_id              AS pendingHelperId,
         h.created_at                     AS createdAt,
         h.updated_at                     AS updatedAt,
         h.helper_accepted_at             AS helperAcceptedAt,
         h.assignment_expires_at          AS assignmentExpiresAt,
+        h.pending_auth_expires_at        AS pendingAuthExpiresAt,
         h.cancelled_at                   AS cancelledAt,
         h.reassigned_count               AS reassignedCount,
         h.released_count                 AS releasedCount,
@@ -128,10 +132,13 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
   @Query("""
       update HelpRequestEntity h
          set h.status = :newStatus,
-             h.helperId = :helperId,
+             h.helperId = null,
+             h.pendingHelperId = :helperId,
              h.helperAcceptLocation = :acceptLocation,
-             h.helperAcceptedAt = :acceptedAt,
-             h.assignmentExpiresAt = :expiresAt,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.pendingAuthExpiresAt = :pendingAuthExpiresAt,
+             h.acceptedAt = :acceptedAt,
              h.nextEscalationAt = null,
              h.lastStateChangeAt = :acceptedAt,
              h.lastStateChangeReason = :stateReason,
@@ -144,7 +151,104 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("helperId") UUID helperId,
           @Param("acceptLocation") org.locationtech.jts.geom.Point acceptLocation,
           @Param("acceptedAt") OffsetDateTime acceptedAt,
-          @Param("expiresAt") OffsetDateTime expiresAt,
+          @Param("pendingAuthExpiresAt") OffsetDateTime pendingAuthExpiresAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = h.pendingHelperId,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.authorizedAt = :authorizedAt,
+             h.authorizedBy = :authorizedBy,
+             h.assignmentExpiresAt = :assignmentExpiresAt,
+             h.helperAcceptedAt = :authorizedAt,
+             h.nextEscalationAt = null,
+             h.lastStateChangeAt = :authorizedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :authorizedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+         and h.pendingHelperId is not null
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt > :authorizedAt
+      """)
+  int updateAuthorize(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("authorizedAt") OffsetDateTime authorizedAt,
+          @Param("authorizedBy") UUID authorizedBy,
+          @Param("assignmentExpiresAt") OffsetDateTime assignmentExpiresAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.rejectedAt = :rejectedAt,
+             h.rejectedBy = :rejectedBy,
+             h.rejectReasonCode = :reasonCode,
+             h.rejectReasonText = :reasonText,
+             h.nextEscalationAt = :nextEscalationAt,
+             h.lastStateChangeAt = :rejectedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :rejectedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+      """)
+  int updateReject(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("rejectedAt") OffsetDateTime rejectedAt,
+          @Param("rejectedBy") UUID rejectedBy,
+          @Param("reasonCode") String reasonCode,
+          @Param("reasonText") String reasonText,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.authTimeoutCount = coalesce(h.authTimeoutCount, 0) + 1,
+             h.nextEscalationAt = :nextEscalationAt,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt <= :now
+      """)
+  int updateAuthTimeout(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
           @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
           @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
           @Param("stateReason") String stateReason
@@ -158,6 +262,8 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.cancelledBy = :actorId,
              h.cancelReasonCode = :reasonCode,
              h.cancelReasonText = :reasonText,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
              h.nextEscalationAt = null,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
@@ -330,6 +436,19 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
          and h.assignmentExpiresAt <= :now
       """)
   List<UUID> findExpiredAssignments(
+          @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
+          @Param("now") OffsetDateTime now,
+          Pageable pageable
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt <= :now
+      """)
+  List<UUID> findExpiredPendingAuth(
           @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
           @Param("now") OffsetDateTime now,
           Pageable pageable

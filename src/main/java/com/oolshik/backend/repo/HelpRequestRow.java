@@ -14,10 +14,12 @@ public interface HelpRequestRow {
     String getCreatedByName();
     String getCreatedByPhoneNumber();
     UUID getHelperId();
+    UUID getPendingHelperId();
     Instant getCreatedAt();
     Instant getUpdatedAt();
     Instant getHelperAcceptedAt();
     Instant getAssignmentExpiresAt();
+    Instant getPendingAuthExpiresAt();
     Instant getCancelledAt();
     Integer getReassignedCount();
     Integer getReleasedCount();

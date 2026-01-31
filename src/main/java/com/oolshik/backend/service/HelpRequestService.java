@@ -4,6 +4,7 @@ import com.oolshik.backend.config.TaskRecoveryProperties;
 import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestEventType;
+import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
@@ -117,8 +118,8 @@ public class HelpRequestService {
         if (helperId.equals(e.getRequesterId())) {
             throw new ForbiddenOperationException("Requester can't accept"); // -> 403
         }
-        OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime expiresAt = now.plusSeconds(recoveryProperties.getAssignmentTtlSeconds());
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime expiresAt = now.plusSeconds(recoveryProperties.getAuthTtlSeconds());
         int updated = repo.updateAccept(
                 requestId,
                 helperId,
@@ -126,15 +127,15 @@ public class HelpRequestService {
                 now,
                 expiresAt,
                 HelpRequestStatus.OPEN,
-                HelpRequestStatus.ASSIGNED,
-                HelpRequestEventType.ACCEPTED.name()
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestEventType.AUTH_REQUESTED.name()
         );
         if (updated == 0) {
             throw new ConflictOperationException("Request not open"); // 409
         }
         eventService.record(
                 requestId,
-                HelpRequestEventType.ACCEPTED,
+                HelpRequestEventType.AUTH_REQUESTED,
                 HelpRequestActorRole.HELPER,
                 helperId,
                 null,
@@ -142,6 +143,97 @@ public class HelpRequestService {
                 null
         );
         helperLocationService.upsert(helperId, acceptorPoint);
+        notificationService.notifyRequester(e.getRequesterId(), "TASK_AUTH_REQUESTED", requestId);
+        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+    }
+
+    @Transactional
+    public HelpRequestEntity authorize(UUID requestId, UUID requesterId) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(existing.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can authorize");
+        }
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime expiresAt = now.plusSeconds(recoveryProperties.getAssignmentTtlSeconds());
+        int updated = repo.updateAuthorize(
+                requestId,
+                requesterId,
+                now,
+                requesterId,
+                expiresAt,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestEventType.AUTH_APPROVED.name()
+        );
+        if (updated == 0) {
+            throw new ConflictOperationException("Authorization not allowed");
+        }
+        eventService.record(
+                requestId,
+                HelpRequestEventType.AUTH_APPROVED,
+                HelpRequestActorRole.REQUESTER,
+                requesterId,
+                null,
+                null,
+                null
+        );
+        if (existing.getPendingHelperId() != null) {
+            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_APPROVED", requestId);
+        }
+        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+    }
+
+    @Transactional
+    public HelpRequestEntity reject(UUID requestId, UUID requesterId, HelpRequestDtos.RejectRequest body) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(existing.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can reject");
+        }
+        if (body == null || body.reasonCode() == null) {
+            throw new IllegalArgumentException("reasonCode is required");
+        }
+        HelpRequestRejectReason reason = body.reasonCode();
+        String reasonText = body == null ? null : body.reasonText();
+        if (reason == HelpRequestRejectReason.OTHER && (reasonText == null || reasonText.isBlank())) {
+            throw new IllegalArgumentException("Reason is required when reasonCode is OTHER");
+        }
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nextEscalationAt = radiusExpansionService
+                .findNextRadius(existing.getRadiusMeters())
+                .map(r -> radiusExpansionService.nextEscalationAtForStage(
+                        now,
+                        (existing.getRadiusStage() == null ? 0 : existing.getRadiusStage()) + 1
+                ))
+                .orElse(null);
+        int updated = repo.updateReject(
+                requestId,
+                requesterId,
+                now,
+                requesterId,
+                reason == null ? null : reason.name(),
+                reasonText,
+                nextEscalationAt,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.OPEN,
+                HelpRequestEventType.AUTH_REJECTED.name()
+        );
+        if (updated == 0) {
+            throw new ConflictOperationException("Request not pending authorization");
+        }
+        eventService.record(
+                requestId,
+                HelpRequestEventType.AUTH_REJECTED,
+                HelpRequestActorRole.REQUESTER,
+                requesterId,
+                reason == null ? null : reason.name(),
+                reasonText,
+                null
+        );
+        if (existing.getPendingHelperId() != null) {
+            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_REJECTED", requestId);
+        }
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -237,6 +329,7 @@ public class HelpRequestService {
             throw new ForbiddenOperationException("Only requester can cancel");
         }
         UUID helperId = existing.getHelperId();
+        UUID pendingHelperId = existing.getPendingHelperId();
 
         HelpRequestCancelReason reason = body == null ? null : body.reasonCode();
         String reasonText = body == null ? null : body.reasonText();
@@ -245,7 +338,11 @@ public class HelpRequestService {
         }
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        List<HelpRequestStatus> allowed = List.of(HelpRequestStatus.OPEN, HelpRequestStatus.ASSIGNED);
+        List<HelpRequestStatus> allowed = List.of(
+                HelpRequestStatus.OPEN,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.PENDING_AUTH
+        );
         int updated = repo.updateCancel(
                 requestId,
                 requesterId,
@@ -272,6 +369,8 @@ public class HelpRequestService {
         );
         if (helperId != null) {
             notificationService.notifyHelper(helperId, "TASK_CANCELLED", requestId);
+        } else if (pendingHelperId != null) {
+            notificationService.notifyHelper(pendingHelperId, "TASK_CANCELLED", requestId);
         }
         notificationService.notifyRequester(requesterId, "TASK_CANCELLED_CONFIRM", requestId);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
@@ -420,8 +519,55 @@ public class HelpRequestService {
         return true;
     }
 
+    @Transactional
+    public boolean autoExpirePendingAuth(UUID requestId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        OffsetDateTime nextEscalationAt = radiusExpansionService
+                .findNextRadius(existing.getRadiusMeters())
+                .map(r -> radiusExpansionService.nextEscalationAtForStage(
+                        now,
+                        (existing.getRadiusStage() == null ? 0 : existing.getRadiusStage()) + 1
+                ))
+                .orElse(null);
+        int updated = repo.updateAuthTimeout(
+                requestId,
+                now,
+                nextEscalationAt,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.OPEN,
+                HelpRequestEventType.AUTH_TIMEOUT.name()
+        );
+        if (updated == 0) {
+            return false;
+        }
+        String metadata = existing.getPendingHelperId() == null
+                ? null
+                : String.format("{\"pendingHelperId\":\"%s\"}", existing.getPendingHelperId());
+        eventService.record(
+                requestId,
+                HelpRequestEventType.AUTH_TIMEOUT,
+                HelpRequestActorRole.SYSTEM,
+                null,
+                null,
+                null,
+                metadata
+        );
+        if (existing.getPendingHelperId() != null) {
+            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_TIMEOUT", requestId);
+        }
+        notificationService.notifyRequester(existing.getRequesterId(), "TASK_AUTH_TIMEOUT", requestId);
+        return true;
+    }
+
     @Transactional(readOnly = true)
     public List<UUID> findExpiredAssignments(OffsetDateTime now, int limit) {
         return repo.findExpiredAssignments(HelpRequestStatus.ASSIGNED, now, PageRequest.of(0, limit));
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> findExpiredPendingAuth(OffsetDateTime now, int limit) {
+        return repo.findExpiredPendingAuth(HelpRequestStatus.PENDING_AUTH, now, PageRequest.of(0, limit));
     }
 }
