@@ -6,6 +6,7 @@ import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.service.HelpRequestService;
+import com.oolshik.backend.service.HelpRequestRatingService;
 import com.oolshik.backend.transcription.TranscriptionJobEntity;
 import com.oolshik.backend.transcription.TranscriptionJobPublisher;
 import com.oolshik.backend.transcription.TranscriptionJobService;
@@ -43,6 +44,7 @@ public class HelpRequestController {
     private static final Logger log = LoggerFactory.getLogger(HelpRequestController.class);
 
     private final HelpRequestService service;
+    private final HelpRequestRatingService ratingService;
     private final UserRepository userRepo;
     private final AudioFileRepository audioRepo; // NEW
     private final TranscriptionJobService transcriptionJobService;
@@ -58,11 +60,13 @@ public class HelpRequestController {
         return GEOMETRY_FACTORY.createPoint(new Coordinate(lon, lat));
     }
     public HelpRequestController(HelpRequestService service,
+                                 HelpRequestRatingService ratingService,
                                  UserRepository userRepo,
                                  AudioFileRepository audioRepo,
                                  TranscriptionJobService transcriptionJobService,
                                  TranscriptionJobPublisher transcriptionJobPublisher) {
         this.service = service;
+        this.ratingService = ratingService;
         this.userRepo = userRepo;
         this.audioRepo = audioRepo;
         this.transcriptionJobService = transcriptionJobService;
@@ -223,6 +227,15 @@ public class HelpRequestController {
                 .orElse(e.getVoiceUrl());
 
         UUID pendingHelperId = maskPendingHelperId(e.getPendingHelperId(), e.getRequesterId(), viewerId);
+        HelpRequestRatingService.RatingSummary ratingSummary = ratingService.summaryForRequest(
+                e.getId(),
+                e.getRequesterId(),
+                e.getHelperId(),
+                e.getPendingHelperId()
+        );
+        BigDecimal ratingValue = ratingSummary.ratingByRequester() != null
+                ? ratingSummary.ratingByRequester()
+                : ratingSummary.ratingByHelper();
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
                 e.getRadiusMeters(), e.getStatus(),
@@ -230,7 +243,11 @@ public class HelpRequestController {
                 pendingHelperId,
                 e.getCreatedAt(),
                 url, // NEW
-                e.getRatingValue(),
+                ratingValue,
+                ratingSummary.ratingByRequester(),
+                ratingSummary.ratingByHelper(),
+                ratingSummary.requesterAvgRating(),
+                ratingSummary.helperAvgRating(),
                 job == null ? null : job.getJobId(),
                 e.getHelperAcceptedAt(),
                 e.getAssignmentExpiresAt(),
@@ -271,6 +288,9 @@ public class HelpRequestController {
                 row.getNextEscalationAt(),
                 row.getVoiceUrl(),
                 row.getRatingValue(),
+                row.getRatingByRequester(),
+                row.getRatingByHelper(),
+                row.getRequesterAvgRating(),
                 row.getHelperAvgRating(),
                 row.getDistanceMtr()
         );
@@ -319,6 +339,9 @@ public class HelpRequestController {
             Instant nextEscalationAt,
             String voiceUrl,
             BigDecimal ratingValue,
+            BigDecimal ratingByRequester,
+            BigDecimal ratingByHelper,
+            BigDecimal requesterAvgRating,
             BigDecimal helperAvgRating,
             Double distanceMtr
     ) {}

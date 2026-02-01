@@ -15,11 +15,10 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
 
   @Query(
           value = """
-        WITH helper_avg AS (
-          SELECT helper_id, AVG(rating_value)::numeric(3,2) AS avg_rating
-          FROM help_request
-          WHERE rating_value IS NOT NULL
-          GROUP BY helper_id
+        WITH user_avg AS (
+          SELECT target_user_id, AVG(rating_value)::numeric(3,2) AS avg_rating
+          FROM help_request_rating
+          GROUP BY target_user_id
         )
         SELECT
           h.id,
@@ -45,15 +44,39 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.radius_stage                   AS radiusStage,
           h.next_escalation_at             AS nextEscalationAt,
           h.voice_url                      AS voiceUrl,
-          h.rating_value                   AS ratingValue,
+          COALESCE((
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          ), (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          ))                               AS ratingValue,
           ha.avg_rating                    AS helperAvgRating,
+          ra.avg_rating                    AS requesterAvgRating,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          )                                AS ratingByRequester,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          )                                AS ratingByHelper,
           ST_Distance(
             h.location,
             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
           )                                AS distanceMtr
         FROM help_request h
         JOIN app_user u ON u.id = h.requester_id
-        LEFT JOIN helper_avg ha ON ha.helper_id = h.helper_id
+        LEFT JOIN user_avg ha ON ha.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
+        LEFT JOIN user_avg ra ON ra.target_user_id = h.requester_id
         WHERE
           (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
           AND ST_DWithin(
@@ -113,13 +136,39 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.radius_stage                   AS radiusStage,
         h.next_escalation_at             AS nextEscalationAt,
         h.voice_url                      AS voiceUrl,
-        h.rating_value                   AS ratingValue,
         COALESCE((
-          SELECT AVG(hr2.rating_value)::numeric(3,2)
-          FROM help_request hr2
-          WHERE hr2.helper_id = h.helper_id
-            AND hr2.rating_value IS NOT NULL
-        ), 0.00)                         AS helperAvgRating
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.requester_id
+        ), (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.helper_id
+        ))                               AS ratingValue,
+        (
+          SELECT AVG(r.rating_value)::numeric(3,2)
+          FROM help_request_rating r
+          WHERE r.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
+        )                                AS helperAvgRating,
+        (
+          SELECT AVG(r.rating_value)::numeric(3,2)
+          FROM help_request_rating r
+          WHERE r.target_user_id = h.requester_id
+        )                                AS requesterAvgRating,
+        (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.requester_id
+        )                                AS ratingByRequester,
+        (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.helper_id
+        )                                AS ratingByHelper
       FROM help_request h
       JOIN app_user u ON u.id = h.requester_id
       WHERE h.id = :taskId
@@ -200,6 +249,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.rejectedAt = :rejectedAt,
              h.rejectedBy = :rejectedBy,
              h.rejectReasonCode = :reasonCode,
@@ -235,6 +287,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.authTimeoutCount = coalesce(h.authTimeoutCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
@@ -264,6 +319,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.cancelReasonText = :reasonText,
              h.pendingHelperId = null,
              h.pendingAuthExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.nextEscalationAt = null,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
@@ -292,6 +350,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.releasedAt = :now,
              h.releasedCount = coalesce(h.releasedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
@@ -320,6 +381,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
@@ -351,6 +415,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,

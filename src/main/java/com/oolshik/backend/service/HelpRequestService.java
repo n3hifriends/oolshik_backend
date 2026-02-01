@@ -24,8 +24,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -41,6 +39,7 @@ public class HelpRequestService {
     private final HelpRequestNotificationService notificationService;
     private final HelpRequestRadiusExpansionService radiusExpansionService;
     private final HelperLocationService helperLocationService;
+    private final HelpRequestRatingService ratingService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -49,7 +48,8 @@ public class HelpRequestService {
             TaskRecoveryProperties recoveryProperties,
             HelpRequestNotificationService notificationService,
             HelpRequestRadiusExpansionService radiusExpansionService,
-            HelperLocationService helperLocationService
+            HelperLocationService helperLocationService,
+            HelpRequestRatingService ratingService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -58,6 +58,7 @@ public class HelpRequestService {
         this.notificationService = notificationService;
         this.radiusExpansionService = radiusExpansionService;
         this.helperLocationService = helperLocationService;
+        this.ratingService = ratingService;
     }
 
     @Transactional
@@ -252,7 +253,16 @@ public class HelpRequestService {
         e.setLastStateChangeAt(OffsetDateTime.now(ZoneOffset.UTC));
         e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
         if (completePayload != null && completePayload.rating != null) {
-            applyRating(e, requesterId, completePayload.rating, completePayload.feedback);
+            if (e.getHelperId() == null) {
+                throw new BadRequestException("helper not assigned yet");
+            }
+            ratingService.createRating(
+                    requestId,
+                    requesterId,
+                    e.getHelperId(),
+                    HelpRequestActorRole.REQUESTER,
+                    completePayload.rating
+            );
         }
         eventService.record(
                 requestId,
@@ -271,49 +281,32 @@ public class HelpRequestService {
     public HelpRequestEntity rate(UUID requestId, UUID requesterId, HelpRequestController.RatePayload ratePayload) throws BadRequestException {
 
         HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) {
-            throw new ForbiddenOperationException("Only requester can complete"); // -> 403
-        }
         if (e.getStatus() == HelpRequestStatus.CANCELLED) {
             throw new ConflictOperationException("Request already cancelled");
         }
-        e.setStatus(HelpRequestStatus.COMPLETED);
-        e.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        e.setNextEscalationAt(null);
-        e.setLastStateChangeAt(OffsetDateTime.now(ZoneOffset.UTC));
-        e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
-        if (ratePayload != null && ratePayload.rating != null) {
-            applyRating(e, requesterId, ratePayload.rating, ratePayload.feedback);
+        boolean isRequester = requesterId.equals(e.getRequesterId());
+        boolean isHelper = e.getHelperId() != null && requesterId.equals(e.getHelperId());
+        if (!isRequester && !isHelper) {
+            throw new ForbiddenOperationException("Only requester or helper can rate"); // -> 403
         }
-        eventService.record(
-                requestId,
-                HelpRequestEventType.COMPLETED,
-                HelpRequestActorRole.REQUESTER,
-                requesterId,
-                null,
-                null,
-                null
-        );
+        if (e.getStatus() != HelpRequestStatus.COMPLETED) {
+            throw new ConflictOperationException("Request not completed yet");
+        }
+        if (ratePayload != null && ratePayload.rating != null) {
+            UUID targetUserId = isRequester ? e.getHelperId() : e.getRequesterId();
+            if (targetUserId == null) {
+                throw new BadRequestException("rating target not found");
+            }
+            HelpRequestActorRole role = isRequester ? HelpRequestActorRole.REQUESTER : HelpRequestActorRole.HELPER;
+            ratingService.createRating(
+                    requestId,
+                    requesterId,
+                    targetUserId,
+                    role,
+                    ratePayload.rating
+            );
+        }
         return repo.save(e);
-    }
-
-    private void applyRating(HelpRequestEntity hr, UUID actorUserId, BigDecimal rating, String feedback) throws BadRequestException {
-        BigDecimal r = rating.setScale(1, RoundingMode.HALF_UP);
-        if (r.compareTo(new BigDecimal("0.0")) < 0 || r.compareTo(new BigDecimal("5.0")) > 0)
-            throw new BadRequestException("rating must be between 0.0 and 5.0");
-
-        // Optional: only requester can rate helper (or vice versa). Adjust as per your rule.
-        // e.g., require actorUserId equals hr.getRequesterId() OR hr.getHelperId()
-
-        // Prevent double-rating
-        if (hr.getRatingValue() != null)
-            throw new BadRequestException("rating already submitted");
-
-        hr.setRatingValue(r);
-        hr.setRatedByUserId(actorUserId);
-        hr.setRatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-
-        // TODO: store feedback somewhere if/when required (another column/table)
     }
 
     @Transactional

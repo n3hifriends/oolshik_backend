@@ -46,6 +46,8 @@ class HelpRequestServiceTest {
     private HelpRequestRadiusExpansionService radiusExpansionService;
     @Mock
     private HelperLocationService helperLocationService;
+    @Mock
+    private HelpRequestRatingService ratingService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -60,7 +62,8 @@ class HelpRequestServiceTest {
                 recoveryProperties,
                 notificationService,
                 radiusExpansionService,
-                helperLocationService
+                helperLocationService,
+                ratingService
         );
     }
 
