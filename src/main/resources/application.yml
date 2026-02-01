@@ -59,6 +59,7 @@ app:
   task-recovery:
     acceptToStartSlaSeconds: ${ACCEPT_TO_START_SLA_SECONDS:420}
     assignmentTtlSeconds: ${ASSIGNMENT_TTL_SECONDS:2700}
+    authTtlSeconds: ${AUTH_TTL_SECONDS:120}
     maxReassign: ${MAX_REASSIGN:2}
     schedulerBatchSize: ${TASK_RECOVERY_BATCH_SIZE:100}
     schedulerDelayMs: ${TASK_RECOVERY_DELAY_MS:60000}

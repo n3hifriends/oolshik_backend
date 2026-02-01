@@ -42,6 +42,36 @@ public class HelpRequestEntity {
     @Column(name = "helper_id")
     private UUID helperId;
 
+    @Column(name = "pending_helper_id")
+    private UUID pendingHelperId;
+
+    @Column(name = "pending_auth_expires_at")
+    private OffsetDateTime pendingAuthExpiresAt;
+
+    @Column(name = "accepted_at")
+    private OffsetDateTime acceptedAt;
+
+    @Column(name = "authorized_at")
+    private OffsetDateTime authorizedAt;
+
+    @Column(name = "authorized_by")
+    private UUID authorizedBy;
+
+    @Column(name = "rejected_at")
+    private OffsetDateTime rejectedAt;
+
+    @Column(name = "rejected_by")
+    private UUID rejectedBy;
+
+    @Column(name = "reject_reason_code")
+    private String rejectReasonCode;
+
+    @Column(name = "reject_reason_text", columnDefinition = "TEXT")
+    private String rejectReasonText;
+
+    @Column(name = "auth_timeout_count")
+    private Integer authTimeoutCount;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -131,6 +161,7 @@ public class HelpRequestEntity {
         if (reassignedCount == null) reassignedCount = 0;
         if (releasedCount == null) releasedCount = 0;
         if (radiusStage == null) radiusStage = 0;
+        if (authTimeoutCount == null) authTimeoutCount = 0;
     }
 
     @PreUpdate
@@ -146,6 +177,16 @@ public class HelpRequestEntity {
     public String getDisplayName() { return displayName; }
     public String getPhoneNumber() { return phoneNumber; }
     public UUID getHelperId() { return helperId; }
+    public UUID getPendingHelperId() { return pendingHelperId; }
+    public OffsetDateTime getPendingAuthExpiresAt() { return pendingAuthExpiresAt; }
+    public OffsetDateTime getAcceptedAt() { return acceptedAt; }
+    public OffsetDateTime getAuthorizedAt() { return authorizedAt; }
+    public UUID getAuthorizedBy() { return authorizedBy; }
+    public OffsetDateTime getRejectedAt() { return rejectedAt; }
+    public UUID getRejectedBy() { return rejectedBy; }
+    public String getRejectReasonCode() { return rejectReasonCode; }
+    public String getRejectReasonText() { return rejectReasonText; }
+    public Integer getAuthTimeoutCount() { return authTimeoutCount; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setId(UUID id) { this.id = id; }
@@ -157,6 +198,18 @@ public class HelpRequestEntity {
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setHelperId(UUID helperId) { this.helperId = helperId; }
+    public void setPendingHelperId(UUID pendingHelperId) { this.pendingHelperId = pendingHelperId; }
+    public void setPendingAuthExpiresAt(OffsetDateTime pendingAuthExpiresAt) {
+        this.pendingAuthExpiresAt = pendingAuthExpiresAt;
+    }
+    public void setAcceptedAt(OffsetDateTime acceptedAt) { this.acceptedAt = acceptedAt; }
+    public void setAuthorizedAt(OffsetDateTime authorizedAt) { this.authorizedAt = authorizedAt; }
+    public void setAuthorizedBy(UUID authorizedBy) { this.authorizedBy = authorizedBy; }
+    public void setRejectedAt(OffsetDateTime rejectedAt) { this.rejectedAt = rejectedAt; }
+    public void setRejectedBy(UUID rejectedBy) { this.rejectedBy = rejectedBy; }
+    public void setRejectReasonCode(String rejectReasonCode) { this.rejectReasonCode = rejectReasonCode; }
+    public void setRejectReasonText(String rejectReasonText) { this.rejectReasonText = rejectReasonText; }
+    public void setAuthTimeoutCount(Integer authTimeoutCount) { this.authTimeoutCount = authTimeoutCount; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getVoiceUrl() { return voiceUrl; }

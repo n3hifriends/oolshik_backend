@@ -15,11 +15,10 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
 
   @Query(
           value = """
-        WITH helper_avg AS (
-          SELECT helper_id, AVG(rating_value)::numeric(3,2) AS avg_rating
-          FROM help_request
-          WHERE rating_value IS NOT NULL
-          GROUP BY helper_id
+        WITH user_avg AS (
+          SELECT target_user_id, AVG(rating_value)::numeric(3,2) AS avg_rating
+          FROM help_request_rating
+          GROUP BY target_user_id
         )
         SELECT
           h.id,
@@ -33,25 +32,51 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           u.display_name                   AS createdByName,
           u.phone_number                   AS createdByPhoneNumber,
           h.helper_id                      AS helperId,
+          h.pending_helper_id              AS pendingHelperId,
           h.created_at                     AS createdAt,
           h.updated_at                     AS UpdatedAt,
           h.helper_accepted_at             AS helperAcceptedAt,
           h.assignment_expires_at          AS assignmentExpiresAt,
+          h.pending_auth_expires_at        AS pendingAuthExpiresAt,
           h.cancelled_at                   AS cancelledAt,
           h.reassigned_count               AS reassignedCount,
           h.released_count                 AS releasedCount,
           h.radius_stage                   AS radiusStage,
           h.next_escalation_at             AS nextEscalationAt,
           h.voice_url                      AS voiceUrl,
-          h.rating_value                   AS ratingValue,
+          COALESCE((
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          ), (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          ))                               AS ratingValue,
           ha.avg_rating                    AS helperAvgRating,
+          ra.avg_rating                    AS requesterAvgRating,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          )                                AS ratingByRequester,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          )                                AS ratingByHelper,
           ST_Distance(
             h.location,
             ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
           )                                AS distanceMtr
         FROM help_request h
         JOIN app_user u ON u.id = h.requester_id
-        LEFT JOIN helper_avg ha ON ha.helper_id = h.helper_id
+        LEFT JOIN user_avg ha ON ha.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
+        LEFT JOIN user_avg ra ON ra.target_user_id = h.requester_id
         WHERE
           (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
           AND ST_DWithin(
@@ -99,23 +124,51 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         u.display_name                   AS createdByName,
         u.phone_number                   AS createdByPhoneNumber,
         h.helper_id                      AS helperId,
+        h.pending_helper_id              AS pendingHelperId,
         h.created_at                     AS createdAt,
         h.updated_at                     AS updatedAt,
         h.helper_accepted_at             AS helperAcceptedAt,
         h.assignment_expires_at          AS assignmentExpiresAt,
+        h.pending_auth_expires_at        AS pendingAuthExpiresAt,
         h.cancelled_at                   AS cancelledAt,
         h.reassigned_count               AS reassignedCount,
         h.released_count                 AS releasedCount,
         h.radius_stage                   AS radiusStage,
         h.next_escalation_at             AS nextEscalationAt,
         h.voice_url                      AS voiceUrl,
-        h.rating_value                   AS ratingValue,
         COALESCE((
-          SELECT AVG(hr2.rating_value)::numeric(3,2)
-          FROM help_request hr2
-          WHERE hr2.helper_id = h.helper_id
-            AND hr2.rating_value IS NOT NULL
-        ), 0.00)                         AS helperAvgRating
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.requester_id
+        ), (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.helper_id
+        ))                               AS ratingValue,
+        (
+          SELECT AVG(r.rating_value)::numeric(3,2)
+          FROM help_request_rating r
+          WHERE r.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
+        )                                AS helperAvgRating,
+        (
+          SELECT AVG(r.rating_value)::numeric(3,2)
+          FROM help_request_rating r
+          WHERE r.target_user_id = h.requester_id
+        )                                AS requesterAvgRating,
+        (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.requester_id
+        )                                AS ratingByRequester,
+        (
+          SELECT r.rating_value
+          FROM help_request_rating r
+          WHERE r.request_id = h.id
+            AND r.rater_user_id = h.helper_id
+        )                                AS ratingByHelper
       FROM help_request h
       JOIN app_user u ON u.id = h.requester_id
       WHERE h.id = :taskId
@@ -128,10 +181,13 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
   @Query("""
       update HelpRequestEntity h
          set h.status = :newStatus,
-             h.helperId = :helperId,
+             h.helperId = null,
+             h.pendingHelperId = :helperId,
              h.helperAcceptLocation = :acceptLocation,
-             h.helperAcceptedAt = :acceptedAt,
-             h.assignmentExpiresAt = :expiresAt,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.pendingAuthExpiresAt = :pendingAuthExpiresAt,
+             h.acceptedAt = :acceptedAt,
              h.nextEscalationAt = null,
              h.lastStateChangeAt = :acceptedAt,
              h.lastStateChangeReason = :stateReason,
@@ -144,7 +200,110 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("helperId") UUID helperId,
           @Param("acceptLocation") org.locationtech.jts.geom.Point acceptLocation,
           @Param("acceptedAt") OffsetDateTime acceptedAt,
-          @Param("expiresAt") OffsetDateTime expiresAt,
+          @Param("pendingAuthExpiresAt") OffsetDateTime pendingAuthExpiresAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = h.pendingHelperId,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.authorizedAt = :authorizedAt,
+             h.authorizedBy = :authorizedBy,
+             h.assignmentExpiresAt = :assignmentExpiresAt,
+             h.helperAcceptedAt = :authorizedAt,
+             h.nextEscalationAt = null,
+             h.lastStateChangeAt = :authorizedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :authorizedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+         and h.pendingHelperId is not null
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt > :authorizedAt
+      """)
+  int updateAuthorize(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("authorizedAt") OffsetDateTime authorizedAt,
+          @Param("authorizedBy") UUID authorizedBy,
+          @Param("assignmentExpiresAt") OffsetDateTime assignmentExpiresAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
+             h.rejectedAt = :rejectedAt,
+             h.rejectedBy = :rejectedBy,
+             h.rejectReasonCode = :reasonCode,
+             h.rejectReasonText = :reasonText,
+             h.nextEscalationAt = :nextEscalationAt,
+             h.lastStateChangeAt = :rejectedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :rejectedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+      """)
+  int updateReject(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("rejectedAt") OffsetDateTime rejectedAt,
+          @Param("rejectedBy") UUID rejectedBy,
+          @Param("reasonCode") String reasonCode,
+          @Param("reasonText") String reasonText,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
+          @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
+          @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.helperId = null,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.helperAcceptLocation = null,
+             h.helperAcceptedAt = null,
+             h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
+             h.authTimeoutCount = coalesce(h.authTimeoutCount, 0) + 1,
+             h.nextEscalationAt = :nextEscalationAt,
+             h.lastStateChangeAt = :now,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt <= :now
+      """)
+  int updateAuthTimeout(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("nextEscalationAt") OffsetDateTime nextEscalationAt,
           @Param("expectedStatus") com.oolshik.backend.domain.HelpRequestStatus expectedStatus,
           @Param("newStatus") com.oolshik.backend.domain.HelpRequestStatus newStatus,
           @Param("stateReason") String stateReason
@@ -158,6 +317,11 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.cancelledBy = :actorId,
              h.cancelReasonCode = :reasonCode,
              h.cancelReasonText = :reasonText,
+             h.pendingHelperId = null,
+             h.pendingAuthExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.nextEscalationAt = null,
              h.lastStateChangeAt = :now,
              h.lastStateChangeReason = :stateReason,
@@ -186,6 +350,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.releasedAt = :now,
              h.releasedCount = coalesce(h.releasedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
@@ -214,6 +381,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
@@ -245,6 +415,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.helperAcceptLocation = null,
              h.helperAcceptedAt = null,
              h.assignmentExpiresAt = null,
+             h.acceptedAt = null,
+             h.authorizedAt = null,
+             h.authorizedBy = null,
              h.reassignedCount = coalesce(h.reassignedCount, 0) + 1,
              h.nextEscalationAt = :nextEscalationAt,
              h.lastStateChangeAt = :now,
@@ -330,6 +503,19 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
          and h.assignmentExpiresAt <= :now
       """)
   List<UUID> findExpiredAssignments(
+          @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
+          @Param("now") OffsetDateTime now,
+          Pageable pageable
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.pendingAuthExpiresAt is not null
+         and h.pendingAuthExpiresAt <= :now
+      """)
+  List<UUID> findExpiredPendingAuth(
           @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
           @Param("now") OffsetDateTime now,
           Pageable pageable
