@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: notification-worker
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}
+    username: ${DB_USER:oolshik}
+    password: ${DB_PASSWORD:oolshik}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:notification-worker-v1}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+app:
+  kafka:
+    topics:
+      notificationEvents: ${KAFKA_TOPIC_NOTIFICATION_EVENTS:notification.events}
+
+notification:
+  expoEndpoint: ${EXPO_PUSH_ENDPOINT:https://exp.host/--/api/v2/push/send}
+  maxSendAttempts: ${NOTIF_WORKER_MAX_SEND_ATTEMPTS:3}
+  coalesceWindowSeconds: ${NOTIF_COALESCE_WINDOW_SECONDS:10}
+  expoBatchSize: ${NOTIF_EXPO_BATCH_SIZE:100}

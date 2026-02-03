@@ -70,3 +70,30 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+  stt-worker:
+    build: ./stt-worker
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      STT_JOBS_TOPIC: stt.jobs
+      STT_RESULTS_TOPIC: stt.results
+      STT_DLQ_TOPIC: stt.jobs.dlq
+      LOG_LEVEL: INFO
+      MODEL_SIZE: small
+    depends_on:
+      kafka:
+        condition: service_healthy
+  notification-worker:
+    build: ./notification-worker
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: oolshik
+      DB_USER: oolshik
+      DB_PASSWORD: oolshik
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: notification-worker-v1
+    depends_on:
+      kafka:
+        condition: service_healthy
+      db:
+        condition: service_healthy

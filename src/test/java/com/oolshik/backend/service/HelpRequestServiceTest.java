@@ -48,6 +48,8 @@ class HelpRequestServiceTest {
     private HelperLocationService helperLocationService;
     @Mock
     private HelpRequestRatingService ratingService;
+    @Mock
+    private HelpRequestCandidateService candidateService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -63,7 +65,8 @@ class HelpRequestServiceTest {
                 notificationService,
                 radiusExpansionService,
                 helperLocationService,
-                ratingService
+                ratingService,
+                candidateService
         );
     }
 

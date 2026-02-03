@@ -18,9 +18,10 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
-docker compose build api OR can be done after docker compose down
-docker compose up -d api OR docker ompose up -d --build
+docker compose up -d --build <- this will build all i.e. backend, stt-worker, notification-worker
 docker compose logs -f api
+docker compose logs -f stt-worker
+docker compose logs -f notification-worker
 docker exec -it oolshik-backend-otp-db-1 psql -U oolshik -d oolshik
 docker exec -it oolshik-backend-otp-api-1 sh -lc 'ls -R ./data/audio || ls -R /data/audio'
 docker compose exec -T db \
