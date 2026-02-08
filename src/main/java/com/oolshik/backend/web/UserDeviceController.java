@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,8 +38,25 @@ public class UserDeviceController {
         return ResponseEntity.ok().build();
     }
 
+    @DeleteMapping("/device")
+    public ResponseEntity<?> unregisterDevice(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @RequestBody @Valid UnregisterDeviceRequest request
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        var user = userRepository.findByPhoneNumber(principal.phone()).orElseThrow();
+        deviceService.unregisterDevice(user.getId(), request.token());
+        return ResponseEntity.noContent().build();
+    }
+
     public record RegisterDeviceRequest(
             @NotBlank String token,
             String platform
+    ) {}
+
+    public record UnregisterDeviceRequest(
+            @NotBlank String token
     ) {}
 }

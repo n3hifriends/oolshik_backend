@@ -109,6 +109,17 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           Pageable pageable
   );
 
+  @Query(
+          value = """
+        SELECT COUNT(*)
+        FROM help_request h
+        WHERE h.helper_id = :helperId
+          AND h.status = 'COMPLETED'
+        """,
+          nativeQuery = true
+  )
+  long countCompletedHelps(@Param("helperId") UUID helperId);
+
 
   @Query(
           value = """

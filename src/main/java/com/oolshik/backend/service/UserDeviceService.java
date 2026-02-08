@@ -45,6 +45,25 @@ public class UserDeviceService {
         repository.save(entity);
     }
 
+    @Transactional
+    public void unregisterDevice(UUID userId, String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("token is required");
+        }
+        if (!EXPO_TOKEN_PATTERN.matcher(token).matches()) {
+            throw new IllegalArgumentException("invalid Expo push token");
+        }
+        String hash = sha256(token);
+        repository.findByTokenHash(hash).ifPresent((entity) -> {
+            if (entity.getUserId() != null && entity.getUserId().equals(userId)) {
+                if (entity.isActive()) {
+                    entity.setActive(false);
+                    repository.save(entity);
+                }
+            }
+        });
+    }
+
     private String sha256(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
