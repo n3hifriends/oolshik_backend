@@ -3,6 +3,7 @@ package com.oolshik.backend.media;
 
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.ResponseEntity;
 
 import java.time.Duration;
 import java.util.Map;
@@ -22,17 +23,17 @@ public class MediaPresignController {
     public record PresignResp(String uploadUrl, String fileUrl, String objectKey) {}
 
     @PostMapping("/pre-signed")
-    public PresignResp create(@RequestBody PresignReq req, Authentication auth) {
+    public ResponseEntity<?> create(@RequestBody PresignReq req, Authentication auth) {
         if (!(storage instanceof S3StorageService s3)) {
             // In local/dev mode we don’t support presigned PUT. Frontend should fall back to chunked upload.
-            throw new UnsupportedOperationException("Presigned uploads require media.storage=s3");
+            return ResponseEntity.status(501).body(Map.of("error", "presign_unsupported"));
         }
         String userId = auth.getName();
         String ext = guessExt(req.contentType());
         String objectKey = userId + "/direct/" + UUID.randomUUID() + ext;
         String uploadUrl = s3.presignPutUrl(objectKey, req.contentType(), Duration.ofMinutes(15));
         String fileUrl = s3.toPublicUrl(objectKey);
-        return new PresignResp(uploadUrl, fileUrl, objectKey);
+        return ResponseEntity.ok(new PresignResp(uploadUrl, fileUrl, objectKey));
     }
 
     private static String guessExt(String ct) {
