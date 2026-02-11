@@ -9,6 +9,9 @@ import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.notification.AssignmentChange;
+import com.oolshik.backend.notification.NotificationEventContext;
+import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
@@ -40,6 +43,7 @@ public class HelpRequestService {
     private final HelpRequestRadiusExpansionService radiusExpansionService;
     private final HelperLocationService helperLocationService;
     private final HelpRequestRatingService ratingService;
+    private final HelpRequestCandidateService candidateService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -49,7 +53,8 @@ public class HelpRequestService {
             HelpRequestNotificationService notificationService,
             HelpRequestRadiusExpansionService radiusExpansionService,
             HelperLocationService helperLocationService,
-            HelpRequestRatingService ratingService
+            HelpRequestRatingService ratingService,
+            HelpRequestCandidateService candidateService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -59,6 +64,7 @@ public class HelpRequestService {
         this.radiusExpansionService = radiusExpansionService;
         this.helperLocationService = helperLocationService;
         this.ratingService = ratingService;
+        this.candidateService = candidateService;
     }
 
     @Transactional
@@ -91,7 +97,24 @@ public class HelpRequestService {
         } else {
             e.setNextEscalationAt(radiusExpansionService.initialNextEscalationAt(OffsetDateTime.now(), radiusMeters));
         }
-        return repo.save(e);
+        HelpRequestEntity saved = repo.save(e);
+        if (saved.getStatus() == HelpRequestStatus.OPEN) {
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+            candidateService.seedCandidatesForNewRequest(saved, now);
+            NotificationEventContext context = buildContext(
+                    requesterId,
+                    null,
+                    HelpRequestStatus.OPEN,
+                    AssignmentChange.NONE,
+                    null,
+                    null,
+                    0,
+                    saved.getRadiusMeters(),
+                    now
+            );
+            notificationService.enqueueTaskEvent(NotificationEventType.TASK_CREATED, saved, context);
+        }
+        return saved;
     }
 
     public Page<HelpRequestRow> nearby(
@@ -144,7 +167,18 @@ public class HelpRequestService {
                 null
         );
         helperLocationService.upsert(helperId, acceptorPoint);
-        notificationService.notifyRequester(e.getRequesterId(), "TASK_AUTH_REQUESTED", requestId);
+        NotificationEventContext context = buildContext(
+                helperId,
+                HelpRequestStatus.OPEN,
+                HelpRequestStatus.PENDING_AUTH,
+                AssignmentChange.ASSIGNED,
+                null,
+                helperId,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_REQUESTED, e, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -179,9 +213,18 @@ public class HelpRequestService {
                 null,
                 null
         );
-        if (existing.getPendingHelperId() != null) {
-            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_APPROVED", requestId);
-        }
+        NotificationEventContext context = buildContext(
+                requesterId,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.ASSIGNED,
+                AssignmentChange.ASSIGNED,
+                existing.getPendingHelperId(),
+                existing.getPendingHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_APPROVED, existing, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -232,9 +275,18 @@ public class HelpRequestService {
                 reasonText,
                 null
         );
-        if (existing.getPendingHelperId() != null) {
-            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_REJECTED", requestId);
-        }
+        NotificationEventContext context = buildContext(
+                requesterId,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.UNASSIGNED,
+                existing.getPendingHelperId(),
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_REJECTED, existing, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -360,12 +412,20 @@ public class HelpRequestService {
                 reasonText,
                 null
         );
-        if (helperId != null) {
-            notificationService.notifyHelper(helperId, "TASK_CANCELLED", requestId);
-        } else if (pendingHelperId != null) {
-            notificationService.notifyHelper(pendingHelperId, "TASK_CANCELLED", requestId);
-        }
-        notificationService.notifyRequester(requesterId, "TASK_CANCELLED_CONFIRM", requestId);
+        UUID previousHelperId = helperId != null ? helperId : pendingHelperId;
+        AssignmentChange change = previousHelperId == null ? AssignmentChange.NONE : AssignmentChange.UNASSIGNED;
+        NotificationEventContext context = buildContext(
+                requesterId,
+                existing.getStatus(),
+                HelpRequestStatus.CANCELLED,
+                change,
+                previousHelperId,
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_CANCELLED, existing, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -414,7 +474,18 @@ public class HelpRequestService {
                 reasonText,
                 null
         );
-        notificationService.notifyRequester(requesterId, "TASK_RELEASED", requestId);
+        NotificationEventContext context = buildContext(
+                helperId,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.UNASSIGNED,
+                helperId,
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_RELEASED, existing, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -466,10 +537,18 @@ public class HelpRequestService {
                 null,
                 null
         );
-        if (helperId != null) {
-            notificationService.notifyHelper(helperId, "TASK_REASSIGNED", requestId);
-        }
-        notificationService.notifyRequester(requesterId, "TASK_REOPENED", requestId);
+        NotificationEventContext context = buildContext(
+                requesterId,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.UNASSIGNED,
+                helperId,
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_REASSIGNED, existing, context);
         return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
@@ -505,10 +584,18 @@ public class HelpRequestService {
                 null,
                 null
         );
-        if (existing.getHelperId() != null) {
-            notificationService.notifyHelper(existing.getHelperId(), "TASK_TIMEOUT_REOPENED", requestId);
-        }
-        notificationService.notifyRequester(existing.getRequesterId(), "TASK_TIMEOUT_REOPENED", requestId);
+        NotificationEventContext context = buildContext(
+                null,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.UNASSIGNED,
+                existing.getHelperId(),
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_TIMEOUT, existing, context);
         return true;
     }
 
@@ -547,10 +634,18 @@ public class HelpRequestService {
                 null,
                 metadata
         );
-        if (existing.getPendingHelperId() != null) {
-            notificationService.notifyHelper(existing.getPendingHelperId(), "TASK_AUTH_TIMEOUT", requestId);
-        }
-        notificationService.notifyRequester(existing.getRequesterId(), "TASK_AUTH_TIMEOUT", requestId);
+        NotificationEventContext context = buildContext(
+                null,
+                HelpRequestStatus.PENDING_AUTH,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.UNASSIGNED,
+                existing.getPendingHelperId(),
+                null,
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_TIMEOUT, existing, context);
         return true;
     }
 
@@ -562,5 +657,29 @@ public class HelpRequestService {
     @Transactional(readOnly = true)
     public List<UUID> findExpiredPendingAuth(OffsetDateTime now, int limit) {
         return repo.findExpiredPendingAuth(HelpRequestStatus.PENDING_AUTH, now, PageRequest.of(0, limit));
+    }
+
+    private NotificationEventContext buildContext(
+            UUID actorUserId,
+            HelpRequestStatus previousStatus,
+            HelpRequestStatus newStatus,
+            AssignmentChange assignmentChange,
+            UUID previousHelperId,
+            UUID newHelperId,
+            Integer previousRadiusMeters,
+            Integer newRadiusMeters,
+            OffsetDateTime occurredAt
+    ) {
+        NotificationEventContext context = new NotificationEventContext();
+        context.setActorUserId(actorUserId);
+        context.setPreviousStatus(previousStatus == null ? null : previousStatus.name());
+        context.setNewStatus(newStatus == null ? null : newStatus.name());
+        context.setAssignmentChange(assignmentChange == null ? AssignmentChange.NONE : assignmentChange);
+        context.setPreviousHelperId(previousHelperId);
+        context.setNewHelperId(newHelperId);
+        context.setPreviousRadiusMeters(previousRadiusMeters);
+        context.setNewRadiusMeters(newRadiusMeters);
+        context.setOccurredAt(occurredAt);
+        return context;
     }
 }

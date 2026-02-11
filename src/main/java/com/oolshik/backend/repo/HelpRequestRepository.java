@@ -31,6 +31,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.requester_id                   AS requesterId,
           u.display_name                   AS createdByName,
           u.phone_number                   AS createdByPhoneNumber,
+          hu.phone_number                  AS helperPhoneNumber,
           h.helper_id                      AS helperId,
           h.pending_helper_id              AS pendingHelperId,
           h.created_at                     AS createdAt,
@@ -75,6 +76,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           )                                AS distanceMtr
         FROM help_request h
         JOIN app_user u ON u.id = h.requester_id
+        LEFT JOIN app_user hu ON hu.id = COALESCE(h.helper_id, h.pending_helper_id)
         LEFT JOIN user_avg ha ON ha.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
         LEFT JOIN user_avg ra ON ra.target_user_id = h.requester_id
         WHERE
@@ -109,6 +111,17 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           Pageable pageable
   );
 
+  @Query(
+          value = """
+        SELECT COUNT(*)
+        FROM help_request h
+        WHERE h.helper_id = :helperId
+          AND h.status = 'COMPLETED'
+        """,
+          nativeQuery = true
+  )
+  long countCompletedHelps(@Param("helperId") UUID helperId);
+
 
   @Query(
           value = """
@@ -123,6 +136,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.requester_id                   AS requesterId,
         u.display_name                   AS createdByName,
         u.phone_number                   AS createdByPhoneNumber,
+        hu.phone_number                  AS helperPhoneNumber,
         h.helper_id                      AS helperId,
         h.pending_helper_id              AS pendingHelperId,
         h.created_at                     AS createdAt,
@@ -171,6 +185,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         )                                AS ratingByHelper
       FROM help_request h
       JOIN app_user u ON u.id = h.requester_id
+      LEFT JOIN app_user hu ON hu.id = COALESCE(h.helper_id, h.pending_helper_id)
       WHERE h.id = :taskId
     """,
           nativeQuery = true

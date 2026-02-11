@@ -4,6 +4,7 @@ import com.oolshik.backend.config.KafkaTopicProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +18,8 @@ public class KafkaTranscriptionJobPublisher implements TranscriptionJobPublisher
     private final KafkaTemplate<String, SttJobMessage> kafkaTemplate;
     private final KafkaTopicProperties topics;
 
-    public KafkaTranscriptionJobPublisher(KafkaTemplate<String, SttJobMessage> kafkaTemplate,
+    public KafkaTranscriptionJobPublisher(
+                                          @Qualifier("sttKafkaTemplate") KafkaTemplate<String, SttJobMessage> kafkaTemplate,
                                           KafkaTopicProperties topics) {
         this.kafkaTemplate = kafkaTemplate;
         this.topics = topics;

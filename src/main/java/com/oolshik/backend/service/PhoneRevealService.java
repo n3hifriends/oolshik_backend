@@ -7,6 +7,7 @@ import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.PhoneRevealEventRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.web.dto.PhoneRevealDtos.RevealPhoneResponse;
+import com.oolshik.backend.web.error.ConflictOperationException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,19 +35,35 @@ public class PhoneRevealService {
         HelpRequestEntity hr = helpRequestRepository.findById(helpRequestId)
                 .orElseThrow(() -> new EntityNotFoundException("Request not found"));
 
-        UserEntity requester = userRepository.findById(hr.getRequesterId())
-                .orElseThrow(() -> new EntityNotFoundException("Requester not found"));
-
         UserEntity viewer = userRepository.findById(viewerUserId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
-        String fullNumber = requester.getPhoneNumber();
+        UUID targetUserId;
+        if (viewerUserId.equals(hr.getRequesterId())) {
+            UUID helperTarget = hr.getHelperId() != null ? hr.getHelperId() : hr.getPendingHelperId();
+            if (helperTarget == null) {
+                throw new ConflictOperationException("Helper not assigned");
+            }
+            targetUserId = helperTarget;
+        } else if (
+                (hr.getHelperId() != null && viewerUserId.equals(hr.getHelperId())) ||
+                (hr.getPendingHelperId() != null && viewerUserId.equals(hr.getPendingHelperId()))
+        ) {
+            targetUserId = hr.getRequesterId();
+        } else {
+            throw new ConflictOperationException("Not allowed");
+        }
+
+        UserEntity target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new EntityNotFoundException("Target user not found"));
+
+        String fullNumber = target.getPhoneNumber();
 
 
         PhoneRevealEventEntity ev = new PhoneRevealEventEntity();
         ev.setPhoneNumber(fullNumber);
         ev.setRequesterUserId(helpRequestId);
-        ev.setTargetUserId(viewerUserId);
+        ev.setTargetUserId(targetUserId);
         phoneRevealRepo.save(ev);
 
         long count = phoneRevealRepo.countByRequesterUserId(helpRequestId);

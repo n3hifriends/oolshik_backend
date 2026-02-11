@@ -5,9 +5,10 @@ import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestEventType;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
-import com.oolshik.backend.repo.HelpRequestNotifyRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
-import com.oolshik.backend.repo.HelperLocationRepository;
+import com.oolshik.backend.notification.AssignmentChange;
+import com.oolshik.backend.notification.NotificationEventContext;
+import com.oolshik.backend.notification.NotificationEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,25 +28,22 @@ public class HelpRequestRadiusExpansionService {
 
     private final RadiusExpansionProperties properties;
     private final HelpRequestRepository requestRepo;
-    private final HelperLocationRepository helperLocationRepository;
-    private final HelpRequestNotifyRepository notifyRepository;
     private final HelpRequestNotificationService notificationService;
     private final HelpRequestEventService eventService;
+    private final HelpRequestCandidateService candidateService;
 
     public HelpRequestRadiusExpansionService(
             RadiusExpansionProperties properties,
             HelpRequestRepository requestRepo,
-            HelperLocationRepository helperLocationRepository,
-            HelpRequestNotifyRepository notifyRepository,
             HelpRequestNotificationService notificationService,
-            HelpRequestEventService eventService
+            HelpRequestEventService eventService,
+            HelpRequestCandidateService candidateService
     ) {
         this.properties = properties;
         this.requestRepo = requestRepo;
-        this.helperLocationRepository = helperLocationRepository;
-        this.notifyRepository = notifyRepository;
         this.notificationService = notificationService;
         this.eventService = eventService;
+        this.candidateService = candidateService;
     }
 
     public OffsetDateTime initialNextEscalationAt(OffsetDateTime now, int currentRadius) {
@@ -129,19 +127,17 @@ public class HelpRequestRadiusExpansionService {
                 String.format("{\"oldRadius\":%d,\"newRadius\":%d,\"wave\":%d}", currentRadius, nextRadius, nextStage)
         );
 
-        OffsetDateTime freshness = now.minusHours(properties.getLocationFreshnessHours());
-        List<UUID> helperIds = helperLocationRepository.findNewlyEligibleHelpers(
-                requestId,
-                (double) nextRadius,
-                (double) currentRadius,
-                freshness,
-                nextStage
-        );
-        for (UUID helperId : helperIds) {
-            int inserted = notifyRepository.insertIgnore(UUID.randomUUID(), requestId, helperId, nextStage);
-            if (inserted > 0) {
-                notificationService.notifyHelper(helperId, "TASK_RADIUS_EXPANDED", requestId);
-            }
-        }
+        candidateService.seedCandidatesForRadiusExpansion(task, currentRadius, nextRadius, now);
+        NotificationEventContext context = new NotificationEventContext();
+        context.setActorUserId(null);
+        context.setPreviousStatus(HelpRequestStatus.OPEN.name());
+        context.setNewStatus(HelpRequestStatus.OPEN.name());
+        context.setAssignmentChange(AssignmentChange.NONE);
+        context.setPreviousHelperId(task.getHelperId());
+        context.setNewHelperId(task.getHelperId());
+        context.setPreviousRadiusMeters(currentRadius);
+        context.setNewRadiusMeters(nextRadius);
+        context.setOccurredAt(now);
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_RADIUS_EXPANDED, task, context);
     }
 }

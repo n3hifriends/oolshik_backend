@@ -75,6 +75,13 @@ app:
       sttJobs: ${KAFKA_TOPIC_STT_JOBS:stt.jobs}
       sttResults: ${KAFKA_TOPIC_STT_RESULTS:stt.results}
       sttDlq: ${KAFKA_TOPIC_STT_DLQ:stt.jobs.dlq}
+      notificationEvents: ${KAFKA_TOPIC_NOTIFICATION_EVENTS:notification.events}
+
+  notification:
+    activeWindowMinutes: ${NOTIF_ACTIVE_WINDOW_MINUTES:15}
+    outboxPublishIntervalMs: ${NOTIF_OUTBOX_PUBLISH_INTERVAL_MS:2000}
+    outboxBatchSize: ${NOTIF_OUTBOX_BATCH_SIZE:50}
+    outboxMaxAttempts: ${NOTIF_OUTBOX_MAX_ATTEMPTS:8}
 
 logging:
   level:
