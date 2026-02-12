@@ -82,6 +82,11 @@ app:
     outboxPublishIntervalMs: ${NOTIF_OUTBOX_PUBLISH_INTERVAL_MS:2000}
     outboxBatchSize: ${NOTIF_OUTBOX_BATCH_SIZE:50}
     outboxMaxAttempts: ${NOTIF_OUTBOX_MAX_ATTEMPTS:8}
+  feedback:
+    maxPerDay: ${FEEDBACK_MAX_PER_DAY:10}
+    rateLimitWindowHours: ${FEEDBACK_RATE_LIMIT_WINDOW_HOURS:24}
+    retentionDays: ${FEEDBACK_RETENTION_DAYS:365}
+    retentionPurgeIntervalMs: ${FEEDBACK_RETENTION_PURGE_INTERVAL_MS:86400000}
 
 logging:
   level:
