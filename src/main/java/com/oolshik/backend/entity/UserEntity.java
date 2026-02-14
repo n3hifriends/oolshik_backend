@@ -30,6 +30,9 @@ public class UserEntity {
 
     private String languages;
 
+    @Column(name = "preferred_language", nullable = false, length = 16)
+    private String preferredLanguage;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -42,6 +45,7 @@ public class UserEntity {
         if (createdAt == null) createdAt = OffsetDateTime.now();
         if (updatedAt == null) updatedAt = createdAt;
         if (roles == null || roles.isBlank()) roles = "NETA";
+        if (preferredLanguage == null || preferredLanguage.isBlank()) preferredLanguage = "en-IN";
     }
 
     @PreUpdate
@@ -68,6 +72,7 @@ public class UserEntity {
     public String getDisplayName() { return displayName; }
     public String getRoles() { return roles; }
     public String getLanguages() { return languages; }
+    public String getPreferredLanguage() { return preferredLanguage; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setId(UUID id) { this.id = id; }
@@ -77,6 +82,7 @@ public class UserEntity {
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setRoles(String roles) { this.roles = roles; }
     public void setLanguages(String languages) { this.languages = languages; }
+    public void setPreferredLanguage(String preferredLanguage) { this.preferredLanguage = preferredLanguage; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 
