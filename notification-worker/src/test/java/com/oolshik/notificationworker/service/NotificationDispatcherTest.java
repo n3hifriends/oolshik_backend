@@ -74,6 +74,7 @@ class NotificationDispatcherTest {
         NotificationDeliveryLogEntity existing = new NotificationDeliveryLogEntity();
         existing.setStatus("SENT");
         when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.of(existing));
+        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of());
 
         dispatcher.dispatch(payload);
 
@@ -92,13 +93,24 @@ class NotificationDispatcherTest {
 
         when(recipientResolver.resolve(payload)).thenReturn(List.of(userId));
         when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of(new UserDeviceRepository.UserLocaleRow() {
+            @Override
+            public UUID getUserId() {
+                return userId;
+            }
+
+            @Override
+            public String getPreferredLanguage() {
+                return "mr-IN";
+            }
+        }));
 
         UserDeviceEntity device = new UserDeviceEntity();
         device.setUserId(userId);
         device.setToken("ExponentPushToken[abc]");
         when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
 
-        when(templateService.templateFor(eq("TASK_CANCELLED"), any()))
+        when(templateService.templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN")))
                 .thenReturn(new NotificationTemplateService.NotificationTemplate("t", "b"));
 
         ExpoPushResponse.ExpoPushTicket ticket = new ExpoPushResponse.ExpoPushTicket();
@@ -115,5 +127,6 @@ class NotificationDispatcherTest {
         String expectedHash = HashUtil.sha256(device.getToken());
         verify(userDeviceRepository).deactivateByTokenHash(eq(expectedHash));
         verify(deliveryLogRepository).updateStatus(any(), eq("FAILED"), any(), any(OffsetDateTime.class));
+        verify(templateService).templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN"));
     }
 }

@@ -11,6 +11,11 @@ import java.util.UUID;
 
 public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UUID> {
 
+    interface UserLocaleRow {
+        UUID getUserId();
+        String getPreferredLanguage();
+    }
+
     @Query("""
         select d
           from UserDeviceEntity d
@@ -18,6 +23,14 @@ public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UU
            and d.isActive = true
         """)
     List<UserDeviceEntity> findActiveByUserIds(@Param("userIds") List<UUID> userIds);
+
+    @Query(value = """
+        SELECT u.id AS userId,
+               COALESCE(u.preferred_language, 'en-IN') AS preferredLanguage
+          FROM app_user u
+         WHERE u.id IN (:userIds)
+        """, nativeQuery = true)
+    List<UserLocaleRow> findPreferredLocalesByUserIds(@Param("userIds") List<UUID> userIds);
 
     @Modifying
     @Query(value = """

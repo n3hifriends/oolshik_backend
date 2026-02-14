@@ -5,7 +5,7 @@ import jakarta.validation.constraints.*;
 public class AuthDtos {
 
     public record OtpRequest(
-            @NotBlank @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Invalid phone format") String phone
+            @NotBlank @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "{validation.phone.invalid}") String phone
     ) {}
 
     public record OtpVerify(

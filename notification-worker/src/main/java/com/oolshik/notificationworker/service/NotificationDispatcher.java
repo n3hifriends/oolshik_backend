@@ -92,6 +92,11 @@ public class NotificationDispatcher {
         for (UserDeviceEntity device : devices) {
             devicesByUser.computeIfAbsent(device.getUserId(), k -> new ArrayList<>()).add(device);
         }
+        Map<UUID, String> localesByUser = new HashMap<>();
+        for (UserDeviceRepository.UserLocaleRow row : userDeviceRepository.findPreferredLocalesByUserIds(
+                new ArrayList<>(logs.keySet()))) {
+            localesByUser.put(row.getUserId(), LocaleSupport.normalizeTag(row.getPreferredLanguage()));
+        }
 
         List<OutgoingMessage> outgoing = new ArrayList<>();
         for (Map.Entry<UUID, NotificationDeliveryLogEntity> entry : logs.entrySet()) {
@@ -101,8 +106,9 @@ public class NotificationDispatcher {
                 deliveryLogRepository.updateStatus(entry.getValue().getId(), "FAILED", "no active tokens", now);
                 continue;
             }
+            String localeTag = localesByUser.getOrDefault(recipientId, LocaleSupport.EN_IN_TAG);
             NotificationTemplateService.NotificationTemplate template =
-                    templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId));
+                    templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId), localeTag);
             String body = enrichBodyWithOffer(template.body(), payload);
             for (UserDeviceEntity device : userDevices) {
                 Map<String, Object> data = new HashMap<>();
