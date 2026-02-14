@@ -55,6 +55,9 @@ public class PaymentRequest {
     private String mcc;
     private String merchantId;
 
+    @Column(name = "txn_ref", length = 128)
+    private String txnRef;
+
     private BigDecimal amountRequested;
 
     @Column(nullable = false, length = 8)

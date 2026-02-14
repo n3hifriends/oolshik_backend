@@ -21,6 +21,7 @@ public class PaymentDtos {
             String payeeName,
             String mcc,
             String merchantId,
+            String txnRef,
             BigDecimal amount,              // optional
             String currency,                // default INR
             String note,                    // optional
@@ -38,6 +39,7 @@ public class PaymentDtos {
             String payeeName,
             String mcc,
             String merchantId,
+            String txnRef,
             BigDecimal amountRequested,
             String currency,
             String note,

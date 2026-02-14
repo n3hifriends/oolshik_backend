@@ -126,6 +126,18 @@ public class HelpRequestEntity {
     @Column(name = "next_escalation_at")
     private OffsetDateTime nextEscalationAt;
 
+    @Column(name = "offer_amount", precision = 12, scale = 2)
+    private BigDecimal offerAmount;
+
+    @Column(name = "offer_currency", length = 8)
+    private String offerCurrency;
+
+    @Column(name = "offer_updated_at")
+    private OffsetDateTime offerUpdatedAt;
+
+    @Column(name = "offer_last_notified_amount", precision = 12, scale = 2)
+    private BigDecimal offerLastNotifiedAmount;
+
     public Point getHelperAcceptLocation() {
         return helperAcceptLocation;
     }
@@ -162,6 +174,7 @@ public class HelpRequestEntity {
         if (releasedCount == null) releasedCount = 0;
         if (radiusStage == null) radiusStage = 0;
         if (authTimeoutCount == null) authTimeoutCount = 0;
+        if (offerCurrency == null || offerCurrency.isBlank()) offerCurrency = "INR";
     }
 
     @PreUpdate
@@ -251,6 +264,14 @@ public class HelpRequestEntity {
     public void setRadiusStage(Integer radiusStage) { this.radiusStage = radiusStage; }
     public OffsetDateTime getNextEscalationAt() { return nextEscalationAt; }
     public void setNextEscalationAt(OffsetDateTime nextEscalationAt) { this.nextEscalationAt = nextEscalationAt; }
+    public BigDecimal getOfferAmount() { return offerAmount; }
+    public void setOfferAmount(BigDecimal offerAmount) { this.offerAmount = offerAmount; }
+    public String getOfferCurrency() { return offerCurrency; }
+    public void setOfferCurrency(String offerCurrency) { this.offerCurrency = offerCurrency; }
+    public OffsetDateTime getOfferUpdatedAt() { return offerUpdatedAt; }
+    public void setOfferUpdatedAt(OffsetDateTime offerUpdatedAt) { this.offerUpdatedAt = offerUpdatedAt; }
+    public BigDecimal getOfferLastNotifiedAmount() { return offerLastNotifiedAmount; }
+    public void setOfferLastNotifiedAmount(BigDecimal offerLastNotifiedAmount) { this.offerLastNotifiedAmount = offerLastNotifiedAmount; }
 
     public Point getLocation() {
         return location;

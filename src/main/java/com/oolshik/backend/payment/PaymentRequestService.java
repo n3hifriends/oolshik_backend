@@ -70,6 +70,7 @@ public class PaymentRequestService {
                 .payeeName(in.payeeName())
                 .mcc(in.mcc())
                 .merchantId(in.merchantId())
+                .txnRef(in.txnRef())
                 .amountRequested(in.amount())
                 .currency(Optional.ofNullable(in.currency()).orElse("INR"))
                 .note(in.note())

@@ -145,6 +145,7 @@ public class PaymentRequestController {
         out.snapshot.payeeName = pr.getPayeeName();
         out.snapshot.mcc = pr.getMcc();
         out.snapshot.merchantId = pr.getMerchantId();
+        out.snapshot.txnRef = pr.getTxnRef();
         out.snapshot.amountRequested = pr.getAmountRequested();
         out.snapshot.currency = pr.getCurrency();
         out.snapshot.note = pr.getNote();

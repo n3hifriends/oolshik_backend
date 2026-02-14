@@ -16,6 +16,8 @@ import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.ReleaseRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.RejectRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.apache.coyote.BadRequestException;
@@ -88,7 +90,9 @@ public class HelpRequestController {
                 requester.getId(),
                 req.title(), req.description(),
                 req.radiusMeters(),
-                demoUrl, point
+                demoUrl, point,
+                req.offerAmount(),
+                req.offerCurrency()
         );
         TranscriptionJobEntity job = null;
         if (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank()) {
@@ -220,6 +224,24 @@ public class HelpRequestController {
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
+    @PatchMapping("/{id}/offer")
+    public ResponseEntity<OfferUpdateResponse> updateOffer(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable UUID id,
+            @RequestBody @Valid OfferUpdateRequest body
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var outcome = service.updateOffer(id, requester.getId(), body == null ? null : body.offerAmount(), body == null ? null : body.offerCurrency(), "TASK_DETAIL");
+        var task = outcome.task();
+        return ResponseEntity.ok(new OfferUpdateResponse(
+                task.getId(),
+                task.getOfferAmount(),
+                task.getOfferCurrency(),
+                task.getOfferUpdatedAt(),
+                outcome.notificationSuppressed()
+        ));
+    }
+
     private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job, UUID viewerId) {
         String url = audioRepo
                 .findFirstByRequestIdOrderByCreatedAtDesc(e.getId().toString())
@@ -257,7 +279,10 @@ public class HelpRequestController {
                 e.getReassignedCount(),
                 e.getReleasedCount(),
                 e.getRadiusStage(),
-                e.getNextEscalationAt()
+                e.getNextEscalationAt(),
+                e.getOfferAmount(),
+                e.getOfferCurrency(),
+                e.getOfferUpdatedAt()
         );
     }
 
@@ -287,6 +312,9 @@ public class HelpRequestController {
                 row.getRadiusStage(),
                 row.getNextEscalationAt(),
                 row.getVoiceUrl(),
+                row.getOfferAmount(),
+                row.getOfferCurrency(),
+                row.getOfferUpdatedAt(),
                 row.getRatingValue(),
                 row.getRatingByRequester(),
                 row.getRatingByHelper(),
@@ -338,6 +366,9 @@ public class HelpRequestController {
             Integer radiusStage,
             Instant nextEscalationAt,
             String voiceUrl,
+            BigDecimal offerAmount,
+            String offerCurrency,
+            Instant offerUpdatedAt,
             BigDecimal ratingValue,
             BigDecimal ratingByRequester,
             BigDecimal ratingByHelper,

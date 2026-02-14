@@ -24,6 +24,8 @@ public class NotificationEventPayload {
     private BigDecimal paymentAmount;
     private String paymentCurrency;
     private OffsetDateTime paymentDueAt;
+    private BigDecimal offerAmount;
+    private String offerCurrency;
     private Geo geo;
     private Integer previousRadiusMeters;
     private Integer newRadiusMeters;
@@ -191,6 +193,22 @@ public class NotificationEventPayload {
 
     public void setPaymentDueAt(OffsetDateTime paymentDueAt) {
         this.paymentDueAt = paymentDueAt;
+    }
+
+    public BigDecimal getOfferAmount() {
+        return offerAmount;
+    }
+
+    public void setOfferAmount(BigDecimal offerAmount) {
+        this.offerAmount = offerAmount;
+    }
+
+    public String getOfferCurrency() {
+        return offerCurrency;
+    }
+
+    public void setOfferCurrency(String offerCurrency) {
+        this.offerCurrency = offerCurrency;
     }
 
     public Geo getGeo() {

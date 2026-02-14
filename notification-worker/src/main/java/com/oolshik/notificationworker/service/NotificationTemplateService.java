@@ -19,6 +19,7 @@ public class NotificationTemplateService {
             case TASK_TIMEOUT -> new NotificationTemplate("Request timed out", "Please retry or expand radius.");
             case TASK_CREATED -> new NotificationTemplate("New request near you", "Open the app to help.");
             case TASK_RADIUS_EXPANDED -> new NotificationTemplate("New request in your area", "You are now eligible to help.");
+            case OFFER_UPDATED -> new NotificationTemplate("Offer updated", "A requester updated the offer for a nearby task.");
             case PAYMENT_REQUEST_CREATED -> new NotificationTemplate("Payment request created", "A payment request is linked to your task.");
             case PAYMENT_ACTION_REQUIRED -> new NotificationTemplate(
                     role == RecipientRole.REQUESTER ? "Payment needed" : "Please complete payment",

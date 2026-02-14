@@ -8,12 +8,14 @@ import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.entity.HelpRequestOfferEventEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.notification.AssignmentChange;
 import com.oolshik.backend.notification.NotificationEventContext;
 import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
+import com.oolshik.backend.repo.HelpRequestOfferEventRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.web.HelpRequestController;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
@@ -27,9 +29,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -44,6 +49,7 @@ public class HelpRequestService {
     private final HelperLocationService helperLocationService;
     private final HelpRequestRatingService ratingService;
     private final HelpRequestCandidateService candidateService;
+    private final HelpRequestOfferEventRepository offerEventRepository;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -54,7 +60,8 @@ public class HelpRequestService {
             HelpRequestRadiusExpansionService radiusExpansionService,
             HelperLocationService helperLocationService,
             HelpRequestRatingService ratingService,
-            HelpRequestCandidateService candidateService
+            HelpRequestCandidateService candidateService,
+            HelpRequestOfferEventRepository offerEventRepository
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -65,10 +72,20 @@ public class HelpRequestService {
         this.helperLocationService = helperLocationService;
         this.ratingService = ratingService;
         this.candidateService = candidateService;
+        this.offerEventRepository = offerEventRepository;
     }
 
     @Transactional
-    public HelpRequestEntity create(UUID requesterId, String title, String description, int radiusMeters, String voiceUrl, Point location) {
+    public HelpRequestEntity create(
+            UUID requesterId,
+            String title,
+            String description,
+            int radiusMeters,
+            String voiceUrl,
+            Point location,
+            BigDecimal offerAmount,
+            String offerCurrency
+    ) {
         UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
         boolean titleBlank = (title == null || title.isBlank());
         boolean descriptionBlank = (description == null || description.isBlank());
@@ -83,6 +100,9 @@ public class HelpRequestService {
         if (descriptionBlank) {
             description = null;
         }
+        BigDecimal normalizedOffer = normalizeOfferAmount(offerAmount);
+        String normalizedCurrency = normalizeOfferCurrency(offerCurrency);
+
         HelpRequestEntity e = new HelpRequestEntity();
         e.setRequesterId(requester.getId());
         e.setTitle(title);
@@ -92,10 +112,14 @@ public class HelpRequestService {
         e.setVoiceUrl(voiceUrl);
         e.setLocation(location);
         e.setRadiusStage(0);
+        e.setOfferAmount(normalizedOffer);
+        e.setOfferCurrency(normalizedCurrency);
+        e.setOfferUpdatedAt(normalizedOffer == null ? null : OffsetDateTime.now(ZoneOffset.UTC));
         if (titleBlank) {
             e.setNextEscalationAt(null);
         } else {
             e.setNextEscalationAt(radiusExpansionService.initialNextEscalationAt(OffsetDateTime.now(), radiusMeters));
+            e.setOfferLastNotifiedAmount(normalizedOffer);
         }
         HelpRequestEntity saved = repo.save(e);
         if (saved.getStatus() == HelpRequestStatus.OPEN) {
@@ -658,6 +682,101 @@ public class HelpRequestService {
     public List<UUID> findExpiredPendingAuth(OffsetDateTime now, int limit) {
         return repo.findExpiredPendingAuth(HelpRequestStatus.PENDING_AUTH, now, PageRequest.of(0, limit));
     }
+
+    @Transactional
+    public OfferUpdateOutcome updateOffer(
+            UUID requestId,
+            UUID requesterId,
+            BigDecimal offerAmount,
+            String offerCurrency,
+            String source
+    ) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(existing.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can update offer");
+        }
+        if (existing.getStatus() != HelpRequestStatus.OPEN || existing.getHelperId() != null) {
+            throw new ConflictOperationException("Offer can only be updated for OPEN and unassigned requests");
+        }
+
+        BigDecimal normalizedOffer = normalizeOfferAmount(offerAmount);
+        String normalizedCurrency = normalizeOfferCurrency(offerCurrency);
+        BigDecimal currentOffer = normalizeOfferAmount(existing.getOfferAmount());
+        String currentCurrency = normalizeOfferCurrency(existing.getOfferCurrency());
+
+        boolean changed = !Objects.equals(currentOffer, normalizedOffer)
+                || !Objects.equals(currentCurrency, normalizedCurrency);
+        if (!changed) {
+            return new OfferUpdateOutcome(
+                    existing,
+                    true,
+                    false
+            );
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        HelpRequestOfferEventEntity event = new HelpRequestOfferEventEntity();
+        event.setHelpRequestId(existing.getId());
+        event.setOldAmount(currentOffer);
+        event.setNewAmount(normalizedOffer);
+        event.setActorUserId(requesterId);
+        event.setSource(source == null || source.isBlank() ? "TASK_DETAIL" : source);
+        event.setEventTs(now);
+
+        existing.setOfferAmount(normalizedOffer);
+        existing.setOfferCurrency(normalizedCurrency);
+        existing.setOfferUpdatedAt(now);
+
+        BigDecimal lastNotified = normalizeOfferAmount(existing.getOfferLastNotifiedAmount());
+        boolean shouldNotify = !Objects.equals(lastNotified, normalizedOffer);
+        if (shouldNotify) {
+            existing.setOfferLastNotifiedAmount(normalizedOffer);
+        }
+
+        HelpRequestEntity saved = repo.save(existing);
+        offerEventRepository.save(event);
+
+        if (shouldNotify) {
+            NotificationEventContext context = buildContext(
+                    requesterId,
+                    HelpRequestStatus.OPEN,
+                    HelpRequestStatus.OPEN,
+                    AssignmentChange.NONE,
+                    saved.getHelperId(),
+                    saved.getHelperId(),
+                    saved.getRadiusMeters(),
+                    saved.getRadiusMeters(),
+                    now
+            );
+            notificationService.enqueueTaskEvent(NotificationEventType.OFFER_UPDATED, saved, context);
+        }
+
+        return new OfferUpdateOutcome(saved, !shouldNotify, true);
+    }
+
+    private BigDecimal normalizeOfferAmount(BigDecimal offerAmount) {
+        if (offerAmount == null) {
+            return null;
+        }
+        if (offerAmount.signum() < 0) {
+            throw new IllegalArgumentException("offerAmount cannot be negative");
+        }
+        return offerAmount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String normalizeOfferCurrency(String offerCurrency) {
+        if (offerCurrency == null || offerCurrency.isBlank()) {
+            return "INR";
+        }
+        return offerCurrency.trim().toUpperCase();
+    }
+
+    public record OfferUpdateOutcome(
+            HelpRequestEntity task,
+            boolean notificationSuppressed,
+            boolean changed
+    ) {}
 
     private NotificationEventContext buildContext(
             UUID actorUserId,

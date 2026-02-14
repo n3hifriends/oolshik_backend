@@ -35,4 +35,7 @@ public interface HelpRequestRow {
     Double getDistanceMtr();                    // computed in SELECT for ordering
     Double getLatitude();
     Double getLongitude();
+    BigDecimal getOfferAmount();
+    String getOfferCurrency();
+    Instant getOfferUpdatedAt();
 }

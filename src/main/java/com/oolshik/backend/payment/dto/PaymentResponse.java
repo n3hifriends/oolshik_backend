@@ -13,6 +13,7 @@ public class PaymentResponse {
         public String payeeName;
         public String mcc;
         public String merchantId;
+        public String txnRef;
         public BigDecimal amountRequested;
         public String currency;
         public String note;

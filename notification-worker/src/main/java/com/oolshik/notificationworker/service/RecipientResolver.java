@@ -41,6 +41,13 @@ public class RecipientResolver {
                         radius
                 ));
             }
+            case OFFER_UPDATED -> {
+                List<UUID> candidateHelpers = candidateRepository.findHelperIdsByRequestIdAndStates(
+                        payload.getTaskId(),
+                        List.of("PENDING", "NOTIFIED")
+                );
+                recipients.addAll(candidateHelpers);
+            }
             case TASK_AUTH_REQUESTED -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
             }
