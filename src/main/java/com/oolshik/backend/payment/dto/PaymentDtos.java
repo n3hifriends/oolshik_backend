@@ -1,5 +1,6 @@
 package com.oolshik.backend.payment.dto;
 
+import com.oolshik.backend.payment.PaymentPayerRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -20,12 +21,14 @@ public class PaymentDtos {
             String payeeName,
             String mcc,
             String merchantId,
+            String txnRef,
             BigDecimal amount,              // optional
             String currency,                // default INR
             String note,                    // optional
             ScanLocation scanLocation,
             String appVersion,
-            String deviceId
+            String deviceId,
+            PaymentPayerRole payerRole
     ) {
     }
 
@@ -36,6 +39,7 @@ public class PaymentDtos {
             String payeeName,
             String mcc,
             String merchantId,
+            String txnRef,
             BigDecimal amountRequested,
             String currency,
             String note,

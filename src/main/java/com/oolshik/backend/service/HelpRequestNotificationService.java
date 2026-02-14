@@ -53,6 +53,8 @@ public class HelpRequestNotificationService {
         payload.setGeo(toGeo(task.getLocation()));
         payload.setPreviousRadiusMeters(context.getPreviousRadiusMeters());
         payload.setNewRadiusMeters(context.getNewRadiusMeters());
+        payload.setOfferAmount(task.getOfferAmount());
+        payload.setOfferCurrency(task.getOfferCurrency());
 
         String json = toJson(payload);
 

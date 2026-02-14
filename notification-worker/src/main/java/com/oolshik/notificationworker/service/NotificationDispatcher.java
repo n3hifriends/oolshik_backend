@@ -16,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,7 +64,8 @@ public class NotificationDispatcher {
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, NotificationDeliveryLogEntity> logs = new HashMap<>();
         for (UUID recipientId : recipients) {
-            String key = HashUtil.sha256(payload.getEventType() + ":" + payload.getTaskId() + ":" + recipientId);
+            String idempotencySeed = buildIdempotencySeed(payload, recipientId);
+            String key = HashUtil.sha256(idempotencySeed + ":" + recipientId);
             NotificationDeliveryLogEntity existing = deliveryLogRepository.findByIdempotencyKey(key).orElse(null);
             if (existing != null) {
                 if ("SENT".equals(existing.getStatus()) || "PROCESSING".equals(existing.getStatus())) {
@@ -101,15 +103,28 @@ public class NotificationDispatcher {
             }
             NotificationTemplateService.NotificationTemplate template =
                     templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId));
+            String body = enrichBodyWithOffer(template.body(), payload);
             for (UserDeviceEntity device : userDevices) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("type", payload.getEventType());
+                if (payload.getTaskId() != null) {
+                    data.put("taskId", payload.getTaskId().toString());
+                }
+                if (payload.getPaymentRequestId() != null) {
+                    data.put("paymentRequestId", payload.getPaymentRequestId().toString());
+                    data.put("route", "PaymentPay");
+                } else {
+                    data.put("route", "TaskDetail");
+                }
+                if (payload.getOfferAmount() != null) {
+                    data.put("offerAmount", payload.getOfferAmount().toPlainString());
+                    data.put("offerCurrency", payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency());
+                }
                 ExpoPushMessage message = new ExpoPushMessage();
                 message.setTo(device.getToken());
                 message.setTitle(template.title());
-                message.setBody(template.body());
-                message.setData(Map.of(
-                        "type", payload.getEventType(),
-                        "taskId", payload.getTaskId().toString()
-                ));
+                message.setBody(body);
+                message.setData(data);
                 outgoing.add(new OutgoingMessage(recipientId, entry.getValue().getId(), device.getToken(), message));
             }
         }
@@ -170,6 +185,34 @@ public class NotificationDispatcher {
         if (!notifiedRecipients.isEmpty() && (type == NotificationEventType.TASK_CREATED || type == NotificationEventType.TASK_RADIUS_EXPANDED)) {
             candidateRepository.updateStates(payload.getTaskId(), notifiedRecipients, "NOTIFIED");
         }
+    }
+
+    private String buildIdempotencySeed(NotificationEventPayload payload, UUID recipientId) {
+        NotificationEventType type = NotificationEventType.valueOf(payload.getEventType());
+        if (type == NotificationEventType.OFFER_UPDATED && payload.getTaskId() != null && payload.getOfferAmount() != null) {
+            BigDecimal normalized = payload.getOfferAmount().stripTrailingZeros();
+            String currency = payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency();
+            return type.name() + ":" + payload.getTaskId() + ":" + currency + ":" + normalized.toPlainString();
+        }
+        if (payload.getEventId() != null) {
+            return payload.getEventId().toString();
+        }
+        return payload.getEventType() + ":" + payload.getTaskId() + ":" + recipientId;
+    }
+
+    private String enrichBodyWithOffer(String body, NotificationEventPayload payload) {
+        if (payload.getOfferAmount() == null) {
+            return body;
+        }
+        String currency = payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency();
+        String suffix = " Offer: " + currency + " " + payload.getOfferAmount().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        if (body == null || body.isBlank()) {
+            return suffix.trim();
+        }
+        if (body.contains("Offer:")) {
+            return body;
+        }
+        return body + suffix;
     }
 
     private NotificationDeliveryLogEntity buildLog(

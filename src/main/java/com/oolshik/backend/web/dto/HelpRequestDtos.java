@@ -4,6 +4,8 @@ import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import com.oolshik.backend.domain.HelpRequestRejectReason;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -20,7 +22,9 @@ public class HelpRequestDtos {
         String voiceUrl,
         @NotNull Double latitude,
         @NotNull Double longitude,
-        @Min(50) @Max(10000) Integer radiusMeters
+        @Min(50) @Max(10000) Integer radiusMeters,
+        @DecimalMin(value = "0.0", inclusive = true) @DecimalMax(value = "1000000.0", inclusive = true) BigDecimal offerAmount,
+        String offerCurrency
     ) {}
 
     public record HelpRequestView(
@@ -48,7 +52,23 @@ public class HelpRequestDtos {
             Integer reassignedCount,
             Integer releasedCount,
             Integer radiusStage,
-            OffsetDateTime nextEscalationAt
+            OffsetDateTime nextEscalationAt,
+            BigDecimal offerAmount,
+            String offerCurrency,
+            OffsetDateTime offerUpdatedAt
+    ) {}
+
+    public record OfferUpdateRequest(
+            @DecimalMin(value = "0.0", inclusive = true) @DecimalMax(value = "1000000.0", inclusive = true) BigDecimal offerAmount,
+            String offerCurrency
+    ) {}
+
+    public record OfferUpdateResponse(
+            UUID taskId,
+            BigDecimal offerAmount,
+            String offerCurrency,
+            OffsetDateTime offerUpdatedAt,
+            boolean notificationSuppressed
     ) {}
 
     public record CancelRequest(

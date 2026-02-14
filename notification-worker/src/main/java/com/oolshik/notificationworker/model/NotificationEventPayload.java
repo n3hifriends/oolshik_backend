@@ -1,5 +1,6 @@
 package com.oolshik.notificationworker.model;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -16,6 +17,15 @@ public class NotificationEventPayload {
     private String assignmentChange;
     private UUID previousHelperId;
     private UUID newHelperId;
+    private UUID paymentRequestId;
+    private UUID payerUserId;
+    private UUID helperUserId;
+    private String payerRole;
+    private BigDecimal paymentAmount;
+    private String paymentCurrency;
+    private OffsetDateTime paymentDueAt;
+    private BigDecimal offerAmount;
+    private String offerCurrency;
     private Geo geo;
     private Integer previousRadiusMeters;
     private Integer newRadiusMeters;
@@ -127,6 +137,78 @@ public class NotificationEventPayload {
 
     public void setNewHelperId(UUID newHelperId) {
         this.newHelperId = newHelperId;
+    }
+
+    public UUID getPaymentRequestId() {
+        return paymentRequestId;
+    }
+
+    public void setPaymentRequestId(UUID paymentRequestId) {
+        this.paymentRequestId = paymentRequestId;
+    }
+
+    public UUID getPayerUserId() {
+        return payerUserId;
+    }
+
+    public void setPayerUserId(UUID payerUserId) {
+        this.payerUserId = payerUserId;
+    }
+
+    public UUID getHelperUserId() {
+        return helperUserId;
+    }
+
+    public void setHelperUserId(UUID helperUserId) {
+        this.helperUserId = helperUserId;
+    }
+
+    public String getPayerRole() {
+        return payerRole;
+    }
+
+    public void setPayerRole(String payerRole) {
+        this.payerRole = payerRole;
+    }
+
+    public BigDecimal getPaymentAmount() {
+        return paymentAmount;
+    }
+
+    public void setPaymentAmount(BigDecimal paymentAmount) {
+        this.paymentAmount = paymentAmount;
+    }
+
+    public String getPaymentCurrency() {
+        return paymentCurrency;
+    }
+
+    public void setPaymentCurrency(String paymentCurrency) {
+        this.paymentCurrency = paymentCurrency;
+    }
+
+    public OffsetDateTime getPaymentDueAt() {
+        return paymentDueAt;
+    }
+
+    public void setPaymentDueAt(OffsetDateTime paymentDueAt) {
+        this.paymentDueAt = paymentDueAt;
+    }
+
+    public BigDecimal getOfferAmount() {
+        return offerAmount;
+    }
+
+    public void setOfferAmount(BigDecimal offerAmount) {
+        this.offerAmount = offerAmount;
+    }
+
+    public String getOfferCurrency() {
+        return offerCurrency;
+    }
+
+    public void setOfferCurrency(String offerCurrency) {
+        this.offerCurrency = offerCurrency;
     }
 
     public Geo getGeo() {

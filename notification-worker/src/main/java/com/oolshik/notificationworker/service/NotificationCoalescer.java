@@ -24,7 +24,8 @@ public class NotificationCoalescer {
     }
 
     public void enqueue(NotificationEventPayload payload) {
-        if (payload.getTaskId() == null) {
+        String eventType = payload.getEventType();
+        if (payload.getTaskId() == null || (eventType != null && eventType.startsWith("PAYMENT_"))) {
             dispatcher.dispatch(payload);
             return;
         }

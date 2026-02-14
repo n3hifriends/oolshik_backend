@@ -48,55 +48,43 @@ public class PaymentRequestController {
 
         try {
             PaymentRequest saved = service.create(userId, ip, body);
-            String upi = PaymentRequestService.buildUpiIntent(saved);
-            PaymentResponse out = new PaymentResponse();
-            out.id = saved.getId();
-            out.upiIntent = upi;
-            out.snapshot = new PaymentResponse.Snapshot();
-            out.snapshot.taskId = saved.getTaskId();
-            out.snapshot.payeeVpa = saved.getPayeeVpa();
-            out.snapshot.payeeName = saved.getPayeeName();
-            out.snapshot.mcc = saved.getMcc();
-            out.snapshot.merchantId = saved.getMerchantId();
-            out.snapshot.amountRequested = saved.getAmountRequested();
-            out.snapshot.currency = saved.getCurrency();
-            out.snapshot.note = saved.getNote();
-            out.snapshot.createdAt = saved.getCreatedAt();
-            out.snapshot.expiresAt = saved.getExpiresAt();
-            out.snapshot.status = saved.getStatus();
+            PaymentResponse out = toResponse(saved, userId);
             return ResponseEntity.created(URI.create("/api/payments/" + saved.getId()))
                     .body(out);
         } catch (NoSuchAlgorithmException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> get(
+    public ResponseEntity<PaymentResponse> get(
             @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
             @PathVariable("id") String rawId) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId, "id");
-        PaymentRequest pr = requireOwnedPayment(id, caller.getId());
-        String upi = PaymentRequestService.buildUpiIntent(pr);
-        Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
-        snapshot.put("payeeVpa", pr.getPayeeVpa());
-        snapshot.put("payeeName", pr.getPayeeName());
-        snapshot.put("mcc", pr.getMcc());
-        snapshot.put("merchantId", pr.getMerchantId());
-        snapshot.put("amountRequested", pr.getAmountRequested());
-        snapshot.put("currency", pr.getCurrency());
-        snapshot.put("note", pr.getNote());
-        snapshot.put("createdAt", pr.getCreatedAt());
-        snapshot.put("expiresAt", pr.getExpiresAt());
+        PaymentRequest pr = requireParticipantPayment(id, caller.getId());
+        return ResponseEntity.ok(toResponse(pr, caller.getId()));
+    }
 
-        Map<String, Object> bodyOut = new java.util.LinkedHashMap<>();
-        bodyOut.put("id", pr.getId());
-        bodyOut.put("taskId", pr.getTaskId());
-        bodyOut.put("status", pr.getStatus());
-        bodyOut.put("snapshot", snapshot);
-        bodyOut.put("upiIntent", upi);
-        return ResponseEntity.ok(bodyOut);
+    @GetMapping("/task/{taskId}/active")
+    public ResponseEntity<PaymentResponse> getActiveByTask(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @PathVariable("taskId") String rawTaskId
+    ) {
+        UserEntity caller = requireAuthenticatedUser(principal);
+        UUID taskId = requireUuid(rawTaskId, "taskId");
+        PaymentRequest active;
+        try {
+            active = service.getActiveForTask(taskId);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Active payment request not found", ex);
+        }
+        if (!service.isTaskParticipant(active, caller.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your payment request");
+        }
+        return ResponseEntity.ok(toResponse(active, caller.getId()));
     }
 
     @PostMapping("/{id}/initiate")
@@ -106,9 +94,10 @@ public class PaymentRequestController {
             @RequestBody(required = false) InitiatePaymentRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId, "id");
-        requireOwnedPayment(id, caller.getId());
-        PaymentRequest pr = service.markInitiated(id);
-        return ResponseEntity.ok(Map.of("status", pr.getStatus()));
+        PaymentRequest pr = requireParticipantPayment(id, caller.getId());
+        requirePayer(pr, caller.getId());
+        PaymentRequest updated = service.markInitiated(id, caller.getId());
+        return ResponseEntity.ok(Map.of("status", updated.getStatus()));
     }
 
     @PostMapping("/{id}/mark-paid")
@@ -118,10 +107,11 @@ public class PaymentRequestController {
             @RequestBody(required = false) MarkPaidRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId, "id");
-        requireOwnedPayment(id, caller.getId());
-        PaymentRequest pr =
-                service.markPaid(id, body == null ? null : body.paidAmount(), body == null ? null : body.proofUrl());
-        return ResponseEntity.ok(Map.of("status", pr.getStatus()));
+        PaymentRequest pr = requireParticipantPayment(id, caller.getId());
+        requirePayer(pr, caller.getId());
+        PaymentRequest updated =
+                service.markPaid(id, caller.getId(), body == null ? null : body.paidAmount(), body == null ? null : body.proofUrl());
+        return ResponseEntity.ok(Map.of("status", updated.getStatus()));
     }
 
     @PostMapping("/{id}/dispute")
@@ -131,9 +121,57 @@ public class PaymentRequestController {
             @RequestBody Map<String, String> body) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId, "id");
-        requireOwnedPayment(id, caller.getId());
-        PaymentRequest pr = service.dispute(id, body.get("reason"));
-        return ResponseEntity.ok(Map.of("status", pr.getStatus()));
+        requireParticipantPayment(id, caller.getId());
+        PaymentRequest updated = service.dispute(id, caller.getId(), body == null ? null : body.get("reason"));
+        return ResponseEntity.ok(Map.of("status", updated.getStatus()));
+    }
+
+    private PaymentResponse toResponse(PaymentRequest pr, UUID callerUserId) {
+        String upi = PaymentRequestService.buildUpiIntent(pr);
+        PaymentResponse out = new PaymentResponse();
+        out.id = pr.getId();
+        out.taskId = pr.getTaskId();
+        out.status = pr.getStatus();
+        out.upiIntent = upi;
+        out.payerUserId = pr.getPayerUser();
+        out.payerRole = pr.getPayerRole();
+        out.requesterUserId = pr.getRequesterUser();
+        out.helperUserId = pr.getHelperUser();
+        out.canPay = service.canPay(pr, callerUserId);
+
+        out.snapshot = new PaymentResponse.Snapshot();
+        out.snapshot.taskId = pr.getTaskId();
+        out.snapshot.payeeVpa = pr.getPayeeVpa();
+        out.snapshot.payeeName = pr.getPayeeName();
+        out.snapshot.mcc = pr.getMcc();
+        out.snapshot.merchantId = pr.getMerchantId();
+        out.snapshot.txnRef = pr.getTxnRef();
+        out.snapshot.amountRequested = pr.getAmountRequested();
+        out.snapshot.currency = pr.getCurrency();
+        out.snapshot.note = pr.getNote();
+        out.snapshot.createdAt = pr.getCreatedAt();
+        out.snapshot.expiresAt = pr.getExpiresAt();
+        out.snapshot.status = pr.getStatus();
+        return out;
+    }
+
+    private void requirePayer(PaymentRequest pr, UUID userId) {
+        if (!service.canPay(pr, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only payer can perform this action");
+        }
+    }
+
+    private PaymentRequest requireParticipantPayment(UUID id, UUID userId) {
+        PaymentRequest pr;
+        try {
+            pr = service.get(id);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment request not found", ex);
+        }
+        if (!service.isTaskParticipant(pr, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your payment request");
+        }
+        return pr;
     }
 
     private static UUID requireUuid(String rawValue, String parameterName) {
@@ -179,18 +217,5 @@ public class PaymentRequestController {
             return userRepository.findByPhoneNumber(phone).orElse(null);
         }
         return null;
-    }
-
-    private PaymentRequest requireOwnedPayment(UUID id, UUID userId) {
-        PaymentRequest pr;
-        try {
-            pr = service.get(id);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment request not found", ex);
-        }
-        if (pr.getScannedByUser() == null || !pr.getScannedByUser().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your payment request");
-        }
-        return pr;
     }
 }

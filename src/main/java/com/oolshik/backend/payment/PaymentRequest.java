@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 import org.locationtech.jts.geom.Point;
 
@@ -27,6 +28,19 @@ public class PaymentRequest {
     @Column(nullable = false)
     private UUID scannedByUser;
 
+    @Column(name = "requester_user")
+    private UUID requesterUser;
+
+    @Column(name = "helper_user")
+    private UUID helperUser;
+
+    @Column(nullable = false, name = "payer_user")
+    private UUID payerUser;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, name = "payer_role", length = 16)
+    private PaymentPayerRole payerRole;
+
     @Column(nullable = false, columnDefinition = "text")
     private String rawPayload;
 
@@ -40,6 +54,9 @@ public class PaymentRequest {
     private String payeeName;
     private String mcc;
     private String merchantId;
+
+    @Column(name = "txn_ref", length = 128)
+    private String txnRef;
 
     private BigDecimal amountRequested;
 
@@ -58,6 +75,10 @@ public class PaymentRequest {
     @CreationTimestamp
     @Column(nullable = false)
     private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(nullable = false)
+    private Instant updatedAt;
 
     private Instant expiresAt;
 

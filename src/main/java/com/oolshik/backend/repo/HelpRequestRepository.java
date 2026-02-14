@@ -44,6 +44,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.released_count                 AS releasedCount,
           h.radius_stage                   AS radiusStage,
           h.next_escalation_at             AS nextEscalationAt,
+          h.offer_amount                   AS offerAmount,
+          h.offer_currency                 AS offerCurrency,
+          h.offer_updated_at               AS offerUpdatedAt,
           h.voice_url                      AS voiceUrl,
           COALESCE((
             SELECT r.rating_value
@@ -149,6 +152,9 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.released_count                 AS releasedCount,
         h.radius_stage                   AS radiusStage,
         h.next_escalation_at             AS nextEscalationAt,
+        h.offer_amount                   AS offerAmount,
+        h.offer_currency                 AS offerCurrency,
+        h.offer_updated_at               AS offerUpdatedAt,
         h.voice_url                      AS voiceUrl,
         COALESCE((
           SELECT r.rating_value

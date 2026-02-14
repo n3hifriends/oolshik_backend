@@ -1,13 +1,17 @@
 package com.oolshik.backend.payment;
 
+import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.payment.dto.PaymentDtos.*;
+import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.service.PaymentNotificationService;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.MessageDigestAlgorithms;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -17,6 +21,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,16 +30,39 @@ import java.util.UUID;
 public class PaymentRequestService {
 
     private final PaymentRequestRepository repo;
+    private final HelpRequestRepository helpRequestRepository;
+    private final PaymentNotificationService paymentNotificationService;
 
     private static final GeometryFactory GEO = new GeometryFactory(new PrecisionModel(), 4326);
+    public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_INITIATED = "INITIATED";
+    public static final String STATUS_PAID_MARKED = "PAID_MARKED";
+    public static final String STATUS_DISPUTED = "DISPUTED";
+    public static final String STATUS_EXPIRED = "EXPIRED";
+    private static final List<String> ACTIVE_STATUSES = List.of(STATUS_PENDING, STATUS_INITIATED);
 
+    @Transactional
     public PaymentRequest create(UUID scannerUserId, String clientIp, CreatePaymentRequest in) throws NoSuchAlgorithmException {
+        PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(in.taskId(), ACTIVE_STATUSES)
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+
+        HelpRequestEntity task = helpRequestRepository.findById(in.taskId())
+                .orElseThrow(() -> new IllegalArgumentException("task not found"));
         var id = UUID.randomUUID();
+        PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
+        UUID payerUser = resolvePayerUser(task, scannerUserId, payerRole);
 
         var pr = PaymentRequest.builder()
                 .id(id)
                 .taskId(in.taskId())
                 .scannedByUser(scannerUserId)
+                .requesterUser(task.getRequesterId())
+                .helperUser(task.getHelperId())
+                .payerUser(payerUser)
+                .payerRole(payerRole)
                 .rawPayload(in.rawPayload())
                 .rawSha256(sha256(in.rawPayload()))
                 .format(in.format())
@@ -42,10 +70,11 @@ public class PaymentRequestService {
                 .payeeName(in.payeeName())
                 .mcc(in.mcc())
                 .merchantId(in.merchantId())
+                .txnRef(in.txnRef())
                 .amountRequested(in.amount())
                 .currency(Optional.ofNullable(in.currency()).orElse("INR"))
                 .note(in.note())
-                .status("PENDING")
+                .status(STATUS_PENDING)
                 .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS))
                 .appVersion(in.appVersion())
                 .deviceId(in.deviceId())
@@ -58,36 +87,143 @@ public class PaymentRequestService {
             pr.setScanLocation(GEO.createPoint(new Coordinate(lon, lat)));
         }
 
-        return repo.save(pr);
+        PaymentRequest saved = repo.save(pr);
+        paymentNotificationService.enqueuePaymentEvent(
+                NotificationEventType.PAYMENT_REQUEST_CREATED,
+                saved,
+                scannerUserId,
+                null,
+                saved.getStatus()
+        );
+        if (!scannerUserId.equals(saved.getPayerUser())) {
+            paymentNotificationService.enqueuePaymentEvent(
+                    NotificationEventType.PAYMENT_ACTION_REQUIRED,
+                    saved,
+                    scannerUserId,
+                    saved.getStatus(),
+                    saved.getStatus()
+            );
+        }
+        return saved;
     }
 
     public PaymentRequest get(UUID id) {
         return repo.findById(id).orElseThrow(() -> new IllegalArgumentException("payment_request not found"));
     }
 
-    public PaymentRequest markInitiated(UUID id) {
+    public PaymentRequest getActiveForTask(UUID taskId) {
+        return repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(taskId, ACTIVE_STATUSES)
+                .orElseThrow(() -> new IllegalArgumentException("active payment request not found"));
+    }
+
+    @Transactional
+    public PaymentRequest markInitiated(UUID id, UUID actorUserId) {
         var pr = get(id);
-        if ("PENDING".equals(pr.getStatus())) {
-            pr.setStatus("INITIATED");
-            return repo.save(pr);
+        if (!canPay(pr, actorUserId)) {
+            throw new SecurityException("Only payer can initiate payment");
+        }
+        if (STATUS_PENDING.equals(pr.getStatus())) {
+            String previous = pr.getStatus();
+            pr.setStatus(STATUS_INITIATED);
+            PaymentRequest saved = repo.save(pr);
+            paymentNotificationService.enqueuePaymentEvent(
+                    NotificationEventType.PAYMENT_INITIATED,
+                    saved,
+                    actorUserId,
+                    previous,
+                    saved.getStatus()
+            );
+            return saved;
         }
         return pr;
     }
 
-    public PaymentRequest markPaid(UUID id, BigDecimal paidAmount, String proofUrl) {
+    @Transactional
+    public PaymentRequest markPaid(UUID id, UUID actorUserId, BigDecimal paidAmount, String proofUrl) {
         var pr = get(id);
-        pr.setStatus("PAID_MARKED");
+        if (!canPay(pr, actorUserId)) {
+            throw new SecurityException("Only payer can mark payment as paid");
+        }
+        if (STATUS_PAID_MARKED.equals(pr.getStatus())) {
+            return pr;
+        }
+        String previous = pr.getStatus();
+        pr.setStatus(STATUS_PAID_MARKED);
         // Optionally: store paidAmount & proofUrl in a separate evidence table later
         if (paidAmount != null && pr.getAmountRequested() == null) {
             pr.setAmountRequested(paidAmount);
         }
-        return repo.save(pr);
+        PaymentRequest saved = repo.save(pr);
+        paymentNotificationService.enqueuePaymentEvent(
+                NotificationEventType.PAYMENT_MARKED_PAID,
+                saved,
+                actorUserId,
+                previous,
+                saved.getStatus()
+        );
+        return saved;
     }
 
-    public PaymentRequest dispute(UUID id, String reason) {
+    @Transactional
+    public PaymentRequest dispute(UUID id, UUID actorUserId, String reason) {
         var pr = get(id);
-        pr.setStatus("DISPUTED");
-        return repo.save(pr);
+        if (!isTaskParticipant(pr, actorUserId)) {
+            throw new SecurityException("Only task participants can dispute payment");
+        }
+        if (STATUS_DISPUTED.equals(pr.getStatus())) {
+            return pr;
+        }
+        String previous = pr.getStatus();
+        pr.setStatus(STATUS_DISPUTED);
+        PaymentRequest saved = repo.save(pr);
+        paymentNotificationService.enqueuePaymentEvent(
+                NotificationEventType.PAYMENT_DISPUTED,
+                saved,
+                actorUserId,
+                previous,
+                saved.getStatus()
+        );
+        return saved;
+    }
+
+    @Transactional
+    public int expireActiveRequests(int limit) {
+        List<PaymentRequest> expired = repo.lockExpiredActive(ACTIVE_STATUSES, Instant.now(), limit);
+        for (PaymentRequest payment : expired) {
+            String previous = payment.getStatus();
+            payment.setStatus(STATUS_EXPIRED);
+            PaymentRequest saved = repo.save(payment);
+            paymentNotificationService.enqueuePaymentEvent(
+                    NotificationEventType.PAYMENT_EXPIRED,
+                    saved,
+                    null,
+                    previous,
+                    saved.getStatus()
+            );
+        }
+        return expired.size();
+    }
+
+    public boolean isTaskParticipant(PaymentRequest pr, UUID userId) {
+        if (userId == null || pr == null) return false;
+        return userId.equals(pr.getRequesterUser())
+                || userId.equals(pr.getHelperUser())
+                || userId.equals(pr.getPayerUser())
+                || userId.equals(pr.getScannedByUser());
+    }
+
+    public boolean canPay(PaymentRequest pr, UUID userId) {
+        return userId != null && pr != null && userId.equals(pr.getPayerUser());
+    }
+
+    private UUID resolvePayerUser(HelpRequestEntity task, UUID scannerUserId, PaymentPayerRole payerRole) {
+        if (payerRole == PaymentPayerRole.REQUESTER) {
+            return task.getRequesterId();
+        }
+        if (task.getHelperId() != null) {
+            return task.getHelperId();
+        }
+        return scannerUserId;
     }
 
     public static String buildUpiIntent(PaymentRequest pr) {
