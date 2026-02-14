@@ -1,5 +1,6 @@
 package com.oolshik.backend.payment.dto;
 
+import com.oolshik.backend.payment.PaymentPayerRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -25,7 +26,8 @@ public class PaymentDtos {
             String note,                    // optional
             ScanLocation scanLocation,
             String appVersion,
-            String deviceId
+            String deviceId,
+            PaymentPayerRole payerRole
     ) {
     }
 

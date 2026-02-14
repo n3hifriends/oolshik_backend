@@ -63,7 +63,10 @@ public class NotificationDispatcher {
         OffsetDateTime now = OffsetDateTime.now();
         Map<UUID, NotificationDeliveryLogEntity> logs = new HashMap<>();
         for (UUID recipientId : recipients) {
-            String key = HashUtil.sha256(payload.getEventType() + ":" + payload.getTaskId() + ":" + recipientId);
+            String idempotencySeed = payload.getEventId() != null
+                    ? payload.getEventId().toString()
+                    : payload.getEventType() + ":" + payload.getTaskId();
+            String key = HashUtil.sha256(idempotencySeed + ":" + recipientId);
             NotificationDeliveryLogEntity existing = deliveryLogRepository.findByIdempotencyKey(key).orElse(null);
             if (existing != null) {
                 if ("SENT".equals(existing.getStatus()) || "PROCESSING".equals(existing.getStatus())) {
@@ -102,14 +105,22 @@ public class NotificationDispatcher {
             NotificationTemplateService.NotificationTemplate template =
                     templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId));
             for (UserDeviceEntity device : userDevices) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("type", payload.getEventType());
+                if (payload.getTaskId() != null) {
+                    data.put("taskId", payload.getTaskId().toString());
+                }
+                if (payload.getPaymentRequestId() != null) {
+                    data.put("paymentRequestId", payload.getPaymentRequestId().toString());
+                    data.put("route", "PaymentPay");
+                } else {
+                    data.put("route", "TaskDetail");
+                }
                 ExpoPushMessage message = new ExpoPushMessage();
                 message.setTo(device.getToken());
                 message.setTitle(template.title());
                 message.setBody(template.body());
-                message.setData(Map.of(
-                        "type", payload.getEventType(),
-                        "taskId", payload.getTaskId().toString()
-                ));
+                message.setData(data);
                 outgoing.add(new OutgoingMessage(recipientId, entry.getValue().getId(), device.getToken(), message));
             }
         }

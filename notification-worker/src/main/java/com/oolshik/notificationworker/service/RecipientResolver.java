@@ -66,12 +66,50 @@ public class RecipientResolver {
                 addIfPresent(recipients, payload.getRequesterUserId());
                 addIfPresent(recipients, helperId(payload));
             }
+            case PAYMENT_REQUEST_CREATED -> {
+                addIfPresent(recipients, payload.getRequesterUserId());
+                addIfPresent(recipients, helperUserId(payload));
+                if (payload.getActorUserId() != null) {
+                    recipients.remove(payload.getActorUserId());
+                }
+            }
+            case PAYMENT_ACTION_REQUIRED -> addIfPresent(recipients, payload.getPayerUserId());
+            case PAYMENT_INITIATED, PAYMENT_MARKED_PAID -> {
+                UUID payer = payload.getPayerUserId();
+                UUID requester = payload.getRequesterUserId();
+                UUID helper = helperUserId(payload);
+                if (payer == null || requester == null || helper == null) {
+                    if (requester != null) recipients.add(requester);
+                    if (helper != null) recipients.add(helper);
+                } else if (payer.equals(requester)) {
+                    recipients.add(helper);
+                } else {
+                    recipients.add(requester);
+                }
+            }
+            case PAYMENT_DISPUTED -> {
+                addIfPresent(recipients, payload.getRequesterUserId());
+                addIfPresent(recipients, helperUserId(payload));
+            }
+            case PAYMENT_EXPIRED -> {
+                addIfPresent(recipients, payload.getPayerUserId());
+                if (payload.getRequesterUserId() != null && !payload.getRequesterUserId().equals(payload.getPayerUserId())) {
+                    addIfPresent(recipients, payload.getRequesterUserId());
+                }
+            }
         }
         return new ArrayList<>(recipients);
     }
 
     private UUID helperId(NotificationEventPayload payload) {
         return payload.getNewHelperId() != null ? payload.getNewHelperId() : payload.getPreviousHelperId();
+    }
+
+    private UUID helperUserId(NotificationEventPayload payload) {
+        if (payload.getHelperUserId() != null) {
+            return payload.getHelperUserId();
+        }
+        return helperId(payload);
     }
 
     private void addIfPresent(Set<UUID> recipients, UUID userId) {

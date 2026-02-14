@@ -82,6 +82,8 @@ app:
     outboxPublishIntervalMs: ${NOTIF_OUTBOX_PUBLISH_INTERVAL_MS:2000}
     outboxBatchSize: ${NOTIF_OUTBOX_BATCH_SIZE:50}
     outboxMaxAttempts: ${NOTIF_OUTBOX_MAX_ATTEMPTS:8}
+  payment:
+    expirySweepIntervalMs: ${PAYMENT_EXPIRY_SWEEP_INTERVAL_MS:60000}
   feedback:
     maxPerDay: ${FEEDBACK_MAX_PER_DAY:10}
     rateLimitWindowHours: ${FEEDBACK_RATE_LIMIT_WINDOW_HOURS:24}

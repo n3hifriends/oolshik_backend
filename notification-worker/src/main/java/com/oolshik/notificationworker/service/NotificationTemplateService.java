@@ -19,6 +19,17 @@ public class NotificationTemplateService {
             case TASK_TIMEOUT -> new NotificationTemplate("Request timed out", "Please retry or expand radius.");
             case TASK_CREATED -> new NotificationTemplate("New request near you", "Open the app to help.");
             case TASK_RADIUS_EXPANDED -> new NotificationTemplate("New request in your area", "You are now eligible to help.");
+            case PAYMENT_REQUEST_CREATED -> new NotificationTemplate("Payment request created", "A payment request is linked to your task.");
+            case PAYMENT_ACTION_REQUIRED -> new NotificationTemplate(
+                    role == RecipientRole.REQUESTER ? "Payment needed" : "Please complete payment",
+                    role == RecipientRole.REQUESTER
+                            ? "A helper requested payment. Open task details to pay via UPI."
+                            : "Open task details to complete payment via UPI."
+            );
+            case PAYMENT_INITIATED -> new NotificationTemplate("Payment started", "UPI payment has been initiated.");
+            case PAYMENT_MARKED_PAID -> new NotificationTemplate("Payment marked paid", "Please verify the transfer and proceed.");
+            case PAYMENT_DISPUTED -> new NotificationTemplate("Payment disputed", "There is an issue with this payment. Please review.");
+            case PAYMENT_EXPIRED -> new NotificationTemplate("Payment request expired", "Create a new payment request to continue.");
         };
     }
 
