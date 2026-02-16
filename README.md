@@ -93,6 +93,23 @@ Environment variables (defaults in `application.yml`):
 - `KAFKA_CONSUMER_GROUP=oolshik-stt-backend`
 - `KAFKA_TOPIC_STT_JOBS=stt.jobs`, `KAFKA_TOPIC_STT_RESULTS=stt.results`, `KAFKA_TOPIC_STT_DLQ=stt.jobs.dlq`
 - `STT_REPUBLISH_DELAY_MS=30000`
+- `STT_AUDIO_SOURCE_MODE=REQUEST` (`REQUEST` | `DEMO_FIXED` | `S3_ONLY`)
+- `STT_DEMO_AUDIO_URL=https://...` (used only when `STT_AUDIO_SOURCE_MODE=DEMO_FIXED`)
+- `STT_S3_ALLOWED_HOST_SUFFIXES=.amazonaws.com,.cloudfront.net` (used when `STT_AUDIO_SOURCE_MODE=S3_ONLY`)
+- `STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER=true` (in `REQUEST`, rewrites local stream URL host for worker reachability)
+- `STT_LOCAL_WORKER_BASE_URL=http://api:8080` (worker-reachable API base in Docker network)
+- `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false` (enable `/api/public/media/audio/{id}/stream` in local/demo only)
+
+STT audio source modes:
+
+- `REQUEST`: STT uses the incoming `voiceUrl` from frontend/backend request.
+- `DEMO_FIXED`: STT ignores request `voiceUrl` and always uses `STT_DEMO_AUDIO_URL`.
+- `S3_ONLY`: STT requires HTTPS URL and allowed S3 host suffixes, and rejects local `/api/media/audio/.../stream` URLs.
+
+Recommended modes:
+
+- Local end-to-end (recorded audio -> helper playback + STT): `STT_AUDIO_SOURCE_MODE=REQUEST`, `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=true`, `STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER=true`.
+- Production S3: `media.storage=s3`, `STT_AUDIO_SOURCE_MODE=S3_ONLY`, `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false`.
 
 **Admin seeding (ops):**
 
