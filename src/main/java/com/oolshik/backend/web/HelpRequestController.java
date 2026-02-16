@@ -7,6 +7,7 @@ import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.service.HelpRequestService;
 import com.oolshik.backend.service.HelpRequestRatingService;
+import com.oolshik.backend.transcription.TranscriptionAudioSourceResolver;
 import com.oolshik.backend.transcription.TranscriptionJobEntity;
 import com.oolshik.backend.transcription.TranscriptionJobPublisher;
 import com.oolshik.backend.transcription.TranscriptionJobService;
@@ -30,9 +31,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -51,6 +54,7 @@ public class HelpRequestController {
     private final AudioFileRepository audioRepo; // NEW
     private final TranscriptionJobService transcriptionJobService;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
+    private final TranscriptionAudioSourceResolver transcriptionAudioSourceResolver;
 
     private static final String TRANSCRIPTION_ENGINE = "faster-whisper";
     private static final String TRANSCRIPTION_MODEL_VERSION = "unknown";
@@ -66,31 +70,36 @@ public class HelpRequestController {
                                  UserRepository userRepo,
                                  AudioFileRepository audioRepo,
                                  TranscriptionJobService transcriptionJobService,
-                                 TranscriptionJobPublisher transcriptionJobPublisher) {
+                                 TranscriptionJobPublisher transcriptionJobPublisher,
+                                 TranscriptionAudioSourceResolver transcriptionAudioSourceResolver) {
         this.service = service;
         this.ratingService = ratingService;
         this.userRepo = userRepo;
         this.audioRepo = audioRepo;
         this.transcriptionJobService = transcriptionJobService;
         this.transcriptionJobPublisher = transcriptionJobPublisher;
+        this.transcriptionAudioSourceResolver = transcriptionAudioSourceResolver;
     }
 
     @PostMapping
     public ResponseEntity<?> create(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(req.latitude(), req.longitude()); // 4326
-        // HelpRequestEntity created = service.create(
-        //         requester.getId(),
-        //         req.title(), req.description(),
-        //         req.radiusMeters(),
-        //         req.voiceUrl(), point
-        // );
-        final String demoUrl = "https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav";
+        String voiceUrl = req.voiceUrl();
+        if (voiceUrl != null && voiceUrl.isBlank()) {
+            voiceUrl = null;
+        }
+        String transcriptionAudioUrl;
+        try {
+            transcriptionAudioUrl = transcriptionAudioSourceResolver.resolveForJob(voiceUrl);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
                 req.radiusMeters(),
-                demoUrl, point,
+                voiceUrl, point,
                 req.offerAmount(),
                 req.offerCurrency()
         );
@@ -98,7 +107,7 @@ public class HelpRequestController {
         if (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank()) {
             job = transcriptionJobService.createOrGet(
                     created.getId(),
-                    created.getVoiceUrl(),
+                    transcriptionAudioUrl,
                     null,
                     TRANSCRIPTION_ENGINE,
                     TRANSCRIPTION_MODEL_VERSION

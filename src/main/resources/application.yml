@@ -60,6 +60,11 @@ app:
     maxAttempts: 5
   transcription:
     republishDelayMs: ${STT_REPUBLISH_DELAY_MS:30000}
+    audioSourceMode: ${STT_AUDIO_SOURCE_MODE:REQUEST}
+    demoAudioUrl: ${STT_DEMO_AUDIO_URL:https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav}
+    s3AllowedHostSuffixes: ${STT_S3_ALLOWED_HOST_SUFFIXES:.amazonaws.com,.cloudfront.net}
+    rewriteLocalPublicStreamForWorker: ${STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER:true}
+    localWorkerBaseUrl: ${STT_LOCAL_WORKER_BASE_URL:http://api:8080}
   task-recovery:
     acceptToStartSlaSeconds: ${ACCEPT_TO_START_SLA_SECONDS:420}
     assignmentTtlSeconds: ${ASSIGNMENT_TTL_SECONDS:2700}
@@ -116,6 +121,7 @@ media:
 
   local:
     root: ./data/audio
+    publicStreamEnabled: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:false}
 
   s3:
     bucket: your-bucket-name

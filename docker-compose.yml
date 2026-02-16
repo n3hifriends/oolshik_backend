@@ -59,6 +59,12 @@ services:
       FIREBASE_PROJECT_ID: oolshik
       FIREBASE_CHECK_REVOKED: false
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
+      STT_AUDIO_SOURCE_MODE: ${STT_AUDIO_SOURCE_MODE:-REQUEST}
+      STT_DEMO_AUDIO_URL: ${STT_DEMO_AUDIO_URL:-https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav}
+      STT_S3_ALLOWED_HOST_SUFFIXES: ${STT_S3_ALLOWED_HOST_SUFFIXES:-.amazonaws.com,.cloudfront.net}
+      STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER: ${STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER:-true}
+      STT_LOCAL_WORKER_BASE_URL: ${STT_LOCAL_WORKER_BASE_URL:-http://api:8080}
+      MEDIA_LOCAL_PUBLIC_STREAM_ENABLED: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:-true}
     volumes:
       # LEFT side = host path, RIGHT side = container path
       - ./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json:/secrets/firebase-sa.json:ro
