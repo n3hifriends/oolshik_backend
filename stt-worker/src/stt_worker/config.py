@@ -5,7 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        case_sensitive=False,
+        protected_namespaces=("settings_",),
+    )
 
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 

@@ -59,6 +59,7 @@ app:
     cooldownSeconds: 30
     maxAttempts: 5
   transcription:
+    engine: ${STT_ENGINE:indicconformer}
     republishDelayMs: ${STT_REPUBLISH_DELAY_MS:30000}
     audioSourceMode: ${STT_AUDIO_SOURCE_MODE:REQUEST}
     demoAudioUrl: ${STT_DEMO_AUDIO_URL:https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav}

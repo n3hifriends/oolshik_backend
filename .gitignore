@@ -6,3 +6,7 @@ target/
 .env
 /secrets/*.json
 /data/audio/
+__pycache__/
+*.py[cod]
+/models/*
+!/models/.gitkeep
