@@ -1,18 +1,37 @@
 services:
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        PRELOAD_ASR_MODEL: ${PRELOAD_ASR_MODEL:-false}
+        ASR_MODEL_ID: ${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}
+        ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-}
+        HF_TOKEN: ${HF_TOKEN:-}
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - STT_JOBS_TOPIC=stt.jobs
       - STT_RESULTS_TOPIC=stt.results
       - STT_DLQ_TOPIC=stt.jobs.dlq
       - LOG_LEVEL=INFO
+      - STT_ENGINE=indicconformer
+      - STT_ENABLE_FALLBACK=false
+      - STT_DEFAULT_LANG=mr
+      - ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
+      - ASR_DECODING=rnnt
+      - STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true
+      - HF_HOME=/models/hf
+      - HF_TOKEN=${HF_TOKEN:-}
+      - ASR_MODEL_PATH=${ASR_MODEL_PATH:-ai4bharat/indic-conformer-600m-multilingual}
+      - AUDIO_DOWNLOAD_RETRIES=2
+      - AUDIO_DOWNLOAD_BACKOFF_SEC=0.5
       - MODEL_SIZE=small
     ports:
       - "9108:9108"
       - "8081:8081"
     networks:
       - oolshik-backend-otp_default
+    volumes:
+      - ../models/hf:/models/hf
 
 networks:
   oolshik-backend-otp_default:

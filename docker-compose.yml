@@ -77,17 +77,37 @@ services:
       db:
         condition: service_healthy
   stt-worker:
-    build: ./stt-worker
+    build:
+      context: ./stt-worker
+      args:
+        PRELOAD_ASR_MODEL: ${PRELOAD_ASR_MODEL:-false}
+        ASR_MODEL_ID: ${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}
+        ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-}
+        HF_TOKEN: ${HF_TOKEN:-}
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       STT_JOBS_TOPIC: stt.jobs
       STT_RESULTS_TOPIC: stt.results
       STT_DLQ_TOPIC: stt.jobs.dlq
       LOG_LEVEL: INFO
+      STT_ENGINE: indicconformer
+      STT_ENABLE_FALLBACK: "false"
+      STT_DEFAULT_LANG: ${STT_DEFAULT_LANG:-mr}
+      ASR_MODEL_ID: ${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}
+      ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-}
+      ASR_DECODING: ${ASR_DECODING:-rnnt}
+      STT_ALLOW_RUNTIME_MODEL_DOWNLOAD: ${STT_ALLOW_RUNTIME_MODEL_DOWNLOAD:-true}
+      HF_HOME: /models/hf
+      HF_TOKEN: ${HF_TOKEN:-}
+      ASR_MODEL_PATH: ${ASR_MODEL_PATH:-ai4bharat/indic-conformer-600m-multilingual}
       MODEL_SIZE: small
+      AUDIO_DOWNLOAD_RETRIES: ${AUDIO_DOWNLOAD_RETRIES:-2}
+      AUDIO_DOWNLOAD_BACKOFF_SEC: ${AUDIO_DOWNLOAD_BACKOFF_SEC:-0.5}
     depends_on:
       kafka:
         condition: service_healthy
+    volumes:
+      - ./models/hf:/models/hf
   notification-worker:
     build: ./notification-worker
     environment:
