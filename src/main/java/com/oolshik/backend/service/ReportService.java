@@ -8,6 +8,7 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
 import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
 import jakarta.persistence.EntityNotFoundException;
@@ -34,10 +35,8 @@ public class ReportService {
     }
 
     @Transactional
-    public CreateResponse create(String principalPhone, CreateRequest req) {
-        // Who is reporting?
-        UserEntity reporter = userRepo.findByPhoneNumber(principalPhone)
-                .orElseThrow(() -> new EntityNotFoundException("Reporter not found"));
+    public CreateResponse create(FirebaseTokenFilter.FirebaseUserPrincipal principal, CreateRequest req) {
+        UserEntity reporter = resolveReporter(principal);
 
         // Validate context: **exactly one** of taskId or targetUserId
         final UUID helpRequestId   = req.taskId();
@@ -45,41 +44,41 @@ public class ReportService {
 
         if (helpRequestId == null && explicitTarget == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Either taskId or targetUserId is required");
+                    "errors.report.taskOrTargetRequired");
         }
         if (helpRequestId != null && explicitTarget != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Provide only one of taskId or targetUserId");
+                    "errors.report.onlyOneTarget");
         }
 
         // If OTHER, details are required
         if (req.reason() == ReportReason.OTHER && (req.text() == null || req.text().isBlank())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Details are required when reason is OTHER");
+                    "errors.report.detailsRequiredForOther");
         }
 
         // Resolve target user
         UUID targetUserId;
         if (helpRequestId != null) {
             HelpRequestEntity hr = helpRepo.findById(helpRequestId)
-                    .orElseThrow(() -> new EntityNotFoundException("Task not found"));
+                    .orElseThrow(() -> new EntityNotFoundException("errors.report.taskNotFound"));
             targetUserId = hr.getRequesterId(); // inferred from the task
             if (targetUserId == null) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Task has no requester to report");
+                        "errors.report.taskNoRequester");
             }
             // If you *want* to allow reporting the helper instead, add a switch here.
         } else {
             // targetUserId flow
             userRepo.findById(explicitTarget)
-                    .orElseThrow(() -> new EntityNotFoundException("Target user not found"));
+                    .orElseThrow(() -> new EntityNotFoundException("errors.report.targetUserNotFound"));
             targetUserId = explicitTarget;
         }
 
         // Prevent self-reporting (optional but sensible)
         if (reporter.getId().equals(targetUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "You cannot report yourself");
+                    "errors.report.selfReportForbidden");
         }
 
         // Optional: dedupe to avoid spam (uncomment if you add this repo method)
@@ -99,5 +98,22 @@ public class ReportService {
 
         reportRepo.save(ev);
         return new CreateResponse(ev.getId());
+    }
+
+    private UserEntity resolveReporter(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "errors.auth.required");
+        }
+        if (principal.uid() != null && !principal.uid().isBlank()) {
+            var byUid = userRepo.findByFirebaseUid(principal.uid());
+            if (byUid.isPresent()) {
+                return byUid.get();
+            }
+        }
+        if (principal.phone() != null && !principal.phone().isBlank()) {
+            return userRepo.findByPhoneNumber(principal.phone())
+                    .orElseThrow(() -> new EntityNotFoundException("errors.report.reporterNotFound"));
+        }
+        throw new EntityNotFoundException("errors.report.reporterNotFound");
     }
 }
