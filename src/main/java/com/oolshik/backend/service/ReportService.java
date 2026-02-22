@@ -62,12 +62,7 @@ public class ReportService {
         if (helpRequestId != null) {
             HelpRequestEntity hr = helpRepo.findById(helpRequestId)
                     .orElseThrow(() -> new EntityNotFoundException("errors.report.taskNotFound"));
-            targetUserId = hr.getRequesterId(); // inferred from the task
-            if (targetUserId == null) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "errors.report.taskNoRequester");
-            }
-            // If you *want* to allow reporting the helper instead, add a switch here.
+            targetUserId = resolveTaskReportTargetUserId(reporter.getId(), hr);
         } else {
             // targetUserId flow
             userRepo.findById(explicitTarget)
@@ -115,5 +110,33 @@ public class ReportService {
                     .orElseThrow(() -> new EntityNotFoundException("errors.report.reporterNotFound"));
         }
         throw new EntityNotFoundException("errors.report.reporterNotFound");
+    }
+
+    private UUID resolveTaskReportTargetUserId(UUID reporterUserId, HelpRequestEntity hr) {
+        UUID requesterId = hr.getRequesterId();
+        UUID helperId = hr.getHelperId();
+        UUID pendingHelperId = hr.getPendingHelperId();
+
+        if (requesterId == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "errors.report.taskNoRequester");
+        }
+
+        if (reporterUserId.equals(requesterId)) {
+            UUID counterpartyId = helperId != null ? helperId : pendingHelperId;
+            if (counterpartyId == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "errors.report.taskNoCounterparty");
+            }
+            return counterpartyId;
+        }
+
+        if (helperId != null && reporterUserId.equals(helperId)) {
+            return requesterId;
+        }
+
+        if (pendingHelperId != null && reporterUserId.equals(pendingHelperId)) {
+            return requesterId;
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "errors.report.taskParticipantRequired");
     }
 }
