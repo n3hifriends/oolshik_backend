@@ -2,15 +2,14 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.service.ReportService;
+import com.oolshik.backend.security.FirebaseTokenFilter;
 import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
 import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -30,8 +29,11 @@ public class ReportController {
 //    }
 
     @PostMapping
-    public ResponseEntity<CreateResponse> create(Principal principal, @RequestBody CreateRequest req) {
+    public ResponseEntity<CreateResponse> create(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @RequestBody @Valid CreateRequest req
+    ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(reportService.create(principal.getName(), req));
+                .body(reportService.create(principal, req));
     }
 }
