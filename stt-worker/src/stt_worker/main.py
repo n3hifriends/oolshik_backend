@@ -308,12 +308,18 @@ def process_message(
 
     start = time.perf_counter()
     attempt = get_attempt(msg)
-    selected_lang = (job.languageHint or options.default_lang or "mr").strip().lower()
+    raw_language_hint = (job.languageHint or "").strip().lower()
+    default_language_hint = (options.default_lang or "mr").strip().lower()
+    effective_language_hint = raw_language_hint or default_language_hint
+    selected_lang = None if effective_language_hint in {"", "auto", "detect"} else effective_language_hint
+    log_lang = selected_lang or "auto"
 
     tmp_dir = settings.tmp_dir
     os.makedirs(tmp_dir, exist_ok=True)
     input_path = os.path.join(tmp_dir, f"{job.jobId}.input")
     wav_path = os.path.join(tmp_dir, f"{job.jobId}.wav")
+    fallback_used = False
+    used_engine = engine
 
     try:
         download_start = time.perf_counter()
@@ -337,13 +343,37 @@ def process_message(
             raise AudioDownloadError("AUDIO_TOO_LONG", f"Audio longer than {settings.max_audio_duration_sec}s", False)
 
         transcribe_start = time.perf_counter()
-        fallback_used = False
-        used_engine = engine
-
         try:
-            result = engine.transcribe(wav_tensor, selected_lang)
+            if selected_lang is None and engine.engine_name == ENGINE_INDICCONFORMER:
+                if fallback_engine is None:
+                    raise TranscribeError(
+                        "LANGUAGE_HINT_REQUIRED",
+                        "Auto language detection requires faster-whisper fallback; set STT_ENABLE_FALLBACK=true or send languageHint",
+                        False,
+                    )
+                fallback_used = True
+                used_engine = fallback_engine
+                log.info(
+                    "Using fallback engine for auto language detection",
+                    extra={
+                        "stage": "transcribe",
+                        "job_id": job.jobId,
+                        "engine": engine.engine_name,
+                        "lang": log_lang,
+                        "fallback_used": True,
+                        "error_code": None,
+                    },
+                )
+                result = fallback_engine.transcribe(wav_tensor, selected_lang)
+            else:
+                result = engine.transcribe(wav_tensor, selected_lang)
         except TranscribeError as primary_exc:
-            if engine.engine_name == ENGINE_INDICCONFORMER and options.fallback_enabled and fallback_engine:
+            if (
+                engine.engine_name == ENGINE_INDICCONFORMER
+                and options.fallback_enabled
+                and fallback_engine
+                and not fallback_used
+            ):
                 fallback_used = True
                 log.warning(
                     "Primary engine failed; attempting fallback",
@@ -351,7 +381,7 @@ def process_message(
                         "stage": "transcribe",
                         "job_id": job.jobId,
                         "engine": engine.engine_name,
-                        "lang": selected_lang,
+                        "lang": log_lang,
                         "fallback_used": True,
                         "error_code": primary_exc.code,
                     },
@@ -391,7 +421,7 @@ def process_message(
                 "stage": "completed",
                 "job_id": job.jobId,
                 "engine": used_engine.engine_name,
-                "lang": selected_lang,
+                "lang": log_lang,
                 "audio_duration": round(preprocessed_duration, 3),
                 "processing_time": round(processing_time, 3),
                 "fallback_used": fallback_used,
@@ -407,7 +437,7 @@ def process_message(
                 "stage": "download",
                 "job_id": job.jobId,
                 "engine": engine.engine_name,
-                "lang": selected_lang,
+                "lang": log_lang,
                 "fallback_used": False,
                 "error_code": error.code,
                 "error_message": error.message,
@@ -432,9 +462,9 @@ def process_message(
             extra={
                 "stage": "transcribe",
                 "job_id": job.jobId,
-                "engine": engine.engine_name,
-                "lang": selected_lang,
-                "fallback_used": False,
+                "engine": used_engine.engine_name,
+                "lang": log_lang,
+                "fallback_used": fallback_used,
                 "error_code": error.code,
                 "error_message": error.message,
             },
@@ -448,8 +478,8 @@ def process_message(
             attempt,
             error,
             "TRANSCRIBE",
-            engine.engine_name,
-            engine.model_version,
+            used_engine.engine_name,
+            used_engine.model_version,
         )
     except Exception as exc:  # noqa: BLE001
         error = classify_error(exc)

@@ -98,14 +98,23 @@ class BaseEngine(ABC):
         if self.default_lang not in _SUPPORTED_LANGUAGES:
             self.default_lang = _DEFAULT_LANG
 
-    def resolve_lang(self, lang: Optional[str]) -> str:
-        candidate = (lang or self.default_lang).strip().lower()
+    def resolve_lang(self, lang: Optional[str], *, allow_auto: bool = True) -> Optional[str]:
+        candidate = (lang or "").strip().lower()
+        if candidate in {"", "auto", "detect"}:
+            return None if allow_auto else self.default_lang
+        # Accept locale-style hints like "en-IN" / "mr_IN" by reducing to the base code.
+        for sep in ("-", "_"):
+            if sep in candidate:
+                base = candidate.split(sep, 1)[0].strip()
+                if base in _SUPPORTED_LANGUAGES:
+                    candidate = base
+                    break
         if candidate not in _SUPPORTED_LANGUAGES:
             return self.default_lang
         return candidate
 
     @abstractmethod
-    def transcribe(self, wav_tensor: torch.Tensor, lang: str) -> Dict[str, Any]:
+    def transcribe(self, wav_tensor: torch.Tensor, lang: Optional[str]) -> Dict[str, Any]:
         ...
 
 
@@ -127,17 +136,16 @@ class FasterWhisperEngine(BaseEngine):
         self.timeout_sec = timeout_sec
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-    def transcribe(self, wav_tensor: torch.Tensor, lang: str) -> Dict[str, Any]:
-        language = self.resolve_lang(lang)
+    def transcribe(self, wav_tensor: torch.Tensor, lang: Optional[str]) -> Dict[str, Any]:
+        language = self.resolve_lang(lang, allow_auto=True)
 
         def _run() -> Dict[str, Any]:
             audio_np = wav_tensor.squeeze(0).detach().cpu().numpy()
             segments_out: List[Segment] = []
-            segments, info = self.model.transcribe(
-                audio_np,
-                language=language,
-                vad_filter=True,
-            )
+            transcribe_kwargs: Dict[str, Any] = {"vad_filter": True}
+            if language:
+                transcribe_kwargs["language"] = language
+            segments, info = self.model.transcribe(audio_np, **transcribe_kwargs)
             text_parts: List[str] = []
             for seg in segments:
                 seg_text = normalize_text(seg.text)
@@ -148,7 +156,7 @@ class FasterWhisperEngine(BaseEngine):
             full_text = normalize_text(" ".join(text_parts))
             return {
                 "text": full_text,
-                "language": getattr(info, "language", language) if info else language,
+                "language": getattr(info, "language", None) if info else language,
                 "confidence": getattr(info, "language_probability", None) if info else None,
                 "segments": [
                     {"start": seg.start, "end": seg.end, "text": seg.text}
@@ -259,20 +267,52 @@ class IndicConformerEngine(BaseEngine):
             return kwargs
         return {k: v for k, v in kwargs.items() if k in params}
 
-    def _invoke_model(self, waveform: Any, lang: str) -> Any:
+    def _invoke_model(self, waveform: Any, lang: Optional[str]) -> Any:
         method_candidates = ["transcribe", "generate", "infer"]
-        kwargs_candidates = [
-            {"audio": waveform, "language": lang, "decoding": self.decoding},
-            {"audio": waveform, "lang": lang, "decoding": self.decoding},
-            {"speech": waveform, "language": lang, "decoding": self.decoding},
-            {"input": waveform, "language": lang, "decoding": self.decoding},
-            {"waveform": waveform, "language": lang, "decoding": self.decoding},
-            {"audio": waveform, "language": lang, "decoding_method": self.decoding},
-            {"audio": waveform, "language": lang},
-            {"audio": waveform, "lang": lang},
-            {"waveform": waveform, "language": lang},
-            {"input": waveform, "language": lang},
-        ]
+        kwargs_candidates: List[Dict[str, Any]] = []
+        if lang:
+            kwargs_candidates.extend(
+                [
+                    {"audio": waveform, "language": lang, "decoding": self.decoding},
+                    {"audio": waveform, "lang": lang, "decoding": self.decoding},
+                    {"speech": waveform, "language": lang, "decoding": self.decoding},
+                    {"input": waveform, "language": lang, "decoding": self.decoding},
+                    {"waveform": waveform, "language": lang, "decoding": self.decoding},
+                    {"audio": waveform, "language": lang, "decoding_method": self.decoding},
+                    {"audio": waveform, "language": lang},
+                    {"audio": waveform, "lang": lang},
+                    {"waveform": waveform, "language": lang},
+                    {"input": waveform, "language": lang},
+                ]
+            )
+        if not lang:
+            kwargs_candidates.extend(
+                [
+                    {"audio": waveform, "language": None, "decoding": self.decoding},
+                    {"audio": waveform, "lang": None, "decoding": self.decoding},
+                    {"speech": waveform, "language": None, "decoding": self.decoding},
+                    {"input": waveform, "language": None, "decoding": self.decoding},
+                    {"waveform": waveform, "language": None, "decoding": self.decoding},
+                    {"audio": waveform, "language": None, "decoding_method": self.decoding},
+                    {"audio": waveform, "language": None},
+                    {"audio": waveform, "lang": None},
+                    {"waveform": waveform, "language": None},
+                    {"input": waveform, "language": None},
+                ]
+            )
+        kwargs_candidates.extend(
+            [
+                {"audio": waveform, "decoding": self.decoding},
+                {"speech": waveform, "decoding": self.decoding},
+                {"input": waveform, "decoding": self.decoding},
+                {"waveform": waveform, "decoding": self.decoding},
+                {"audio": waveform, "decoding_method": self.decoding},
+                {"audio": waveform},
+                {"speech": waveform},
+                {"waveform": waveform},
+                {"input": waveform},
+            ]
+        )
 
         for method_name in method_candidates:
             if not hasattr(self.model, method_name):
@@ -288,13 +328,26 @@ class IndicConformerEngine(BaseEngine):
                     continue
 
         if callable(self.model):
-            callable_attempts = (
-                lambda: self.model(waveform, lang=lang),
-                lambda: self.model(waveform, language=lang),
-                lambda: self.model(waveform, src_lang=lang),
-                lambda: self.model(waveform, lang),
-                lambda: self.model(waveform),
-            )
+            callable_attempts = []
+            if lang:
+                callable_attempts.extend(
+                    [
+                        lambda: self.model(waveform, lang=lang),
+                        lambda: self.model(waveform, language=lang),
+                        lambda: self.model(waveform, src_lang=lang),
+                        lambda: self.model(waveform, lang),
+                    ]
+                )
+            else:
+                callable_attempts.extend(
+                    [
+                        lambda: self.model(waveform, lang=None),
+                        lambda: self.model(waveform, language=None),
+                        lambda: self.model(waveform, src_lang=None),
+                        lambda: self.model(waveform, None),
+                    ]
+                )
+            callable_attempts.append(lambda: self.model(waveform))
             last_type_error: Optional[TypeError] = None
             for attempt in callable_attempts:
                 try:
@@ -305,11 +358,18 @@ class IndicConformerEngine(BaseEngine):
                 except Exception as exc:  # noqa: BLE001
                     raise TranscribeError("TRANSCRIBE_FAILED", str(exc), True) from exc
             if last_type_error is not None:
-                raise TranscribeError("TRANSCRIBE_FAILED", str(last_type_error), True) from last_type_error
+                err_msg = str(last_type_error)
+                if not lang and "positional argument" in err_msg and "'lang'" in err_msg:
+                    raise TranscribeError(
+                        "LANGUAGE_HINT_REQUIRED",
+                        "IndicConformer requires an explicit language hint for this audio; enable fallback or use faster-whisper for auto-detect",
+                        False,
+                    ) from last_type_error
+                raise TranscribeError("TRANSCRIBE_FAILED", err_msg, True) from last_type_error
 
         raise TranscribeError("TRANSCRIBE_FAILED", "No compatible decode method found", True)
 
-    def _normalize_output(self, raw: Any, requested_lang: str) -> Dict[str, Any]:
+    def _normalize_output(self, raw: Any, requested_lang: Optional[str]) -> Dict[str, Any]:
         if isinstance(raw, str):
             return {
                 "text": normalize_text(raw),
@@ -357,8 +417,8 @@ class IndicConformerEngine(BaseEngine):
             "segments": normalized_segments,
         }
 
-    def transcribe(self, wav_tensor: torch.Tensor, lang: str) -> Dict[str, Any]:
-        language = self.resolve_lang(lang)
+    def transcribe(self, wav_tensor: torch.Tensor, lang: Optional[str]) -> Dict[str, Any]:
+        language = self.resolve_lang(lang, allow_auto=True)
 
         def _run() -> Dict[str, Any]:
             waveform = wav_tensor.detach().cpu()

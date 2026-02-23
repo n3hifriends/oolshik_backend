@@ -108,7 +108,7 @@ public class HelpRequestController {
             job = transcriptionJobService.createOrGet(
                     created.getId(),
                     transcriptionAudioUrl,
-                    null,
+                    "auto",
                     TRANSCRIPTION_ENGINE,
                     TRANSCRIPTION_MODEL_VERSION
             );
