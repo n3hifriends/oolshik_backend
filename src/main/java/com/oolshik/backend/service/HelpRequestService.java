@@ -1,6 +1,7 @@
 package com.oolshik.backend.service;
 
 import com.oolshik.backend.config.TaskRecoveryProperties;
+import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestEventType;
@@ -18,9 +19,13 @@ import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.HelpRequestOfferEventRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.web.HelpRequestController;
+import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestSummaryItem;
+import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestSummaryResponse;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
+import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
 import com.oolshik.backend.web.error.ConflictOperationException;
+import io.micrometer.core.instrument.Metrics;
 import org.apache.coyote.BadRequestException;
 import org.locationtech.jts.geom.Point;
 import org.springframework.data.domain.Page;
@@ -50,6 +55,7 @@ public class HelpRequestService {
     private final HelpRequestRatingService ratingService;
     private final HelpRequestCandidateService candidateService;
     private final HelpRequestOfferEventRepository offerEventRepository;
+    private final ActiveRequestCapConfigService activeRequestCapConfigService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -61,7 +67,8 @@ public class HelpRequestService {
             HelperLocationService helperLocationService,
             HelpRequestRatingService ratingService,
             HelpRequestCandidateService candidateService,
-            HelpRequestOfferEventRepository offerEventRepository
+            HelpRequestOfferEventRepository offerEventRepository,
+            ActiveRequestCapConfigService activeRequestCapConfigService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -73,6 +80,7 @@ public class HelpRequestService {
         this.ratingService = ratingService;
         this.candidateService = candidateService;
         this.offerEventRepository = offerEventRepository;
+        this.activeRequestCapConfigService = activeRequestCapConfigService;
     }
 
     @Transactional
@@ -86,12 +94,19 @@ public class HelpRequestService {
             BigDecimal offerAmount,
             String offerCurrency
     ) {
-        UserEntity requester = userRepo.findById(requesterId).orElseThrow(() -> new IllegalArgumentException("Requester not found"));
+        UserEntity requester = userRepo.findByIdForUpdate(requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Requester not found"));
+
         boolean titleBlank = (title == null || title.isBlank());
         boolean descriptionBlank = (description == null || description.isBlank());
         boolean hasVoice = voiceUrl != null && !voiceUrl.isBlank();
         if (titleBlank && !hasVoice) {
             throw new IllegalArgumentException("voiceUrl is required when title is empty");
+        }
+
+        HelpRequestStatus nextStatus = titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN;
+        if (HelpRequestActivityPolicy.isActive(nextStatus)) {
+            enforceActiveRequestCapOrThrow(requesterId);
         }
 
         if (titleBlank) {
@@ -108,22 +123,24 @@ public class HelpRequestService {
         e.setTitle(title);
         e.setDescription(description);
         e.setRadiusMeters(radiusMeters);
-        e.setStatus(titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN);
+        e.setStatus(nextStatus);
         e.setVoiceUrl(voiceUrl);
         e.setLocation(location);
         e.setRadiusStage(0);
         e.setOfferAmount(normalizedOffer);
         e.setOfferCurrency(normalizedCurrency);
-        e.setOfferUpdatedAt(normalizedOffer == null ? null : OffsetDateTime.now(ZoneOffset.UTC));
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        e.setOfferUpdatedAt(normalizedOffer == null ? null : now);
         if (titleBlank) {
             e.setNextEscalationAt(null);
         } else {
-            e.setNextEscalationAt(radiusExpansionService.initialNextEscalationAt(OffsetDateTime.now(), radiusMeters));
+            e.setNextEscalationAt(radiusExpansionService.initialNextEscalationAt(now, radiusMeters));
             e.setOfferLastNotifiedAmount(normalizedOffer);
         }
+
         HelpRequestEntity saved = repo.save(e);
         if (saved.getStatus() == HelpRequestStatus.OPEN) {
-            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
             candidateService.seedCandidatesForNewRequest(saved, now);
             NotificationEventContext context = buildContext(
                     requesterId,
@@ -671,6 +688,109 @@ public class HelpRequestService {
         );
         notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_TIMEOUT, existing, context);
         return true;
+    }
+
+    @Transactional(readOnly = true)
+    public ActiveRequestSummaryResponse getActiveSummary(UUID requesterId) {
+        ActiveRequestSnapshot snapshot = buildActiveRequestSnapshot(requesterId);
+        List<ActiveRequestSummaryItem> activeRequests = snapshot.activeRequests().stream()
+                .map(request -> new ActiveRequestSummaryItem(
+                        request.getId(),
+                        request.getStatus(),
+                        request.getCreatedAt()
+                ))
+                .toList();
+        return new ActiveRequestSummaryResponse(
+                snapshot.cap(),
+                snapshot.activeCount(),
+                snapshot.blocked(),
+                snapshot.suggestedRequestId(),
+                activeRequests
+        );
+    }
+
+    private void enforceActiveRequestCapOrThrow(UUID requesterId) {
+        ActiveRequestSnapshot snapshot = buildActiveRequestSnapshot(requesterId);
+        if (!snapshot.blocked()) {
+            return;
+        }
+
+        List<UUID> activeRequestIds = snapshot.activeRequests().stream()
+                .map(HelpRequestEntity::getId)
+                .toList();
+        if (activeRequestIds.isEmpty() && snapshot.suggestedRequestId() != null) {
+            activeRequestIds = List.of(snapshot.suggestedRequestId());
+        }
+        if (activeRequestIds.isEmpty() && snapshot.suggestedRequestId() == null) {
+            return;
+        }
+
+        UUID eventRequestId = snapshot.suggestedRequestId();
+        if (eventRequestId == null) {
+            eventRequestId = activeRequestIds.isEmpty() ? UUID.randomUUID() : activeRequestIds.get(0);
+        }
+
+        eventService.record(
+                eventRequestId,
+                HelpRequestEventType.CREATE_BLOCKED_CAP_REACHED,
+                HelpRequestActorRole.REQUESTER,
+                requesterId,
+                null,
+                null,
+                buildCapBlockedMetadata(snapshot.cap(), snapshot.activeCount(), snapshot.suggestedRequestId())
+        );
+        Metrics.counter("help_request.create.blocked", "reason", "active_request_cap").increment();
+
+        throw new ActiveRequestCapReachedException(
+                snapshot.cap(),
+                snapshot.activeCount(),
+                activeRequestIds,
+                snapshot.suggestedRequestId()
+        );
+    }
+
+    private ActiveRequestSnapshot buildActiveRequestSnapshot(UUID requesterId) {
+        List<HelpRequestStatus> activeStatuses = HelpRequestActivityPolicy.activeStatuses();
+        int cap = activeRequestCapConfigService.getMaxActiveRequestsPerRequester();
+        int activeCount = safeToInt(repo.countByRequesterIdAndStatusIn(requesterId, activeStatuses));
+        List<HelpRequestEntity> activeRequests = repo.findTop10ByRequesterIdAndStatusInOrderByCreatedAtDescIdDesc(
+                requesterId,
+                activeStatuses
+        );
+        UUID suggestedRequestId = repo.findFirstByRequesterIdAndStatusInOrderByCreatedAtAscIdAsc(
+                        requesterId,
+                        activeStatuses
+                )
+                .map(HelpRequestEntity::getId)
+                .orElse(null);
+        if (suggestedRequestId == null && !activeRequests.isEmpty()) {
+            suggestedRequestId = activeRequests.get(activeRequests.size() - 1).getId();
+        }
+        return new ActiveRequestSnapshot(cap, activeCount, activeCount >= cap, activeRequests, suggestedRequestId);
+    }
+
+    private int safeToInt(long value) {
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) value;
+    }
+
+    private String buildCapBlockedMetadata(int cap, int activeCount, UUID suggestedRequestId) {
+        String suggestedJson = suggestedRequestId == null ? "null" : "\"" + suggestedRequestId + "\"";
+        return "{\"cap\":" + cap
+                + ",\"activeCount\":" + activeCount
+                + ",\"suggestedRequestId\":" + suggestedJson
+                + "}";
+    }
+
+    private record ActiveRequestSnapshot(
+            int cap,
+            int activeCount,
+            boolean blocked,
+            List<HelpRequestEntity> activeRequests,
+            UUID suggestedRequestId
+    ) {
     }
 
     @Transactional(readOnly = true)
