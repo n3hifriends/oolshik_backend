@@ -63,7 +63,7 @@ public class PaymentRequestController {
             @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
             @PathVariable("id") String rawId) {
         UserEntity caller = requireAuthenticatedUser(principal);
-        UUID id = requireUuid(rawId, "id");
+        UUID id = requireUuid(rawId);
         PaymentRequest pr = requireParticipantPayment(id, caller.getId());
         return ResponseEntity.ok(toResponse(pr, caller.getId()));
     }
@@ -74,7 +74,7 @@ public class PaymentRequestController {
             @PathVariable("taskId") String rawTaskId
     ) {
         UserEntity caller = requireAuthenticatedUser(principal);
-        UUID taskId = requireUuid(rawTaskId, "taskId");
+        UUID taskId = requireUuid(rawTaskId);
         PaymentRequest active;
         try {
             active = service.getActiveForTask(taskId);
@@ -93,7 +93,7 @@ public class PaymentRequestController {
             @PathVariable("id") String rawId,
             @RequestBody(required = false) InitiatePaymentRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
-        UUID id = requireUuid(rawId, "id");
+        UUID id = requireUuid(rawId);
         PaymentRequest pr = requireParticipantPayment(id, caller.getId());
         requirePayer(pr, caller.getId());
         PaymentRequest updated = service.markInitiated(id, caller.getId());
@@ -106,7 +106,7 @@ public class PaymentRequestController {
             @PathVariable("id") String rawId,
             @RequestBody(required = false) MarkPaidRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
-        UUID id = requireUuid(rawId, "id");
+        UUID id = requireUuid(rawId);
         PaymentRequest pr = requireParticipantPayment(id, caller.getId());
         requirePayer(pr, caller.getId());
         PaymentRequest updated =
@@ -120,7 +120,7 @@ public class PaymentRequestController {
             @PathVariable("id") String rawId,
             @RequestBody Map<String, String> body) {
         UserEntity caller = requireAuthenticatedUser(principal);
-        UUID id = requireUuid(rawId, "id");
+        UUID id = requireUuid(rawId);
         requireParticipantPayment(id, caller.getId());
         PaymentRequest updated = service.dispute(id, caller.getId(), body == null ? null : body.get("reason"));
         return ResponseEntity.ok(Map.of("status", updated.getStatus()));
@@ -174,18 +174,16 @@ public class PaymentRequestController {
         return pr;
     }
 
-    private static UUID requireUuid(String rawValue, String parameterName) {
+    private static UUID requireUuid(String rawValue) {
         try {
             if (rawValue == null || rawValue.isBlank()) {
-                throw new IllegalArgumentException("Value is blank");
+                throw new IllegalArgumentException("errors.payment.invalidUuid");
             }
             return UUID.fromString(rawValue);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    String.format(
-                            "Invalid %s. Expected a UUID in the format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.",
-                            parameterName),
+                    "errors.payment.invalidUuid",
                     ex);
         }
     }

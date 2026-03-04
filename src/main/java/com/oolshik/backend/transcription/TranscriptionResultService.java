@@ -39,7 +39,7 @@ public class TranscriptionResultService {
 
         TranscriptionStatus status = result.status();
         if (status == null) {
-            throw new IllegalArgumentException("Result status is required");
+            throw new IllegalArgumentException("errors.transcription.resultStatusRequired");
         }
 
         job.setStatus(status);

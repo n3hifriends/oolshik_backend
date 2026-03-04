@@ -1,13 +1,16 @@
 package com.oolshik.backend.media;
 
 import com.oolshik.backend.media.Dtos.*;
+import com.oolshik.backend.web.error.ForbiddenOperationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,7 +88,9 @@ public class AudioController {
     @DeleteMapping("/{id}")
     public void delete(@PathVariable UUID id, Authentication auth) throws IOException {
         AudioFile af = repo.findById(id).orElseThrow();
-        if (!af.getOwnerUserId().equals(auth.getName())) throw new RuntimeException("Forbidden");
+        if (!af.getOwnerUserId().equals(auth.getName())) {
+            throw new ForbiddenOperationException("errors.forbidden");
+        }
         storage.delete(af.getStorageKey());
         repo.delete(af);
     }
@@ -93,7 +98,9 @@ public class AudioController {
     @GetMapping("/{id}/stream")
     public void stream(@PathVariable UUID id, HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
         AudioFile af = repo.findById(id).orElseThrow();
-        if (!af.getOwnerUserId().equals(auth.getName())) throw new RuntimeException("Forbidden");
+        if (!af.getOwnerUserId().equals(auth.getName())) {
+            throw new ForbiddenOperationException("errors.forbidden");
+        }
 
         long fileLength = storage.size(af.getStorageKey());
         String range = request.getHeader("Range");
@@ -124,27 +131,35 @@ public class AudioController {
     public MpuCreateResp mpuCreate(@RequestBody MpuCreateReq req, Authentication auth) {
         String userId = auth.getName();
         String objectKey = userId + "/mpu/" + UUID.randomUUID() + "-" + req.filename();
-        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        if (!(storage instanceof S3StorageService s3)) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
+        }
         var res = s3.mpuCreate(objectKey, req.mimeType());
         return new MpuCreateResp(res.uploadId(), objectKey);
     }
 
     @PostMapping("/mpu/sign-part")
     public MpuSignedPart mpuSign(@RequestBody MpuSignPartReq req) {
-        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        if (!(storage instanceof S3StorageService s3)) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
+        }
         String url = s3.presignPartUrl(req.uploadId(), req.objectKey(), req.partNumber(), Duration.ofMinutes(15));
         return new MpuSignedPart(req.partNumber(), url);
     }
 
     @PostMapping("/mpu/complete")
     public void mpuComplete(@RequestBody MpuCompleteReq req) {
-        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        if (!(storage instanceof S3StorageService s3)) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
+        }
         s3.mpuComplete(req.uploadId(), req.objectKey(), req.parts());
     }
 
     @PostMapping("/mpu/abort")
     public void mpuAbort(@RequestBody MpuAbortReq req) {
-        if (!(storage instanceof S3StorageService s3)) throw new IllegalStateException("MPU requires S3 storage");
+        if (!(storage instanceof S3StorageService s3)) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
+        }
         s3.mpuAbort(req.uploadId(), req.objectKey());
     }
 }

@@ -5,6 +5,7 @@ import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.payment.dto.PaymentDtos.*;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.service.PaymentNotificationService;
+import com.oolshik.backend.web.error.ForbiddenOperationException;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.MessageDigestAlgorithms;
 import org.locationtech.jts.geom.Coordinate;
@@ -120,7 +121,7 @@ public class PaymentRequestService {
     public PaymentRequest markInitiated(UUID id, UUID actorUserId) {
         var pr = get(id);
         if (!canPay(pr, actorUserId)) {
-            throw new SecurityException("Only payer can initiate payment");
+            throw new ForbiddenOperationException("errors.payment.onlyPayer");
         }
         if (STATUS_PENDING.equals(pr.getStatus())) {
             String previous = pr.getStatus();
@@ -142,7 +143,7 @@ public class PaymentRequestService {
     public PaymentRequest markPaid(UUID id, UUID actorUserId, BigDecimal paidAmount, String proofUrl) {
         var pr = get(id);
         if (!canPay(pr, actorUserId)) {
-            throw new SecurityException("Only payer can mark payment as paid");
+            throw new ForbiddenOperationException("errors.payment.onlyPayer");
         }
         if (STATUS_PAID_MARKED.equals(pr.getStatus())) {
             return pr;
@@ -168,7 +169,7 @@ public class PaymentRequestService {
     public PaymentRequest dispute(UUID id, UUID actorUserId, String reason) {
         var pr = get(id);
         if (!isTaskParticipant(pr, actorUserId)) {
-            throw new SecurityException("Only task participants can dispute payment");
+            throw new ForbiddenOperationException("errors.payment.participantRequired");
         }
         if (STATUS_DISPUTED.equals(pr.getStatus())) {
             return pr;

@@ -54,15 +54,15 @@ public class FeedbackService {
             CreateRequest req
     ) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key header is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "errors.feedback.idempotencyKeyRequired");
         }
 
         if (req.feedbackType() == FeedbackType.CSAT && req.rating() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating is required for CSAT");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "errors.feedback.csatRatingRequired");
         }
 
         if (req.contextType() == FeedbackContextType.TASK && req.contextId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contextId is required for TASK feedback");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "errors.feedback.contextIdRequired");
         }
 
         UserEntity user = userService.getOrCreate(principal, null, null);
@@ -78,7 +78,7 @@ public class FeedbackService {
         OffsetDateTime since = now.minusHours(rateLimitWindowHours);
         long count = feedbackRepo.countByUserIdAndCreatedAtAfter(userId, since);
         if (count >= maxPerDay) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Rate limit exceeded");
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "errors.feedback.rateLimitExceeded");
         }
 
         FeedbackEventEntity ev = new FeedbackEventEntity();

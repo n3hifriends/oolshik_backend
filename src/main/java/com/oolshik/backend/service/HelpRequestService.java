@@ -101,7 +101,7 @@ public class HelpRequestService {
         boolean descriptionBlank = (description == null || description.isBlank());
         boolean hasVoice = voiceUrl != null && !voiceUrl.isBlank();
         if (titleBlank && !hasVoice) {
-            throw new IllegalArgumentException("voiceUrl is required when title is empty");
+            throw new IllegalArgumentException("errors.request.voiceUrlRequiredWhenTitleEmpty");
         }
 
         HelpRequestStatus nextStatus = titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN;
@@ -347,7 +347,7 @@ public class HelpRequestService {
         e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
         if (completePayload != null && completePayload.rating != null) {
             if (e.getHelperId() == null) {
-                throw new BadRequestException("helper not assigned yet");
+                throw new BadRequestException("errors.request.helperNotAssignedYet");
             }
             ratingService.createRating(
                     requestId,
@@ -388,7 +388,7 @@ public class HelpRequestService {
         if (ratePayload != null && ratePayload.rating != null) {
             UUID targetUserId = isRequester ? e.getHelperId() : e.getRequesterId();
             if (targetUserId == null) {
-                throw new BadRequestException("rating target not found");
+                throw new BadRequestException("errors.request.ratingTargetNotFound");
             }
             HelpRequestActorRole role = isRequester ? HelpRequestActorRole.REQUESTER : HelpRequestActorRole.HELPER;
             ratingService.createRating(

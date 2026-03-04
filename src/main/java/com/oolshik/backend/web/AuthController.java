@@ -54,7 +54,17 @@ public class AuthController {
     @PostMapping("/otp/verify")
     public ResponseEntity<?> otpVerify(@RequestBody @Valid OtpVerify req) {
         boolean ok = otp.verifyLoginOtp(req.phone(), req.code());
-        if (!ok) return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired OTP"));
+        if (!ok) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error",
+                    messageSource.getMessage(
+                            "errors.auth.invalidOrExpiredOtp",
+                            null,
+                            "Invalid or expired OTP",
+                            LocaleSupport.normalizeLocale(LocaleContextHolder.getLocale())
+                    )
+            ));
+        }
         var user = userService.getOrCreateByPhone(req.phone(), req.displayName(), req.email());
         String access = jwt.generateAccessToken(user.getId(), user.getPhoneNumber());
         String refresh = jwt.generateRefreshToken(user.getId());

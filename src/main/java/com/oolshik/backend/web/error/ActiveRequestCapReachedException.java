@@ -8,7 +8,7 @@ import java.util.UUID;
 public class ActiveRequestCapReachedException extends RuntimeException {
 
     public static final String CODE = "ACTIVE_REQUEST_CAP_REACHED";
-    private static final String DEFAULT_MESSAGE = "Active request limit reached.";
+    private static final String MESSAGE_KEY = "errors.activeRequestCapReached";
 
     private final ActiveRequestCapReachedResponse response;
 
@@ -18,10 +18,10 @@ public class ActiveRequestCapReachedException extends RuntimeException {
             List<UUID> activeRequestIds,
             UUID suggestedRequestId
     ) {
-        super(DEFAULT_MESSAGE);
+        super(MESSAGE_KEY);
         this.response = new ActiveRequestCapReachedResponse(
                 CODE,
-                DEFAULT_MESSAGE,
+                MESSAGE_KEY,
                 cap,
                 activeCount,
                 List.copyOf(activeRequestIds),

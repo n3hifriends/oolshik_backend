@@ -186,11 +186,11 @@ public class HelpRequestController {
                                                     @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                     @RequestBody(required = false) CompletePayload payload) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
-        HelpRequestEntity updated  = null;
+        HelpRequestEntity updated;
         try {
             updated = service.complete(id, requester.getId(), payload);
         } catch (BadRequestException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e.getMessage(), e);
         }
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
@@ -200,11 +200,11 @@ public class HelpRequestController {
                                                @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                @RequestBody RatePayload body) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
-        HelpRequestEntity updated = null;
+        HelpRequestEntity updated;
         try {
             updated = service.rate(id, requester.getId(), body);
         } catch (BadRequestException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e.getMessage(), e);
         }
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }

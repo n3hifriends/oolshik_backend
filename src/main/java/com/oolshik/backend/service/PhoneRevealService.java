@@ -42,7 +42,7 @@ public class PhoneRevealService {
         if (viewerUserId.equals(hr.getRequesterId())) {
             UUID helperTarget = hr.getHelperId() != null ? hr.getHelperId() : hr.getPendingHelperId();
             if (helperTarget == null) {
-                throw new ConflictOperationException("Helper not assigned");
+                throw new ConflictOperationException("errors.phoneReveal.helperNotAssigned");
             }
             targetUserId = helperTarget;
         } else if (
@@ -51,7 +51,7 @@ public class PhoneRevealService {
         ) {
             targetUserId = hr.getRequesterId();
         } else {
-            throw new ConflictOperationException("Only requester or assigned helper can reveal phone");
+            throw new ConflictOperationException("errors.phoneReveal.participantRequired");
         }
 
         UserEntity target = userRepository.findById(targetUserId)

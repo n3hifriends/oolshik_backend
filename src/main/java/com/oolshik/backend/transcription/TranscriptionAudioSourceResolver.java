@@ -34,7 +34,7 @@ public class TranscriptionAudioSourceResolver {
     private String requireConfiguredDemoUrl() {
         String demo = normalize(properties.getDemoAudioUrl());
         if (demo == null) {
-            throw new IllegalArgumentException("Demo transcription audio URL is not configured");
+            throw new IllegalArgumentException("errors.transcription.demoAudioUrlMissing");
         }
         return demo;
     }
@@ -46,16 +46,16 @@ public class TranscriptionAudioSourceResolver {
         URI uri = parseHttpUri(normalized);
         String host = uri.getHost();
         if (host == null || host.isBlank()) {
-            throw new IllegalArgumentException("voiceUrl host is missing");
+            throw new IllegalArgumentException("errors.transcription.voiceUrlHostMissing");
         }
 
         String hostLower = host.toLowerCase(Locale.ROOT);
         if (normalized.contains("/api/media/audio/") || normalized.contains("/api/public/media/audio/")) {
-            throw new IllegalArgumentException("voiceUrl points to local stream endpoint; expected public S3 URL");
+            throw new IllegalArgumentException("errors.transcription.voiceUrlLocalEndpointNotAllowed");
         }
 
         if (!matchesAnyAllowedHostSuffix(hostLower, properties.getS3AllowedHostSuffixes())) {
-            throw new IllegalArgumentException("voiceUrl host is not allowed for S3-only mode: " + host);
+            throw new IllegalArgumentException("errors.transcription.voiceUrlHostNotAllowed");
         }
         return normalized;
     }
@@ -95,11 +95,11 @@ public class TranscriptionAudioSourceResolver {
         try {
             uri = URI.create(value);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("voiceUrl is not a valid URL");
+            throw new IllegalArgumentException("errors.transcription.voiceUrlInvalid");
         }
         String scheme = uri.getScheme();
         if (scheme == null || !"https".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("voiceUrl must be an HTTPS URL in S3-only mode");
+            throw new IllegalArgumentException("errors.transcription.voiceUrlHttpsRequired");
         }
         return uri;
     }
