@@ -1,5 +1,6 @@
 package com.oolshik.backend.repo;
 
+import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -8,7 +9,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, UUID> {
@@ -124,6 +127,18 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           nativeQuery = true
   )
   long countCompletedHelps(@Param("helperId") UUID helperId);
+
+  long countByRequesterIdAndStatusIn(UUID requesterId, Collection<HelpRequestStatus> statuses);
+
+  List<HelpRequestEntity> findTop10ByRequesterIdAndStatusInOrderByCreatedAtDescIdDesc(
+          UUID requesterId,
+          Collection<HelpRequestStatus> statuses
+  );
+
+  Optional<HelpRequestEntity> findFirstByRequesterIdAndStatusInOrderByCreatedAtAscIdAsc(
+          UUID requesterId,
+          Collection<HelpRequestStatus> statuses
+  );
 
 
   @Query(

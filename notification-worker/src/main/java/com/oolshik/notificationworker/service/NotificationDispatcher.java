@@ -109,7 +109,7 @@ public class NotificationDispatcher {
             String localeTag = localesByUser.getOrDefault(recipientId, LocaleSupport.EN_IN_TAG);
             NotificationTemplateService.NotificationTemplate template =
                     templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId), localeTag);
-            String body = enrichBodyWithOffer(template.body(), payload);
+            String body = enrichBodyWithOffer(template.body(), payload, localeTag);
             for (UserDeviceEntity device : userDevices) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("type", payload.getEventType());
@@ -206,16 +206,17 @@ public class NotificationDispatcher {
         return payload.getEventType() + ":" + payload.getTaskId() + ":" + recipientId;
     }
 
-    private String enrichBodyWithOffer(String body, NotificationEventPayload payload) {
+    private String enrichBodyWithOffer(String body, NotificationEventPayload payload, String localeTag) {
         if (payload.getOfferAmount() == null) {
             return body;
         }
+        String offerLabel = LocaleSupport.isMarathi(localeTag) ? "ऑफर" : "Offer";
         String currency = payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency();
-        String suffix = " Offer: " + currency + " " + payload.getOfferAmount().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        String suffix = " " + offerLabel + ": " + currency + " " + payload.getOfferAmount().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
         if (body == null || body.isBlank()) {
             return suffix.trim();
         }
-        if (body.contains("Offer:")) {
+        if (body.contains("Offer:") || body.contains("ऑफर:")) {
             return body;
         }
         return body + suffix;

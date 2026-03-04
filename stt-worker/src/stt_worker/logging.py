@@ -23,6 +23,9 @@ class JsonFormatter(logging.Formatter):
         "error_code",
         "error_message",
         "model_ready",
+        "detected_lang",
+        "detected_confidence",
+        "route_reason",
     )
 
     def format(self, record: logging.LogRecord) -> str:

@@ -11,5 +11,6 @@ public enum HelpRequestEventType {
     CANCELLED,
     TIMEOUT,
     COMPLETED,
-    RADIUS_EXPANDED
+    RADIUS_EXPANDED,
+    CREATE_BLOCKED_CAP_REACHED
 }

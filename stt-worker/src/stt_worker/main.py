@@ -67,6 +67,8 @@ class RuntimeOptions:
     download_retries: int
     download_backoff_sec: float
     fallback_enabled: bool
+    auto_route_primary_langs: frozenset[str]
+    auto_route_min_confidence: float
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -81,6 +83,42 @@ def _normalize_engine_name(value: str) -> str:
     if v in {"fasterwhisper", "faster-whisper"}:
         return ENGINE_FASTERWHISPER
     return ENGINE_INDICCONFORMER
+
+
+def _canonical_lang_code(value: Any) -> Optional[str]:
+    candidate = str(value or "").strip().lower()
+    if candidate in {"", "auto", "detect"}:
+        return None
+    for sep in ("-", "_"):
+        if sep in candidate:
+            candidate = candidate.split(sep, 1)[0].strip()
+            break
+    return candidate or None
+
+
+def _parse_lang_csv(value: str, default: tuple[str, ...]) -> frozenset[str]:
+    raw = value.strip()
+    if not raw:
+        items = default
+    else:
+        items = tuple(part.strip() for part in raw.split(","))
+    normalized = {_canonical_lang_code(item) for item in items}
+    return frozenset(lang for lang in normalized if lang)
+
+
+def _env_float_clamped(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _coerce_optional_float(value: Any) -> Optional[float]:
+    return float(value) if isinstance(value, (int, float)) else None
 
 
 def get_attempt(msg: Message) -> int:
@@ -308,12 +346,18 @@ def process_message(
 
     start = time.perf_counter()
     attempt = get_attempt(msg)
-    selected_lang = (job.languageHint or options.default_lang or "mr").strip().lower()
+    raw_language_hint = (job.languageHint or "").strip().lower()
+    default_language_hint = (options.default_lang or "mr").strip().lower()
+    effective_language_hint = raw_language_hint or default_language_hint
+    selected_lang = None if effective_language_hint in {"", "auto", "detect"} else effective_language_hint
+    log_lang = selected_lang or "auto"
 
     tmp_dir = settings.tmp_dir
     os.makedirs(tmp_dir, exist_ok=True)
     input_path = os.path.join(tmp_dir, f"{job.jobId}.input")
     wav_path = os.path.join(tmp_dir, f"{job.jobId}.wav")
+    fallback_used = False
+    used_engine = engine
 
     try:
         download_start = time.perf_counter()
@@ -337,13 +381,116 @@ def process_message(
             raise AudioDownloadError("AUDIO_TOO_LONG", f"Audio longer than {settings.max_audio_duration_sec}s", False)
 
         transcribe_start = time.perf_counter()
-        fallback_used = False
-        used_engine = engine
-
         try:
-            result = engine.transcribe(wav_tensor, selected_lang)
+            if selected_lang is None and engine.engine_name == ENGINE_INDICCONFORMER:
+                if fallback_engine is None:
+                    raise TranscribeError(
+                        "LANGUAGE_HINT_REQUIRED",
+                        "Auto language detection requires faster-whisper fallback; set STT_ENABLE_FALLBACK=true or send languageHint",
+                        False,
+                    )
+                fallback_used = True
+                used_engine = fallback_engine
+                log.info(
+                    "Using fallback engine for auto language detection",
+                    extra={
+                        "stage": "transcribe",
+                        "job_id": job.jobId,
+                        "engine": engine.engine_name,
+                        "lang": log_lang,
+                        "fallback_used": True,
+                        "error_code": None,
+                    },
+                )
+                fallback_result = fallback_engine.transcribe(wav_tensor, selected_lang)
+                detected_lang = _canonical_lang_code(fallback_result.get("language"))
+                detected_confidence = _coerce_optional_float(fallback_result.get("confidence"))
+                if detected_lang and detected_lang != fallback_result.get("language"):
+                    fallback_result = dict(fallback_result)
+                    fallback_result["language"] = detected_lang
+                result = fallback_result
+
+                primary_accepts_detected_lang = bool(detected_lang) and (
+                    engine.resolve_lang(detected_lang, allow_auto=True) == detected_lang
+                )
+                should_route_to_primary = (
+                    detected_lang in options.auto_route_primary_langs
+                    and primary_accepts_detected_lang
+                    and detected_confidence is not None
+                    and detected_confidence >= options.auto_route_min_confidence
+                )
+                if should_route_to_primary:
+                    log.info(
+                        "Routing auto-detected language to primary engine",
+                        extra={
+                            "stage": "transcribe",
+                            "job_id": job.jobId,
+                            "engine": engine.engine_name,
+                            "lang": log_lang,
+                            "fallback_used": True,
+                            "error_code": None,
+                            "detected_lang": detected_lang,
+                            "detected_confidence": round(detected_confidence, 3),
+                        },
+                    )
+                    try:
+                        routed_result = engine.transcribe(wav_tensor, detected_lang)
+                        if not routed_result.get("language"):
+                            routed_result = dict(routed_result)
+                            routed_result["language"] = detected_lang
+                        result = routed_result
+                        used_engine = engine
+                    except TranscribeError as route_exc:
+                        log.warning(
+                            "Primary engine failed after auto-detect; using fallback transcript",
+                            extra={
+                                "stage": "transcribe",
+                                "job_id": job.jobId,
+                                "engine": engine.engine_name,
+                                "lang": log_lang,
+                                "fallback_used": True,
+                                "error_code": route_exc.code,
+                                "detected_lang": detected_lang,
+                                "detected_confidence": round(detected_confidence, 3),
+                            },
+                        )
+                        result = fallback_result
+                        used_engine = fallback_engine
+                else:
+                    route_reason = "language_not_routed"
+                    if not detected_lang:
+                        route_reason = "missing_detected_language"
+                    elif detected_lang in options.auto_route_primary_langs and not primary_accepts_detected_lang:
+                        route_reason = "unsupported_primary_language"
+                    elif detected_confidence is None:
+                        route_reason = "missing_detection_confidence"
+                    elif detected_confidence < options.auto_route_min_confidence:
+                        route_reason = "low_detection_confidence"
+                    log.info(
+                        "Keeping fallback transcript after auto-detect",
+                        extra={
+                            "stage": "transcribe",
+                            "job_id": job.jobId,
+                            "engine": fallback_engine.engine_name,
+                            "lang": log_lang,
+                            "fallback_used": True,
+                            "error_code": None,
+                            "detected_lang": detected_lang,
+                            "detected_confidence": (
+                                round(detected_confidence, 3) if detected_confidence is not None else None
+                            ),
+                            "route_reason": route_reason,
+                        },
+                    )
+            else:
+                result = engine.transcribe(wav_tensor, selected_lang)
         except TranscribeError as primary_exc:
-            if engine.engine_name == ENGINE_INDICCONFORMER and options.fallback_enabled and fallback_engine:
+            if (
+                engine.engine_name == ENGINE_INDICCONFORMER
+                and options.fallback_enabled
+                and fallback_engine
+                and not fallback_used
+            ):
                 fallback_used = True
                 log.warning(
                     "Primary engine failed; attempting fallback",
@@ -351,7 +498,7 @@ def process_message(
                         "stage": "transcribe",
                         "job_id": job.jobId,
                         "engine": engine.engine_name,
-                        "lang": selected_lang,
+                        "lang": log_lang,
                         "fallback_used": True,
                         "error_code": primary_exc.code,
                     },
@@ -364,9 +511,8 @@ def process_message(
         STT_TRANSCRIBE_SECONDS.observe(time.perf_counter() - transcribe_start)
 
         transcript_text = result.get("text") or None
-        detected_language = result.get("language")
-        confidence_value = result.get("confidence")
-        confidence = float(confidence_value) if isinstance(confidence_value, (int, float)) else None
+        detected_language = _canonical_lang_code(result.get("language")) or result.get("language")
+        confidence = _coerce_optional_float(result.get("confidence"))
 
         result_payload = build_result(
             job=job,
@@ -391,7 +537,7 @@ def process_message(
                 "stage": "completed",
                 "job_id": job.jobId,
                 "engine": used_engine.engine_name,
-                "lang": selected_lang,
+                "lang": log_lang,
                 "audio_duration": round(preprocessed_duration, 3),
                 "processing_time": round(processing_time, 3),
                 "fallback_used": fallback_used,
@@ -407,7 +553,7 @@ def process_message(
                 "stage": "download",
                 "job_id": job.jobId,
                 "engine": engine.engine_name,
-                "lang": selected_lang,
+                "lang": log_lang,
                 "fallback_used": False,
                 "error_code": error.code,
                 "error_message": error.message,
@@ -432,9 +578,9 @@ def process_message(
             extra={
                 "stage": "transcribe",
                 "job_id": job.jobId,
-                "engine": engine.engine_name,
-                "lang": selected_lang,
-                "fallback_used": False,
+                "engine": used_engine.engine_name,
+                "lang": log_lang,
+                "fallback_used": fallback_used,
                 "error_code": error.code,
                 "error_message": error.message,
             },
@@ -448,8 +594,8 @@ def process_message(
             attempt,
             error,
             "TRANSCRIBE",
-            engine.engine_name,
-            engine.model_version,
+            used_engine.engine_name,
+            used_engine.model_version,
         )
     except Exception as exc:  # noqa: BLE001
         error = classify_error(exc)
@@ -589,6 +735,13 @@ def initialize_engines(settings: Settings) -> Tuple[BaseEngine, Optional[BaseEng
         download_retries=max(0, int(os.getenv("AUDIO_DOWNLOAD_RETRIES", "2"))),
         download_backoff_sec=max(0.1, float(os.getenv("AUDIO_DOWNLOAD_BACKOFF_SEC", "0.5"))),
         fallback_enabled=_env_bool("STT_ENABLE_FALLBACK", True),
+        auto_route_primary_langs=_parse_lang_csv(os.getenv("STT_AUTO_ROUTE_PRIMARY_LANGS", "mr,hi"), ("mr", "hi")),
+        auto_route_min_confidence=_env_float_clamped(
+            "STT_AUTO_ROUTE_MIN_CONFIDENCE",
+            0.70,
+            minimum=0.0,
+            maximum=1.0,
+        ),
     )
 
     if requested_engine == ENGINE_FASTERWHISPER:

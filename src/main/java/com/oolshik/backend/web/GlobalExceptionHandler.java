@@ -1,6 +1,8 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.config.LocaleSupport;
+import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestCapReachedResponse;
+import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
 import jakarta.persistence.EntityNotFoundException;
@@ -131,6 +133,16 @@ public class GlobalExceptionHandler {
     /* ---------------------------
      *  409 – Conflict / Invalid state
      * --------------------------- */
+    @ExceptionHandler(ActiveRequestCapReachedException.class)
+    public ResponseEntity<ActiveRequestCapReachedResponse> handleActiveRequestCapReached(
+            ActiveRequestCapReachedException ex
+    ) {
+        ActiveRequestCapReachedResponse response = ex.response();
+        log.warn("[{}] 409 active_request_cap_reached cap={} activeCount={}",
+                cid(), response.cap(), response.activeCount());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
     @ExceptionHandler(ConflictOperationException.class)
     public ResponseEntity<ApiError> handleConflict(ConflictOperationException ex) {
         String msg = localizeBusinessMessage(ex.getMessage(), "errors.conflict");

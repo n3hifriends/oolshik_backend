@@ -1,6 +1,7 @@
 package com.oolshik.backend.service;
 
 import com.oolshik.backend.config.TaskRecoveryProperties;
+import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestEventType;
 import com.oolshik.backend.domain.HelpRequestRejectReason;
@@ -10,6 +11,7 @@ import com.oolshik.backend.entity.HelpRequestOfferEventEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
+import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,9 +36,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class HelpRequestServiceTest {
@@ -57,6 +62,8 @@ class HelpRequestServiceTest {
     private HelpRequestCandidateService candidateService;
     @Mock
     private com.oolshik.backend.repo.HelpRequestOfferEventRepository offerEventRepository;
+    @Mock
+    private ActiveRequestCapConfigService activeRequestCapConfigService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -64,6 +71,8 @@ class HelpRequestServiceTest {
     @BeforeEach
     void setUp() {
         recoveryProperties = new TaskRecoveryProperties();
+        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
+
         service = new HelpRequestService(
                 repo,
                 userRepo,
@@ -74,7 +83,8 @@ class HelpRequestServiceTest {
                 helperLocationService,
                 ratingService,
                 candidateService,
-                offerEventRepository
+                offerEventRepository,
+                activeRequestCapConfigService
         );
     }
 
@@ -286,7 +296,8 @@ class HelpRequestServiceTest {
         UUID taskId = UUID.randomUUID();
         com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
         requester.setId(requesterId);
-        when(userRepo.findById(requesterId)).thenReturn(Optional.of(requester));
+        when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
         when(repo.save(any())).thenAnswer(inv -> {
             HelpRequestEntity e = inv.getArgument(0);
@@ -311,4 +322,100 @@ class HelpRequestServiceTest {
         verify(notificationService).enqueueTaskEvent(eq(com.oolshik.backend.notification.NotificationEventType.TASK_CREATED), any(), any());
     }
 
+    @Test
+    void capTwoAllowsTwoCreatesAndBlocksThird() {
+        UUID requesterId = UUID.randomUUID();
+        com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
+        requester.setId(requesterId);
+
+        HelpRequestEntity oldest = new HelpRequestEntity();
+        oldest.setId(UUID.randomUUID());
+        oldest.setStatus(HelpRequestStatus.OPEN);
+        oldest.setCreatedAt(OffsetDateTime.now().minusMinutes(2));
+
+        HelpRequestEntity newest = new HelpRequestEntity();
+        newest.setId(UUID.randomUUID());
+        newest.setStatus(HelpRequestStatus.ASSIGNED);
+        newest.setCreatedAt(OffsetDateTime.now().minusMinutes(1));
+
+        when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L, 1L, 2L);
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
+        when(repo.findTop10ByRequesterIdAndStatusInOrderByCreatedAtDescIdDesc(eq(requesterId), any()))
+                .thenReturn(List.of(newest, oldest));
+        when(repo.findFirstByRequesterIdAndStatusInOrderByCreatedAtAscIdAsc(eq(requesterId), any()))
+                .thenReturn(Optional.of(oldest));
+
+        service.create(requesterId, "First", "", 1000, null, null, null, null);
+        service.create(requesterId, "Second", "", 1000, null, null, null, null);
+
+        ActiveRequestCapReachedException ex = assertThrows(
+                ActiveRequestCapReachedException.class,
+                () -> service.create(requesterId, "Third", "", 1000, null, null, null, null)
+        );
+
+        assertEquals(2, ex.response().cap());
+        assertEquals(2, ex.response().activeCount());
+        assertEquals(2, ex.response().activeRequestIds().size());
+        assertEquals(oldest.getId(), ex.response().suggestedRequestId());
+        verify(repo, times(2)).save(any());
+        verify(eventService).record(
+                eq(oldest.getId()),
+                eq(HelpRequestEventType.CREATE_BLOCKED_CAP_REACHED),
+                any(),
+                eq(requesterId),
+                any(),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void draftCreateSkipsCapEnforcement() {
+        UUID requesterId = UUID.randomUUID();
+        com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
+        requester.setId(requesterId);
+
+        when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        HelpRequestEntity saved = service.create(
+                requesterId,
+                "",
+                "voice-first",
+                1000,
+                "https://example.com/voice.m4a",
+                null,
+                null,
+                null
+        );
+
+        assertEquals(HelpRequestStatus.DRAFT, saved.getStatus());
+        verify(repo, never()).countByRequesterIdAndStatusIn(eq(requesterId), any());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void capCheckUsesOnlyActiveStatuses() {
+        UUID requesterId = UUID.randomUUID();
+        com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
+        requester.setId(requesterId);
+
+        when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
+
+        service.create(requesterId, "Need help", "", 1000, null, null, null, null);
+
+        ArgumentCaptor<Collection<HelpRequestStatus>> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
+        verify(repo).countByRequesterIdAndStatusIn(eq(requesterId), statusesCaptor.capture());
+
+        Collection<HelpRequestStatus> statuses = statusesCaptor.getValue();
+        assertTrue(statuses.containsAll(HelpRequestActivityPolicy.activeStatuses()));
+        assertFalse(statuses.contains(HelpRequestStatus.COMPLETED));
+        assertFalse(statuses.contains(HelpRequestStatus.CANCELLED));
+        assertFalse(statuses.contains(HelpRequestStatus.DRAFT));
+    }
 }

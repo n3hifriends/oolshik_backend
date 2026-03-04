@@ -2,6 +2,7 @@ package com.oolshik.notificationworker.service;
 
 import com.oolshik.notificationworker.config.NotificationWorkerProperties;
 import com.oolshik.notificationworker.entity.NotificationDeliveryLogEntity;
+import com.oolshik.notificationworker.model.ExpoPushMessage;
 import com.oolshik.notificationworker.entity.UserDeviceEntity;
 import com.oolshik.notificationworker.model.ExpoPushResponse;
 import com.oolshik.notificationworker.model.NotificationEventPayload;
@@ -11,15 +12,19 @@ import com.oolshik.notificationworker.repo.UserDeviceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -128,5 +133,107 @@ class NotificationDispatcherTest {
         verify(userDeviceRepository).deactivateByTokenHash(eq(expectedHash));
         verify(deliveryLogRepository).updateStatus(any(), eq("FAILED"), any(), any(OffsetDateTime.class));
         verify(templateService).templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN"));
+    }
+
+    @Test
+    void appendsMarathiOfferLabelForMarathiLocale() {
+        UUID taskId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        NotificationEventPayload payload = new NotificationEventPayload();
+        payload.setEventId(UUID.randomUUID());
+        payload.setEventType("OFFER_UPDATED");
+        payload.setTaskId(taskId);
+        payload.setRequesterUserId(requesterId);
+        payload.setOfferAmount(new BigDecimal("100"));
+        payload.setOfferCurrency("INR");
+
+        when(recipientResolver.resolve(payload)).thenReturn(List.of(helperId));
+        when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of(new UserDeviceRepository.UserLocaleRow() {
+            @Override
+            public UUID getUserId() {
+                return helperId;
+            }
+
+            @Override
+            public String getPreferredLanguage() {
+                return "mr-IN";
+            }
+        }));
+
+        UserDeviceEntity device = new UserDeviceEntity();
+        device.setUserId(helperId);
+        device.setToken("ExponentPushToken[mr]");
+        when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
+
+        when(templateService.templateFor(eq("OFFER_UPDATED"), any(), eq("mr-IN")))
+                .thenReturn(new NotificationTemplateService.NotificationTemplate("t", "जवळील कामासाठी विनंतीकर्त्याने ऑफर बदलली आहे."));
+
+        ExpoPushResponse.ExpoPushTicket ticket = new ExpoPushResponse.ExpoPushTicket();
+        ticket.setStatus("ok");
+        ExpoPushResponse response = new ExpoPushResponse();
+        response.setData(List.of(ticket));
+        when(expoPushClient.send(anyList())).thenReturn(response);
+
+        dispatcher.dispatch(payload);
+
+        ArgumentCaptor<List<ExpoPushMessage>> sentMessages = ArgumentCaptor.forClass(List.class);
+        verify(expoPushClient).send(sentMessages.capture());
+        String body = sentMessages.getValue().get(0).getBody();
+        assertTrue(body.contains("ऑफर: INR 100.00"));
+        assertFalse(body.contains("Offer:"));
+    }
+
+    @Test
+    void keepsEnglishOfferLabelForEnglishLocale() {
+        UUID taskId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        NotificationEventPayload payload = new NotificationEventPayload();
+        payload.setEventId(UUID.randomUUID());
+        payload.setEventType("OFFER_UPDATED");
+        payload.setTaskId(taskId);
+        payload.setRequesterUserId(requesterId);
+        payload.setOfferAmount(new BigDecimal("100"));
+        payload.setOfferCurrency("INR");
+
+        when(recipientResolver.resolve(payload)).thenReturn(List.of(helperId));
+        when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of(new UserDeviceRepository.UserLocaleRow() {
+            @Override
+            public UUID getUserId() {
+                return helperId;
+            }
+
+            @Override
+            public String getPreferredLanguage() {
+                return "en-IN";
+            }
+        }));
+
+        UserDeviceEntity device = new UserDeviceEntity();
+        device.setUserId(helperId);
+        device.setToken("ExponentPushToken[en]");
+        when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
+
+        when(templateService.templateFor(eq("OFFER_UPDATED"), any(), eq("en-IN")))
+                .thenReturn(new NotificationTemplateService.NotificationTemplate("t", "A requester updated the offer for a nearby task."));
+
+        ExpoPushResponse.ExpoPushTicket ticket = new ExpoPushResponse.ExpoPushTicket();
+        ticket.setStatus("ok");
+        ExpoPushResponse response = new ExpoPushResponse();
+        response.setData(List.of(ticket));
+        when(expoPushClient.send(anyList())).thenReturn(response);
+
+        dispatcher.dispatch(payload);
+
+        ArgumentCaptor<List<ExpoPushMessage>> sentMessages = ArgumentCaptor.forClass(List.class);
+        verify(expoPushClient).send(sentMessages.capture());
+        String body = sentMessages.getValue().get(0).getBody();
+        assertTrue(body.contains("Offer: INR 100.00"));
+        assertFalse(body.contains("ऑफर:"));
     }
 }

@@ -12,6 +12,7 @@ import com.oolshik.backend.transcription.TranscriptionJobEntity;
 import com.oolshik.backend.transcription.TranscriptionJobPublisher;
 import com.oolshik.backend.transcription.TranscriptionJobService;
 import com.oolshik.backend.web.dto.AcceptHelpRequestReq;
+import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestSummaryResponse;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CreateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
@@ -108,7 +109,7 @@ public class HelpRequestController {
             job = transcriptionJobService.createOrGet(
                     created.getId(),
                     transcriptionAudioUrl,
-                    null,
+                    "auto",
                     TRANSCRIPTION_ENGINE,
                     TRANSCRIPTION_MODEL_VERSION
             );
@@ -134,6 +135,14 @@ public class HelpRequestController {
         UUID viewerId = resolveViewerId(principal);
         return service.nearby(lat, lng, radiusMeters, statuses, pageable)
                 .map(row -> view(row, viewerId));
+    }
+
+    @GetMapping("/active-summary")
+    public ActiveRequestSummaryResponse activeSummary(
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        return service.getActiveSummary(requester.getId());
     }
 
     @GetMapping("/{taskId}")

@@ -14,7 +14,7 @@ services:
       - STT_DLQ_TOPIC=stt.jobs.dlq
       - LOG_LEVEL=INFO
       - STT_ENGINE=indicconformer
-      - STT_ENABLE_FALLBACK=false
+      - STT_ENABLE_FALLBACK=true
       - STT_DEFAULT_LANG=mr
       - ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
       - ASR_DECODING=rnnt

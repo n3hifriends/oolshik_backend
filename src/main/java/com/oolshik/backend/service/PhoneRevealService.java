@@ -35,7 +35,7 @@ public class PhoneRevealService {
         HelpRequestEntity hr = helpRequestRepository.findById(helpRequestId)
                 .orElseThrow(() -> new EntityNotFoundException("Request not found"));
 
-        UserEntity viewer = userRepository.findById(viewerUserId)
+        userRepository.findById(viewerUserId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
         UUID targetUserId;
@@ -51,7 +51,7 @@ public class PhoneRevealService {
         ) {
             targetUserId = hr.getRequesterId();
         } else {
-            throw new ConflictOperationException("Not allowed");
+            throw new ConflictOperationException("Only requester or assigned helper can reveal phone");
         }
 
         UserEntity target = userRepository.findById(targetUserId)
@@ -62,11 +62,11 @@ public class PhoneRevealService {
 
         PhoneRevealEventEntity ev = new PhoneRevealEventEntity();
         ev.setPhoneNumber(fullNumber);
-        ev.setRequesterUserId(helpRequestId);
+        ev.setRequesterUserId(viewerUserId);
         ev.setTargetUserId(targetUserId);
         phoneRevealRepo.save(ev);
 
-        long count = phoneRevealRepo.countByRequesterUserId(helpRequestId);
+        long count = phoneRevealRepo.countByRequesterUserId(viewerUserId);
         return new RevealPhoneResponse(fullNumber, count);
     }
 }
