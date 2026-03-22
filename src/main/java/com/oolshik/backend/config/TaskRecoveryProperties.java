@@ -10,6 +10,9 @@ public class TaskRecoveryProperties {
     private long acceptToStartSlaSeconds = 420;
     private long assignmentTtlSeconds = 2700;
     private long authTtlSeconds = 120;
+    private long completionConfirmationTtlHours = 12;
+    private double reminder50Percent = 0.5d;
+    private double reminder80Percent = 0.8d;
     private int maxReassign = 2;
     private int schedulerBatchSize = 100;
     private long schedulerDelayMs = 60000;
@@ -24,6 +27,14 @@ public class TaskRecoveryProperties {
     }
     public long getAuthTtlSeconds() { return authTtlSeconds; }
     public void setAuthTtlSeconds(long authTtlSeconds) { this.authTtlSeconds = authTtlSeconds; }
+    public long getCompletionConfirmationTtlHours() { return completionConfirmationTtlHours; }
+    public void setCompletionConfirmationTtlHours(long completionConfirmationTtlHours) {
+        this.completionConfirmationTtlHours = completionConfirmationTtlHours;
+    }
+    public double getReminder50Percent() { return reminder50Percent; }
+    public void setReminder50Percent(double reminder50Percent) { this.reminder50Percent = reminder50Percent; }
+    public double getReminder80Percent() { return reminder80Percent; }
+    public void setReminder80Percent(double reminder80Percent) { this.reminder80Percent = reminder80Percent; }
     public int getMaxReassign() { return maxReassign; }
     public void setMaxReassign(int maxReassign) { this.maxReassign = maxReassign; }
     public int getSchedulerBatchSize() { return schedulerBatchSize; }

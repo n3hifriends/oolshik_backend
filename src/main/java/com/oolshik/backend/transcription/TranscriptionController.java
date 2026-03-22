@@ -33,7 +33,7 @@ public class TranscriptionController {
     @GetMapping("/{jobId}")
     public TranscriptionView get(@PathVariable UUID jobId) {
         TranscriptionJobEntity job = repository.findById(jobId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transcription job not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "errors.transcription.jobNotFound"));
 
         return new TranscriptionView(
                 job.getJobId(),

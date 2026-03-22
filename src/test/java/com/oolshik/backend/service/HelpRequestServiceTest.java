@@ -3,13 +3,16 @@ package com.oolshik.backend.service;
 import com.oolshik.backend.config.TaskRecoveryProperties;
 import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
+import com.oolshik.backend.domain.HelpRequestCompletionMode;
 import com.oolshik.backend.domain.HelpRequestEventType;
+import com.oolshik.backend.domain.HelpRequestIssueReason;
 import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.HelpRequestOfferEventEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.web.HelpRequestController;
 import com.oolshik.backend.web.dto.HelpRequestDtos;
 import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
@@ -39,6 +42,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -417,5 +421,279 @@ class HelpRequestServiceTest {
         assertFalse(statuses.contains(HelpRequestStatus.COMPLETED));
         assertFalse(statuses.contains(HelpRequestStatus.CANCELLED));
         assertFalse(statuses.contains(HelpRequestStatus.DRAFT));
+    }
+
+    @Test
+    void markDoneTransitionsAssignedTaskToPendingConfirmation() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(helperId);
+        existing.setStatus(HelpRequestStatus.ASSIGNED);
+
+        HelpRequestEntity updated = new HelpRequestEntity();
+        updated.setId(requestId);
+        updated.setRequesterId(requesterId);
+        updated.setHelperId(helperId);
+        updated.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing), Optional.of(updated));
+        when(repo.updateMarkDoneIfAssigned(
+                eq(requestId),
+                eq(helperId),
+                any(),
+                any(),
+                eq(HelpRequestStatus.ASSIGNED),
+                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                eq(HelpRequestEventType.WORK_MARKED_DONE.name())
+        )).thenReturn(1);
+
+        HelpRequestEntity result = service.markDone(requestId, helperId);
+
+        assertEquals(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION, result.getStatus());
+        verify(eventService).record(
+                eq(requestId),
+                eq(HelpRequestEventType.WORK_MARKED_DONE),
+                eq(com.oolshik.backend.domain.HelpRequestActorRole.HELPER),
+                eq(helperId),
+                eq(null),
+                eq(null),
+                eq(null)
+        );
+        verify(notificationService).enqueueTaskEvent(
+                eq(com.oolshik.backend.notification.NotificationEventType.WORK_MARKED_DONE),
+                eq(existing),
+                any()
+        );
+    }
+
+    @Test
+    void markDoneRejectsNonAssignedHelper() {
+        UUID requestId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(UUID.randomUUID());
+        existing.setHelperId(UUID.randomUUID());
+        existing.setStatus(HelpRequestStatus.ASSIGNED);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing));
+
+        assertThrows(ForbiddenOperationException.class, () -> service.markDone(requestId, helperId));
+        verifyNoInteractions(eventService, notificationService);
+    }
+
+    @Test
+    void confirmCompletionTransitionsPendingTaskToCompleted() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(helperId);
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        HelpRequestEntity updated = new HelpRequestEntity();
+        updated.setId(requestId);
+        updated.setRequesterId(requesterId);
+        updated.setHelperId(helperId);
+        updated.setStatus(HelpRequestStatus.COMPLETED);
+        updated.setCompletionMode(HelpRequestCompletionMode.REQUESTER_CONFIRMED);
+        updated.setCompletedBy(requesterId);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing), Optional.of(updated));
+        when(repo.updateConfirmCompletionIfPending(
+                eq(requestId),
+                eq(requesterId),
+                any(),
+                eq(requesterId),
+                eq(HelpRequestCompletionMode.REQUESTER_CONFIRMED),
+                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                eq(HelpRequestStatus.COMPLETED),
+                eq(HelpRequestEventType.COMPLETION_CONFIRMED.name())
+        )).thenReturn(1);
+
+        HelpRequestEntity result = service.confirmCompletion(requestId, requesterId);
+
+        assertEquals(HelpRequestStatus.COMPLETED, result.getStatus());
+        assertEquals(HelpRequestCompletionMode.REQUESTER_CONFIRMED, result.getCompletionMode());
+        verify(eventService).record(
+                eq(requestId),
+                eq(HelpRequestEventType.COMPLETION_CONFIRMED),
+                eq(com.oolshik.backend.domain.HelpRequestActorRole.REQUESTER),
+                eq(requesterId),
+                eq(null),
+                eq(null),
+                eq(null)
+        );
+    }
+
+    @Test
+    void reportIssueTransitionsPendingTaskToReviewRequired() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(helperId);
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        HelpRequestEntity updated = new HelpRequestEntity();
+        updated.setId(requestId);
+        updated.setRequesterId(requesterId);
+        updated.setHelperId(helperId);
+        updated.setStatus(HelpRequestStatus.REVIEW_REQUIRED);
+        updated.setIssueReasonCode(HelpRequestIssueReason.QUALITY_ISSUE);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing), Optional.of(updated));
+        when(repo.updateReportIssueIfPending(
+                eq(requestId),
+                eq(requesterId),
+                any(),
+                eq(HelpRequestIssueReason.QUALITY_ISSUE),
+                eq("Need cleanup"),
+                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                eq(HelpRequestStatus.REVIEW_REQUIRED),
+                eq(HelpRequestEventType.COMPLETION_ISSUE_REPORTED.name())
+        )).thenReturn(1);
+
+        HelpRequestEntity result = service.reportIssue(
+                requestId,
+                requesterId,
+                new HelpRequestDtos.ReportIssueRequest(HelpRequestIssueReason.QUALITY_ISSUE, "Need cleanup")
+        );
+
+        assertEquals(HelpRequestStatus.REVIEW_REQUIRED, result.getStatus());
+        assertEquals(HelpRequestIssueReason.QUALITY_ISSUE, result.getIssueReasonCode());
+        verify(eventService).record(
+                eq(requestId),
+                eq(HelpRequestEventType.COMPLETION_ISSUE_REPORTED),
+                eq(com.oolshik.backend.domain.HelpRequestActorRole.REQUESTER),
+                eq(requesterId),
+                eq(HelpRequestIssueReason.QUALITY_ISSUE.name()),
+                eq("Need cleanup"),
+                eq(null)
+        );
+    }
+
+    @Test
+    void reportIssueRequiresReasonTextForOther() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(UUID.randomUUID());
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.reportIssue(
+                        requestId,
+                        requesterId,
+                        new HelpRequestDtos.ReportIssueRequest(HelpRequestIssueReason.OTHER, " ")
+                )
+        );
+    }
+
+    @Test
+    void autoCompletePendingConfirmationReturnsTrueWhenUpdated() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(helperId);
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing), Optional.of(existing));
+        when(repo.updateAutoCompleteIfExpired(
+                eq(requestId),
+                any(),
+                eq(HelpRequestCompletionMode.AUTO_TIMEOUT),
+                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                eq(HelpRequestStatus.COMPLETED),
+                eq(HelpRequestEventType.AUTO_COMPLETED_BY_TIMEOUT.name())
+        )).thenReturn(1);
+
+        assertTrue(service.autoCompletePendingConfirmation(requestId));
+        verify(notificationService).enqueueTaskEvent(
+                eq(com.oolshik.backend.notification.NotificationEventType.AUTO_COMPLETED_BY_TIMEOUT),
+                eq(existing),
+                any()
+        );
+    }
+
+    @Test
+    void sendCompletionReminder50IsDeduplicatedByConditionalUpdate() {
+        UUID requestId = UUID.randomUUID();
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(UUID.randomUUID());
+        existing.setHelperId(UUID.randomUUID());
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing));
+        when(repo.markReminder50Sent(eq(requestId), any(), eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION)))
+                .thenReturn(0);
+
+        assertFalse(service.sendCompletionReminder50(requestId));
+        verify(notificationService, never()).enqueueTaskEvent(
+                eq(com.oolshik.backend.notification.NotificationEventType.COMPLETION_REMINDER_50),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    void rateRejectsBeforeFinalCompletion() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity existing = new HelpRequestEntity();
+        existing.setId(requestId);
+        existing.setRequesterId(requesterId);
+        existing.setHelperId(helperId);
+        existing.setStatus(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION);
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(existing));
+
+        assertThrows(
+                ConflictOperationException.class,
+                () -> service.rate(requestId, requesterId, new HelpRequestController.RatePayload())
+        );
+    }
+
+    @Test
+    void reminderCandidateLookupUsesConfiguredThreshold() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-03-21T12:00:00Z");
+        UUID requestId = UUID.randomUUID();
+
+        when(repo.findReminder50Candidates(eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION), any(), any()))
+                .thenReturn(List.of(requestId));
+
+        List<UUID> result = service.findCompletionReminder50Candidates(now, 10);
+
+        assertEquals(List.of(requestId), result);
+        verify(repo).findReminder50Candidates(
+                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                eq(now.minusHours(6)),
+                any()
+        );
     }
 }

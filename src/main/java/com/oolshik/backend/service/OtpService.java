@@ -4,6 +4,7 @@ import com.oolshik.backend.domain.OtpPurpose;
 import com.oolshik.backend.entity.OtpCodeEntity;
 import com.oolshik.backend.repo.OtpCodeRepository;
 import com.oolshik.backend.util.PhoneUtil;
+import com.oolshik.backend.web.error.OtpCooldownException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -56,7 +57,7 @@ public class OtpService {
         if (last != null && last.getLastSentAt() != null &&
             last.getLastSentAt().plusSeconds(cooldownSeconds).isAfter(now)) {
             long wait = last.getLastSentAt().plusSeconds(cooldownSeconds).toEpochSecond() - now.toEpochSecond();
-            throw new IllegalStateException("Please wait " + Math.max(wait, 1) + "s before requesting another OTP");
+            throw new OtpCooldownException(Math.max(wait, 1));
         }
 
         String code = genCode();

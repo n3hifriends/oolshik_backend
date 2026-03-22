@@ -4,7 +4,9 @@ import com.oolshik.backend.config.TaskRecoveryProperties;
 import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
+import com.oolshik.backend.domain.HelpRequestCompletionMode;
 import com.oolshik.backend.domain.HelpRequestEventType;
+import com.oolshik.backend.domain.HelpRequestIssueReason;
 import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestReleaseReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
@@ -101,7 +103,7 @@ public class HelpRequestService {
         boolean descriptionBlank = (description == null || description.isBlank());
         boolean hasVoice = voiceUrl != null && !voiceUrl.isBlank();
         if (titleBlank && !hasVoice) {
-            throw new IllegalArgumentException("voiceUrl is required when title is empty");
+            throw new IllegalArgumentException("errors.request.voiceUrlRequiredWhenTitleEmpty");
         }
 
         HelpRequestStatus nextStatus = titleBlank ? HelpRequestStatus.DRAFT : HelpRequestStatus.OPEN;
@@ -175,6 +177,11 @@ public class HelpRequestService {
     ) {
         return repo.findTaskByTaskId(taskId);
     }
+
+    // Completion confirmation implementation plan:
+    // 1. Helper marks work done with a guarded repository update.
+    // 2. Requester can confirm or report an issue only from the pending-confirmation state.
+    // 3. Reminders and auto-close reuse the same DB-level state guards for idempotency.
 
 
     @Transactional
@@ -333,40 +340,157 @@ public class HelpRequestService {
 
     @Transactional
     public HelpRequestEntity complete(UUID requestId, UUID requesterId, HelpRequestController.CompletePayload completePayload) throws BadRequestException {
-        HelpRequestEntity e = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
-        if (!requesterId.equals(e.getRequesterId())) {
-            throw new ForbiddenOperationException("Only requester can complete"); // -> 403
+        return confirmCompletion(requestId, requesterId);
+    }
+
+    @Transactional
+    public HelpRequestEntity markDone(UUID requestId, UUID helperId) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (existing.getHelperId() == null || !helperId.equals(existing.getHelperId())) {
+            throw new ForbiddenOperationException("Only assigned helper can mark task done");
         }
-        if (e.getStatus() == HelpRequestStatus.CANCELLED) {
-            throw new ConflictOperationException("Request already cancelled");
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime expiresAt = now.plusHours(recoveryProperties.getCompletionConfirmationTtlHours());
+        int updated = repo.updateMarkDoneIfAssigned(
+                requestId,
+                helperId,
+                now,
+                expiresAt,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestEventType.WORK_MARKED_DONE.name()
+        );
+        if (updated == 0) {
+            throw new ConflictOperationException("Task cannot be marked done");
         }
-        e.setStatus(HelpRequestStatus.COMPLETED);
-        e.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        e.setNextEscalationAt(null);
-        e.setLastStateChangeAt(OffsetDateTime.now(ZoneOffset.UTC));
-        e.setLastStateChangeReason(HelpRequestEventType.COMPLETED.name());
-        if (completePayload != null && completePayload.rating != null) {
-            if (e.getHelperId() == null) {
-                throw new BadRequestException("helper not assigned yet");
-            }
-            ratingService.createRating(
-                    requestId,
-                    requesterId,
-                    e.getHelperId(),
-                    HelpRequestActorRole.REQUESTER,
-                    completePayload.rating
-            );
-        }
+
         eventService.record(
                 requestId,
-                HelpRequestEventType.COMPLETED,
+                HelpRequestEventType.WORK_MARKED_DONE,
+                HelpRequestActorRole.HELPER,
+                helperId,
+                null,
+                null,
+                null
+        );
+        NotificationEventContext context = buildContext(
+                helperId,
+                HelpRequestStatus.ASSIGNED,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.WORK_MARKED_DONE, existing, context);
+        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+    }
+
+    @Transactional
+    public HelpRequestEntity confirmCompletion(UUID requestId, UUID requesterId) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(existing.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can confirm completion");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int updated = repo.updateConfirmCompletionIfPending(
+                requestId,
+                requesterId,
+                now,
+                requesterId,
+                HelpRequestCompletionMode.REQUESTER_CONFIRMED,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.COMPLETED,
+                HelpRequestEventType.COMPLETION_CONFIRMED.name()
+        );
+        if (updated == 0) {
+            throw new ConflictOperationException("Completion confirmation not available");
+        }
+
+        eventService.record(
+                requestId,
+                HelpRequestEventType.COMPLETION_CONFIRMED,
                 HelpRequestActorRole.REQUESTER,
                 requesterId,
                 null,
                 null,
                 null
         );
-        return repo.save(e);
+        NotificationEventContext context = buildContext(
+                requesterId,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.COMPLETED,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.COMPLETION_CONFIRMED, existing, context);
+        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+    }
+
+    @Transactional
+    public HelpRequestEntity reportIssue(UUID requestId, UUID requesterId, HelpRequestDtos.ReportIssueRequest body) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        if (!requesterId.equals(existing.getRequesterId())) {
+            throw new ForbiddenOperationException("Only requester can report an issue");
+        }
+        if (body == null || body.reasonCode() == null) {
+            throw new IllegalArgumentException("reasonCode is required");
+        }
+
+        HelpRequestIssueReason reasonCode = body.reasonCode();
+        String reasonText = body.reasonText();
+        if (reasonCode == HelpRequestIssueReason.OTHER && (reasonText == null || reasonText.isBlank())) {
+            throw new IllegalArgumentException("Reason is required when reasonCode is OTHER");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int updated = repo.updateReportIssueIfPending(
+                requestId,
+                requesterId,
+                now,
+                reasonCode,
+                reasonText,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.REVIEW_REQUIRED,
+                HelpRequestEventType.COMPLETION_ISSUE_REPORTED.name()
+        );
+        if (updated == 0) {
+            throw new ConflictOperationException("Issue reporting not available");
+        }
+
+        eventService.record(
+                requestId,
+                HelpRequestEventType.COMPLETION_ISSUE_REPORTED,
+                HelpRequestActorRole.REQUESTER,
+                requesterId,
+                reasonCode.name(),
+                reasonText,
+                null
+        );
+        NotificationEventContext context = buildContext(
+                requesterId,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.REVIEW_REQUIRED,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.COMPLETION_ISSUE_REPORTED, existing, context);
+        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
     }
 
 
@@ -388,7 +512,7 @@ public class HelpRequestService {
         if (ratePayload != null && ratePayload.rating != null) {
             UUID targetUserId = isRequester ? e.getHelperId() : e.getRequesterId();
             if (targetUserId == null) {
-                throw new BadRequestException("rating target not found");
+                throw new BadRequestException("errors.request.ratingTargetNotFound");
             }
             HelpRequestActorRole role = isRequester ? HelpRequestActorRole.REQUESTER : HelpRequestActorRole.HELPER;
             ratingService.createRating(
@@ -641,6 +765,102 @@ public class HelpRequestService {
     }
 
     @Transactional
+    public boolean sendCompletionReminder50(UUID requestId) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int updated = repo.markReminder50Sent(
+                requestId,
+                now,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION
+        );
+        if (updated == 0) {
+            return false;
+        }
+        NotificationEventContext context = buildContext(
+                null,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.COMPLETION_REMINDER_50, existing, context);
+        return true;
+    }
+
+    @Transactional
+    public boolean sendCompletionReminder80(UUID requestId) {
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int updated = repo.markReminder80Sent(
+                requestId,
+                now,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION
+        );
+        if (updated == 0) {
+            return false;
+        }
+        NotificationEventContext context = buildContext(
+                null,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.COMPLETION_REMINDER_80, existing, context);
+        return true;
+    }
+
+    @Transactional
+    public boolean autoCompletePendingConfirmation(UUID requestId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        HelpRequestEntity existing = repo.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        int updated = repo.updateAutoCompleteIfExpired(
+                requestId,
+                now,
+                HelpRequestCompletionMode.AUTO_TIMEOUT,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.COMPLETED,
+                HelpRequestEventType.AUTO_COMPLETED_BY_TIMEOUT.name()
+        );
+        if (updated == 0) {
+            return false;
+        }
+        eventService.record(
+                requestId,
+                HelpRequestEventType.AUTO_COMPLETED_BY_TIMEOUT,
+                HelpRequestActorRole.SYSTEM,
+                null,
+                "TIMEOUT",
+                null,
+                null
+        );
+        NotificationEventContext context = buildContext(
+                null,
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                HelpRequestStatus.COMPLETED,
+                AssignmentChange.NONE,
+                existing.getHelperId(),
+                existing.getHelperId(),
+                null,
+                null,
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.AUTO_COMPLETED_BY_TIMEOUT, existing, context);
+        return true;
+    }
+
+    @Transactional
     public boolean autoExpirePendingAuth(UUID requestId) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         HelpRequestEntity existing = repo.findById(requestId)
@@ -803,6 +1023,33 @@ public class HelpRequestService {
         return repo.findExpiredPendingAuth(HelpRequestStatus.PENDING_AUTH, now, PageRequest.of(0, limit));
     }
 
+    @Transactional(readOnly = true)
+    public List<UUID> findCompletionReminder50Candidates(OffsetDateTime now, int limit) {
+        return repo.findReminder50Candidates(
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                now.minusSeconds(reminderOffsetSeconds(recoveryProperties.getReminder50Percent())),
+                PageRequest.of(0, limit)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> findCompletionReminder80Candidates(OffsetDateTime now, int limit) {
+        return repo.findReminder80Candidates(
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                now.minusSeconds(reminderOffsetSeconds(recoveryProperties.getReminder80Percent())),
+                PageRequest.of(0, limit)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> findExpiredCompletionConfirmations(OffsetDateTime now, int limit) {
+        return repo.findExpiredCompletionConfirmations(
+                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                now,
+                PageRequest.of(0, limit)
+        );
+    }
+
     @Transactional
     public OfferUpdateOutcome updateOffer(
             UUID requestId,
@@ -890,6 +1137,12 @@ public class HelpRequestService {
             return "INR";
         }
         return offerCurrency.trim().toUpperCase();
+    }
+
+    private long reminderOffsetSeconds(double percent) {
+        double bounded = Math.max(0d, Math.min(1d, percent));
+        long ttlSeconds = recoveryProperties.getCompletionConfirmationTtlHours() * 3600L;
+        return Math.max(0L, Math.round(ttlSeconds * bounded));
     }
 
     public record OfferUpdateOutcome(

@@ -26,7 +26,9 @@ public class MultipartUploadService {
 
     public void appendChunk(String uploadId, byte[] bytes) throws IOException {
         String tempKey = tempKeyByUploadId.get(uploadId);
-        if (tempKey == null) throw new IllegalStateException("Unknown uploadId");
+        if (tempKey == null) {
+            throw new IllegalArgumentException("errors.media.unknownUploadId");
+        }
         synchronized (tempKey.intern()) {
             storage.append(tempKey, bytes);
         }
@@ -34,7 +36,9 @@ public class MultipartUploadService {
 
     public String finalizeUpload(String uploadId, String finalKey) throws IOException {
         String tempKey = tempKeyByUploadId.remove(uploadId);
-        if (tempKey == null) throw new IllegalStateException("Unknown uploadId");
+        if (tempKey == null) {
+            throw new IllegalArgumentException("errors.media.unknownUploadId");
+        }
         return storage.finalizeUpload(tempKey, finalKey);
     }
 }

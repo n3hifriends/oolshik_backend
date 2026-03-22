@@ -30,6 +30,30 @@ public class NotificationTemplateService {
             case TASK_TIMEOUT -> new NotificationTemplate("Request timed out", "Please retry or expand radius.");
             case TASK_CREATED -> new NotificationTemplate("New request near you", "Open the app to help.");
             case TASK_RADIUS_EXPANDED -> new NotificationTemplate("New request in your area", "You are now eligible to help.");
+            case WORK_MARKED_DONE -> new NotificationTemplate(
+                    "Please confirm completion",
+                    "Your helper marked this task as completed. Please confirm or report an issue."
+            );
+            case COMPLETION_REMINDER_50 -> new NotificationTemplate(
+                    "Completion reminder",
+                    "Please confirm this task or report an issue before it closes automatically."
+            );
+            case COMPLETION_REMINDER_80 -> new NotificationTemplate(
+                    "Action needed soon",
+                    "Please respond soon. This task will close automatically if no action is taken."
+            );
+            case AUTO_COMPLETED_BY_TIMEOUT -> new NotificationTemplate(
+                    "Task closed automatically",
+                    "This task was completed automatically after no response."
+            );
+            case COMPLETION_CONFIRMED -> new NotificationTemplate(
+                    "Task confirmed completed",
+                    "The requester confirmed this task is completed."
+            );
+            case COMPLETION_ISSUE_REPORTED -> new NotificationTemplate(
+                    "Issue reported",
+                    "The requester reported an issue for this task."
+            );
             case OFFER_UPDATED -> new NotificationTemplate("Offer updated", "A requester updated the offer for a nearby task.");
             case PAYMENT_REQUEST_CREATED -> new NotificationTemplate("Payment request created", "A payment request is linked to your task.");
             case PAYMENT_ACTION_REQUIRED -> new NotificationTemplate(
@@ -52,17 +76,41 @@ public class NotificationTemplateService {
             case TASK_AUTH_REJECTED -> new NotificationTemplate("मंजुरी नाकारली", "पुन्हा प्रयत्न करा किंवा सहाय्याशी संपर्क करा.");
             case TASK_AUTH_TIMEOUT -> new NotificationTemplate("मंजुरी वेळ संपला", "कृपया पुन्हा मंजुरी प्रक्रिया सुरू करा.");
             case TASK_CANCELLED -> new NotificationTemplate("विनंती रद्द झाली", "ही विनंती आता सक्रिय नाही.");
-            case TASK_RELEASED -> new NotificationTemplate("मदतनीस मुक्त झाला", "तुमची विनंती पुन्हा उपलब्ध आहे.");
+            case TASK_RELEASED -> new NotificationTemplate("कार्यकर्ता मुक्त झाला", "तुमची विनंती पुन्हा उपलब्ध आहे.");
             case TASK_REASSIGNED -> new NotificationTemplate("विनंती पुनर्नियुक्त झाली", "नेमणुकीत बदल झाला आहे.");
             case TASK_TIMEOUT -> new NotificationTemplate("विनंतीची वेळ संपली", "कृपया पुन्हा प्रयत्न करा किंवा परिघ वाढवा.");
             case TASK_CREATED -> new NotificationTemplate("तुमच्या जवळ नवीन विनंती", "मदत करण्यासाठी अ‍ॅप उघडा.");
             case TASK_RADIUS_EXPANDED -> new NotificationTemplate("तुमच्या भागात नवीन विनंती", "आता तुम्ही मदत करण्यासाठी पात्र आहात.");
+            case WORK_MARKED_DONE -> new NotificationTemplate(
+                    "पूर्णतेची पुष्टी करा",
+                    "तुमच्या कार्यकर्त्याने हे काम पूर्ण केल्याचे दर्शवले आहे. कृपया पुष्टी करा किंवा समस्या नोंदवा."
+            );
+            case COMPLETION_REMINDER_50 -> new NotificationTemplate(
+                    "पूर्णतेची आठवण",
+                    "कृपया हे काम पुष्टी करा किंवा समस्या नोंदवा. अन्यथा हे आपोआप बंद होईल."
+            );
+            case COMPLETION_REMINDER_80 -> new NotificationTemplate(
+                    "लवकर कृती करा",
+                    "कृपया लवकर प्रतिसाद द्या. अन्यथा हे काम आपोआप पूर्ण म्हणून बंद होईल."
+            );
+            case AUTO_COMPLETED_BY_TIMEOUT -> new NotificationTemplate(
+                    "काम आपोआप पूर्ण झाले",
+                    "कोणताही प्रतिसाद न मिळाल्याने हे काम आपोआप पूर्ण म्हणून बंद झाले."
+            );
+            case COMPLETION_CONFIRMED -> new NotificationTemplate(
+                    "काम पूर्ण म्हणून पुष्टी झाले",
+                    "नेत्याने हे काम पूर्ण झाल्याची पुष्टी केली आहे."
+            );
+            case COMPLETION_ISSUE_REPORTED -> new NotificationTemplate(
+                    "समस्या नोंदवली गेली",
+                    "नेत्याने या कामाबद्दल समस्या नोंदवली आहे."
+            );
             case OFFER_UPDATED -> new NotificationTemplate("ऑफर अद्ययावत", "जवळील कामासाठी विनंतीकर्त्याने ऑफर बदलली आहे.");
             case PAYMENT_REQUEST_CREATED -> new NotificationTemplate("पेमेंट विनंती तयार झाली", "तुमच्या कामाशी पेमेंट विनंती जोडली गेली आहे.");
             case PAYMENT_ACTION_REQUIRED -> new NotificationTemplate(
                     role == RecipientRole.REQUESTER ? "पेमेंट आवश्यक" : "कृपया पेमेंट पूर्ण करा",
                     role == RecipientRole.REQUESTER
-                            ? "मदतनीसाने पेमेंट विनंती केली आहे. UPI पेमेंटसाठी टास्क तपशील उघडा."
+                            ? "कार्यकर्त्याने पेमेंट विनंती केली आहे. UPI पेमेंटसाठी टास्क तपशील उघडा."
                             : "UPI पेमेंट पूर्ण करण्यासाठी टास्क तपशील उघडा."
             );
             case PAYMENT_INITIATED -> new NotificationTemplate("पेमेंट सुरू झाले", "UPI पेमेंट सुरू करण्यात आले आहे.");

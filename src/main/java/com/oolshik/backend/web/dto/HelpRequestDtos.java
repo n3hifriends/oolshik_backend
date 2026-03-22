@@ -48,6 +48,9 @@ public class HelpRequestDtos {
             OffsetDateTime assignmentExpiresAt,
             OffsetDateTime pendingAuthExpiresAt,
             OffsetDateTime cancelledAt,
+            OffsetDateTime workDoneAt,
+            OffsetDateTime completionConfirmationExpiresAt,
+            String completionMode,
             UUID cancelledBy,
             Integer reassignedCount,
             Integer releasedCount,
@@ -55,7 +58,11 @@ public class HelpRequestDtos {
             OffsetDateTime nextEscalationAt,
             BigDecimal offerAmount,
             String offerCurrency,
-            OffsetDateTime offerUpdatedAt
+            OffsetDateTime offerUpdatedAt,
+            Boolean canMarkDone,
+            Boolean canConfirm,
+            Boolean canReportIssue,
+            Boolean canRate
     ) {}
 
     public record OfferUpdateRequest(
@@ -83,6 +90,11 @@ public class HelpRequestDtos {
 
     public record RejectRequest(
             @NotNull HelpRequestRejectReason reasonCode,
+            String reasonText
+    ) {}
+
+    public record ReportIssueRequest(
+            @NotNull com.oolshik.backend.domain.HelpRequestIssueReason reasonCode,
             String reasonText
     ) {}
 }

@@ -1,6 +1,7 @@
 package com.oolshik.backend.repo;
 
 import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.domain.HelpRequestCompletionMode;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,10 +44,13 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           h.assignment_expires_at          AS assignmentExpiresAt,
           h.pending_auth_expires_at        AS pendingAuthExpiresAt,
           h.cancelled_at                   AS cancelledAt,
+          h.work_done_at                   AS workDoneAt,
+          h.completion_confirmation_expires_at AS completionConfirmationExpiresAt,
           h.reassigned_count               AS reassignedCount,
           h.released_count                 AS releasedCount,
           h.radius_stage                   AS radiusStage,
           h.next_escalation_at             AS nextEscalationAt,
+          h.completion_mode                AS completionMode,
           h.offer_amount                   AS offerAmount,
           h.offer_currency                 AS offerCurrency,
           h.offer_updated_at               AS offerUpdatedAt,
@@ -163,10 +167,13 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         h.assignment_expires_at          AS assignmentExpiresAt,
         h.pending_auth_expires_at        AS pendingAuthExpiresAt,
         h.cancelled_at                   AS cancelledAt,
+        h.work_done_at                   AS workDoneAt,
+        h.completion_confirmation_expires_at AS completionConfirmationExpiresAt,
         h.reassigned_count               AS reassignedCount,
         h.released_count                 AS releasedCount,
         h.radius_stage                   AS radiusStage,
         h.next_escalation_at             AS nextEscalationAt,
+        h.completion_mode                AS completionMode,
         h.offer_amount                   AS offerAmount,
         h.offer_currency                 AS offerCurrency,
         h.offer_updated_at               AS offerUpdatedAt,
@@ -518,6 +525,147 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("stateReason") String stateReason
   );
 
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.workDoneAt = :workDoneAt,
+             h.completedAt = null,
+             h.completionConfirmationExpiresAt = :expiresAt,
+             h.assignmentExpiresAt = null,
+             h.issueReportedAt = null,
+             h.issueReasonCode = null,
+             h.issueReasonText = null,
+             h.completionMode = null,
+             h.completedBy = null,
+             h.reminder50Sent = false,
+             h.reminder80Sent = false,
+             h.nextEscalationAt = null,
+             h.lastStateChangeAt = :workDoneAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :workDoneAt
+       where h.id = :id
+         and h.helperId = :helperId
+         and h.status = :expectedStatus
+      """)
+  int updateMarkDoneIfAssigned(
+          @Param("id") UUID id,
+          @Param("helperId") UUID helperId,
+          @Param("workDoneAt") OffsetDateTime workDoneAt,
+          @Param("expiresAt") OffsetDateTime expiresAt,
+          @Param("expectedStatus") HelpRequestStatus expectedStatus,
+          @Param("newStatus") HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.completedAt = :completedAt,
+             h.completionMode = :completionMode,
+             h.completedBy = :completedBy,
+             h.completionConfirmationExpiresAt = null,
+             h.lastStateChangeAt = :completedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :completedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+      """)
+  int updateConfirmCompletionIfPending(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("completedAt") OffsetDateTime completedAt,
+          @Param("completedBy") UUID completedBy,
+          @Param("completionMode") HelpRequestCompletionMode completionMode,
+          @Param("expectedStatus") HelpRequestStatus expectedStatus,
+          @Param("newStatus") HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.issueReportedAt = :issueReportedAt,
+             h.completedAt = null,
+             h.issueReasonCode = :reasonCode,
+             h.issueReasonText = :reasonText,
+             h.completionConfirmationExpiresAt = null,
+             h.lastStateChangeAt = :issueReportedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :issueReportedAt
+       where h.id = :id
+         and h.requesterId = :requesterId
+         and h.status = :expectedStatus
+      """)
+  int updateReportIssueIfPending(
+          @Param("id") UUID id,
+          @Param("requesterId") UUID requesterId,
+          @Param("issueReportedAt") OffsetDateTime issueReportedAt,
+          @Param("reasonCode") com.oolshik.backend.domain.HelpRequestIssueReason reasonCode,
+          @Param("reasonText") String reasonText,
+          @Param("expectedStatus") HelpRequestStatus expectedStatus,
+          @Param("newStatus") HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.status = :newStatus,
+             h.completedAt = :completedAt,
+             h.completionMode = :completionMode,
+             h.completedBy = null,
+             h.completionConfirmationExpiresAt = null,
+             h.lastStateChangeAt = :completedAt,
+             h.lastStateChangeReason = :stateReason,
+             h.updatedAt = :completedAt
+       where h.id = :id
+         and h.status = :expectedStatus
+         and h.completionConfirmationExpiresAt is not null
+         and h.completionConfirmationExpiresAt <= :completedAt
+      """)
+  int updateAutoCompleteIfExpired(
+          @Param("id") UUID id,
+          @Param("completedAt") OffsetDateTime completedAt,
+          @Param("completionMode") HelpRequestCompletionMode completionMode,
+          @Param("expectedStatus") HelpRequestStatus expectedStatus,
+          @Param("newStatus") HelpRequestStatus newStatus,
+          @Param("stateReason") String stateReason
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.reminder50Sent = true,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :status
+         and h.reminder50Sent = false
+      """)
+  int markReminder50Sent(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("status") HelpRequestStatus status
+  );
+
+  @Modifying
+  @Query("""
+      update HelpRequestEntity h
+         set h.reminder80Sent = true,
+             h.updatedAt = :now
+       where h.id = :id
+         and h.status = :status
+         and h.reminder80Sent = false
+      """)
+  int markReminder80Sent(
+          @Param("id") UUID id,
+          @Param("now") OffsetDateTime now,
+          @Param("status") HelpRequestStatus status
+  );
+
   @Query("""
       select h.id
         from HelpRequestEntity h
@@ -553,6 +701,49 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
       """)
   List<UUID> findExpiredPendingAuth(
           @Param("status") com.oolshik.backend.domain.HelpRequestStatus status,
+          @Param("now") OffsetDateTime now,
+          Pageable pageable
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.workDoneAt is not null
+         and h.reminder50Sent = false
+         and h.completionConfirmationExpiresAt is not null
+         and h.workDoneAt <= :threshold
+      """)
+  List<UUID> findReminder50Candidates(
+          @Param("status") HelpRequestStatus status,
+          @Param("threshold") OffsetDateTime threshold,
+          Pageable pageable
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.workDoneAt is not null
+         and h.reminder80Sent = false
+         and h.completionConfirmationExpiresAt is not null
+         and h.workDoneAt <= :threshold
+      """)
+  List<UUID> findReminder80Candidates(
+          @Param("status") HelpRequestStatus status,
+          @Param("threshold") OffsetDateTime threshold,
+          Pageable pageable
+  );
+
+  @Query("""
+      select h.id
+        from HelpRequestEntity h
+       where h.status = :status
+         and h.completionConfirmationExpiresAt is not null
+         and h.completionConfirmationExpiresAt <= :now
+      """)
+  List<UUID> findExpiredCompletionConfirmations(
+          @Param("status") HelpRequestStatus status,
           @Param("now") OffsetDateTime now,
           Pageable pageable
   );

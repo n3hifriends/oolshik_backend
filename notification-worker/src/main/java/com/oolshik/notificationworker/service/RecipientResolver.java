@@ -73,6 +73,16 @@ public class RecipientResolver {
                 addIfPresent(recipients, payload.getRequesterUserId());
                 addIfPresent(recipients, helperId(payload));
             }
+            case WORK_MARKED_DONE, COMPLETION_REMINDER_50, COMPLETION_REMINDER_80 -> {
+                addIfPresent(recipients, payload.getRequesterUserId());
+            }
+            case COMPLETION_CONFIRMED, COMPLETION_ISSUE_REPORTED -> {
+                addIfPresent(recipients, helperUserId(payload));
+            }
+            case AUTO_COMPLETED_BY_TIMEOUT -> {
+                addIfPresent(recipients, payload.getRequesterUserId());
+                addIfPresent(recipients, helperUserId(payload));
+            }
             case PAYMENT_REQUEST_CREATED -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
                 addIfPresent(recipients, helperUserId(payload));

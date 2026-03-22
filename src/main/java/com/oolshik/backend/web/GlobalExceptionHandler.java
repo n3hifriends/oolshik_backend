@@ -5,6 +5,7 @@ import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestCapReachedResp
 import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
+import com.oolshik.backend.web.error.OtpCooldownException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,9 +139,22 @@ public class GlobalExceptionHandler {
             ActiveRequestCapReachedException ex
     ) {
         ActiveRequestCapReachedResponse response = ex.response();
+        String localizedMessage = localizeBusinessMessage(
+                response.message(),
+                "errors.activeRequestCapReached",
+                new Object[]{response.cap()}
+        );
+        ActiveRequestCapReachedResponse localizedResponse = new ActiveRequestCapReachedResponse(
+                response.code(),
+                localizedMessage,
+                response.cap(),
+                response.activeCount(),
+                response.activeRequestIds(),
+                response.suggestedRequestId()
+        );
         log.warn("[{}] 409 active_request_cap_reached cap={} activeCount={}",
                 cid(), response.cap(), response.activeCount());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(localizedResponse);
     }
 
     @ExceptionHandler(ConflictOperationException.class)
@@ -149,6 +163,14 @@ public class GlobalExceptionHandler {
         log.warn("[{}] 409 conflict: {}", cid(), msg);
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError(cid(), "conflict", msg));
+    }
+
+    @ExceptionHandler(OtpCooldownException.class)
+    public ResponseEntity<ApiError> handleOtpCooldown(OtpCooldownException ex) {
+        String msg = localizeBusinessMessage(ex.getMessage(), "errors.auth.otpCooldown", new Object[]{ex.waitSeconds()});
+        log.warn("[{}] 429 rate_limited: {}", cid(), msg);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(new ApiError(cid(), "rate_limited", msg));
     }
 
     /* ---------------------------
@@ -242,15 +264,19 @@ public class GlobalExceptionHandler {
     }
 
     private String localizeBusinessMessage(String rawMessage, String defaultKey) {
+        return localizeBusinessMessage(rawMessage, defaultKey, null);
+    }
+
+    private String localizeBusinessMessage(String rawMessage, String defaultKey, Object[] args) {
         if (rawMessage == null || rawMessage.isBlank()) {
-            return message(defaultKey, null, "Unexpected error");
+            return message(defaultKey, args, "Unexpected error");
         }
         if (rawMessage.startsWith("errors.")) {
-            return message(rawMessage, null, rawMessage);
+            return message(rawMessage, args, rawMessage);
         }
         String key = BUSINESS_MESSAGE_KEYS.get(rawMessage);
         if (key != null) {
-            return message(key, null, rawMessage);
+            return message(key, args, rawMessage);
         }
         return rawMessage;
     }

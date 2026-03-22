@@ -28,10 +28,10 @@ public class UserDeviceService {
     @Transactional
     public void registerDevice(UUID userId, String token, String platform) {
         if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException("token is required");
+            throw new IllegalArgumentException("errors.device.tokenRequired");
         }
         if (!EXPO_TOKEN_PATTERN.matcher(token).matches()) {
-            throw new IllegalArgumentException("invalid Expo push token");
+            throw new IllegalArgumentException("errors.device.invalidExpoToken");
         }
         String hash = sha256(token);
         UserDeviceEntity entity = repository.findByTokenHash(hash).orElseGet(UserDeviceEntity::new);
@@ -48,10 +48,10 @@ public class UserDeviceService {
     @Transactional
     public void unregisterDevice(UUID userId, String token) {
         if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException("token is required");
+            throw new IllegalArgumentException("errors.device.tokenRequired");
         }
         if (!EXPO_TOKEN_PATTERN.matcher(token).matches()) {
-            throw new IllegalArgumentException("invalid Expo push token");
+            throw new IllegalArgumentException("errors.device.invalidExpoToken");
         }
         String hash = sha256(token);
         repository.findByTokenHash(hash).ifPresent((entity) -> {

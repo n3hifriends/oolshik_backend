@@ -35,11 +35,11 @@ public class PublicAudioStreamController {
     @GetMapping("/{id}/stream")
     public void stream(@PathVariable UUID id, HttpServletRequest request, HttpServletResponse response) throws IOException {
         if (!publicStreamEnabled) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Public audio stream is disabled");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "errors.media.publicStreamDisabled");
         }
 
         AudioFile af = repo.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Audio not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "errors.media.audioNotFound"));
 
         long fileLength = storage.size(af.getStorageKey());
         String range = request.getHeader("Range");

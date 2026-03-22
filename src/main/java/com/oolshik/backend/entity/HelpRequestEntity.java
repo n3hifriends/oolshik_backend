@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import com.oolshik.backend.domain.HelpRequestCompletionMode;
+import com.oolshik.backend.domain.HelpRequestIssueReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import org.locationtech.jts.geom.Point;
 
@@ -138,6 +140,38 @@ public class HelpRequestEntity {
     @Column(name = "offer_last_notified_amount", precision = 12, scale = 2)
     private BigDecimal offerLastNotifiedAmount;
 
+    @Column(name = "work_done_at")
+    private OffsetDateTime workDoneAt;
+
+    @Column(name = "completed_at")
+    private OffsetDateTime completedAt;
+
+    @Column(name = "completion_confirmation_expires_at")
+    private OffsetDateTime completionConfirmationExpiresAt;
+
+    @Column(name = "issue_reported_at")
+    private OffsetDateTime issueReportedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "issue_reason_code", length = 32)
+    private HelpRequestIssueReason issueReasonCode;
+
+    @Column(name = "issue_reason_text", columnDefinition = "TEXT")
+    private String issueReasonText;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "completion_mode", length = 32)
+    private HelpRequestCompletionMode completionMode;
+
+    @Column(name = "completed_by")
+    private UUID completedBy;
+
+    @Column(name = "reminder_50_sent", nullable = false)
+    private Boolean reminder50Sent;
+
+    @Column(name = "reminder_80_sent", nullable = false)
+    private Boolean reminder80Sent;
+
     public Point getHelperAcceptLocation() {
         return helperAcceptLocation;
     }
@@ -175,6 +209,8 @@ public class HelpRequestEntity {
         if (radiusStage == null) radiusStage = 0;
         if (authTimeoutCount == null) authTimeoutCount = 0;
         if (offerCurrency == null || offerCurrency.isBlank()) offerCurrency = "INR";
+        if (reminder50Sent == null) reminder50Sent = false;
+        if (reminder80Sent == null) reminder80Sent = false;
     }
 
     @PreUpdate
@@ -258,6 +294,28 @@ public class HelpRequestEntity {
     public void setReleasedCount(Integer releasedCount) { this.releasedCount = releasedCount; }
     public OffsetDateTime getLastStateChangeAt() { return lastStateChangeAt; }
     public void setLastStateChangeAt(OffsetDateTime lastStateChangeAt) { this.lastStateChangeAt = lastStateChangeAt; }
+    public OffsetDateTime getWorkDoneAt() { return workDoneAt; }
+    public void setWorkDoneAt(OffsetDateTime workDoneAt) { this.workDoneAt = workDoneAt; }
+    public OffsetDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
+    public OffsetDateTime getCompletionConfirmationExpiresAt() { return completionConfirmationExpiresAt; }
+    public void setCompletionConfirmationExpiresAt(OffsetDateTime completionConfirmationExpiresAt) {
+        this.completionConfirmationExpiresAt = completionConfirmationExpiresAt;
+    }
+    public OffsetDateTime getIssueReportedAt() { return issueReportedAt; }
+    public void setIssueReportedAt(OffsetDateTime issueReportedAt) { this.issueReportedAt = issueReportedAt; }
+    public HelpRequestIssueReason getIssueReasonCode() { return issueReasonCode; }
+    public void setIssueReasonCode(HelpRequestIssueReason issueReasonCode) { this.issueReasonCode = issueReasonCode; }
+    public String getIssueReasonText() { return issueReasonText; }
+    public void setIssueReasonText(String issueReasonText) { this.issueReasonText = issueReasonText; }
+    public HelpRequestCompletionMode getCompletionMode() { return completionMode; }
+    public void setCompletionMode(HelpRequestCompletionMode completionMode) { this.completionMode = completionMode; }
+    public UUID getCompletedBy() { return completedBy; }
+    public void setCompletedBy(UUID completedBy) { this.completedBy = completedBy; }
+    public Boolean getReminder50Sent() { return reminder50Sent; }
+    public void setReminder50Sent(Boolean reminder50Sent) { this.reminder50Sent = reminder50Sent; }
+    public Boolean getReminder80Sent() { return reminder80Sent; }
+    public void setReminder80Sent(Boolean reminder80Sent) { this.reminder80Sent = reminder80Sent; }
     public String getLastStateChangeReason() { return lastStateChangeReason; }
     public void setLastStateChangeReason(String lastStateChangeReason) { this.lastStateChangeReason = lastStateChangeReason; }
     public Integer getRadiusStage() { return radiusStage; }

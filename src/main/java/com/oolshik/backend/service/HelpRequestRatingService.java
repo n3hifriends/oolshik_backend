@@ -59,20 +59,20 @@ public class HelpRequestRatingService {
             BigDecimal rating
     ) throws BadRequestException {
         if (requestId == null || raterUserId == null || targetUserId == null) {
-            throw new BadRequestException("rating target missing");
+            throw new BadRequestException("errors.rating.targetMissing");
         }
         if (raterUserId.equals(targetUserId)) {
-            throw new BadRequestException("cannot rate yourself");
+            throw new BadRequestException("errors.rating.cannotRateSelf");
         }
         if (rating == null) {
-            throw new BadRequestException("rating is required");
+            throw new BadRequestException("errors.rating.required");
         }
         BigDecimal normalized = rating.setScale(1, RoundingMode.HALF_UP);
         if (normalized.compareTo(MIN_RATING) < 0 || normalized.compareTo(MAX_RATING) > 0) {
-            throw new BadRequestException("rating must be between 0.0 and 5.0");
+            throw new BadRequestException("errors.rating.outOfRange");
         }
         if (repo.existsByRequestIdAndRaterUserId(requestId, raterUserId)) {
-            throw new BadRequestException("rating already submitted");
+            throw new BadRequestException("errors.rating.alreadySubmitted");
         }
 
         HelpRequestRatingEntity e = new HelpRequestRatingEntity();
@@ -85,7 +85,7 @@ public class HelpRequestRatingService {
         try {
             return repo.save(e);
         } catch (DataIntegrityViolationException ex) {
-            throw new BadRequestException("rating already submitted");
+            throw new BadRequestException("errors.rating.alreadySubmitted");
         }
     }
 }

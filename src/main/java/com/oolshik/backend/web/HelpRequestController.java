@@ -18,6 +18,7 @@ import com.oolshik.backend.web.dto.HelpRequestDtos.HelpRequestView;
 import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.ReleaseRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.RejectRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.ReportIssueRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateResponse;
 import jakarta.validation.Valid;
@@ -186,12 +187,43 @@ public class HelpRequestController {
                                                     @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                     @RequestBody(required = false) CompletePayload payload) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
-        HelpRequestEntity updated  = null;
+        HelpRequestEntity updated;
         try {
             updated = service.complete(id, requester.getId(), payload);
         } catch (BadRequestException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e.getMessage(), e);
         }
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
+    }
+
+    @PostMapping("/{id}/mark-done")
+    public ResponseEntity<?> markDone(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+    ) {
+        var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.markDone(id, helper.getId());
+        return ResponseEntity.ok(view(updated, null, helper.getId()));
+    }
+
+    @PostMapping("/{id}/confirm-completion")
+    public ResponseEntity<?> confirmCompletion(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.confirmCompletion(id, requester.getId());
+        return ResponseEntity.ok(view(updated, null, requester.getId()));
+    }
+
+    @PostMapping("/{id}/report-issue")
+    public ResponseEntity<?> reportIssue(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @RequestBody @Valid ReportIssueRequest body
+    ) {
+        var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var updated = service.reportIssue(id, requester.getId(), body);
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 
@@ -200,11 +232,11 @@ public class HelpRequestController {
                                                @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
                                                @RequestBody RatePayload body) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
-        HelpRequestEntity updated = null;
+        HelpRequestEntity updated;
         try {
             updated = service.rate(id, requester.getId(), body);
         } catch (BadRequestException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e.getMessage(), e);
         }
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
@@ -276,6 +308,10 @@ public class HelpRequestController {
         BigDecimal ratingValue = ratingSummary.ratingByRequester() != null
                 ? ratingSummary.ratingByRequester()
                 : ratingSummary.ratingByHelper();
+        Boolean canMarkDone = viewerCanMarkDone(e.getStatus(), e.getHelperId(), viewerId);
+        Boolean canConfirm = viewerCanConfirm(e.getStatus(), e.getRequesterId(), viewerId);
+        Boolean canReportIssue = viewerCanConfirm(e.getStatus(), e.getRequesterId(), viewerId);
+        Boolean canRate = viewerCanRate(e.getStatus(), e.getRequesterId(), e.getHelperId(), viewerId);
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
                 e.getRadiusMeters(), e.getStatus(),
@@ -293,6 +329,9 @@ public class HelpRequestController {
                 e.getAssignmentExpiresAt(),
                 e.getPendingAuthExpiresAt(),
                 e.getCancelledAt(),
+                e.getWorkDoneAt(),
+                e.getCompletionConfirmationExpiresAt(),
+                e.getCompletionMode() == null ? null : e.getCompletionMode().name(),
                 e.getCancelledBy(),
                 e.getReassignedCount(),
                 e.getReleasedCount(),
@@ -300,12 +339,20 @@ public class HelpRequestController {
                 e.getNextEscalationAt(),
                 e.getOfferAmount(),
                 e.getOfferCurrency(),
-                e.getOfferUpdatedAt()
+                e.getOfferUpdatedAt(),
+                canMarkDone,
+                canConfirm,
+                canReportIssue,
+                canRate
         );
     }
 
     private HelpRequestRowView view(HelpRequestRow row, UUID viewerId) {
         UUID pendingHelperId = maskPendingHelperId(row.getPendingHelperId(), row.getRequesterId(), viewerId);
+        Boolean canMarkDone = viewerCanMarkDone(row.getStatus(), row.getHelperId(), viewerId);
+        Boolean canConfirm = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
+        Boolean canReportIssue = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
+        Boolean canRate = viewerCanRate(row.getStatus(), row.getRequesterId(), row.getHelperId(), viewerId);
         return new HelpRequestRowView(
                 row.getId(),
                 row.getTitle(),
@@ -325,6 +372,8 @@ public class HelpRequestController {
                 row.getAssignmentExpiresAt(),
                 row.getPendingAuthExpiresAt(),
                 row.getCancelledAt(),
+                row.getWorkDoneAt(),
+                row.getCompletionConfirmationExpiresAt(),
                 row.getReassignedCount(),
                 row.getReleasedCount(),
                 row.getRadiusStage(),
@@ -338,8 +387,33 @@ public class HelpRequestController {
                 row.getRatingByHelper(),
                 row.getRequesterAvgRating(),
                 row.getHelperAvgRating(),
-                row.getDistanceMtr()
+                row.getDistanceMtr(),
+                row.getCompletionMode(),
+                canMarkDone,
+                canConfirm,
+                canReportIssue,
+                canRate
         );
+    }
+
+    private Boolean viewerCanMarkDone(Object status, UUID helperId, UUID viewerId) {
+        return viewerId != null
+                && helperId != null
+                && viewerId.equals(helperId)
+                && "ASSIGNED".equals(String.valueOf(status));
+    }
+
+    private Boolean viewerCanConfirm(Object status, UUID requesterId, UUID viewerId) {
+        return viewerId != null
+                && requesterId != null
+                && viewerId.equals(requesterId)
+                && "WORK_DONE_PENDING_CONFIRMATION".equals(String.valueOf(status));
+    }
+
+    private Boolean viewerCanRate(Object status, UUID requesterId, UUID helperId, UUID viewerId) {
+        boolean isParticipant = viewerId != null
+                && (viewerId.equals(requesterId) || viewerId.equals(helperId));
+        return isParticipant && "COMPLETED".equals(String.valueOf(status));
     }
 
     private UUID maskPendingHelperId(UUID pendingHelperId, UUID requesterId, UUID viewerId) {
@@ -379,6 +453,8 @@ public class HelpRequestController {
             Instant assignmentExpiresAt,
             Instant pendingAuthExpiresAt,
             Instant cancelledAt,
+            Instant workDoneAt,
+            Instant completionConfirmationExpiresAt,
             Integer reassignedCount,
             Integer releasedCount,
             Integer radiusStage,
@@ -392,6 +468,11 @@ public class HelpRequestController {
             BigDecimal ratingByHelper,
             BigDecimal requesterAvgRating,
             BigDecimal helperAvgRating,
-            Double distanceMtr
+            Double distanceMtr,
+            String completionMode,
+            Boolean canMarkDone,
+            Boolean canConfirm,
+            Boolean canReportIssue,
+            Boolean canRate
     ) {}
 }

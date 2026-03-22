@@ -5,6 +5,8 @@ public enum HelpRequestStatus {
     OPEN,
     PENDING_AUTH,
     ASSIGNED,
+    WORK_DONE_PENDING_CONFIRMATION,
+    REVIEW_REQUIRED,
     COMPLETED,
     CANCELLED
 }
