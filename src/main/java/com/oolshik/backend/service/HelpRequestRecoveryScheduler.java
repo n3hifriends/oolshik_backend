@@ -68,4 +68,67 @@ public class HelpRequestRecoveryScheduler {
             log.info("Auto-expired {} pending authorizations", reopened);
         }
     }
+
+    @Scheduled(fixedDelayString = "${app.task-recovery.schedulerDelayMs:60000}")
+    public void sendCompletionReminder50() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        List<UUID> candidates = helpRequestService.findCompletionReminder50Candidates(
+                now,
+                recoveryProperties.getSchedulerBatchSize()
+        );
+        if (candidates.isEmpty()) {
+            return;
+        }
+        int reminded = 0;
+        for (UUID id : candidates) {
+            if (helpRequestService.sendCompletionReminder50(id)) {
+                reminded++;
+            }
+        }
+        if (reminded > 0) {
+            log.info("Sent {} completion reminder-50 notifications", reminded);
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${app.task-recovery.schedulerDelayMs:60000}")
+    public void sendCompletionReminder80() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        List<UUID> candidates = helpRequestService.findCompletionReminder80Candidates(
+                now,
+                recoveryProperties.getSchedulerBatchSize()
+        );
+        if (candidates.isEmpty()) {
+            return;
+        }
+        int reminded = 0;
+        for (UUID id : candidates) {
+            if (helpRequestService.sendCompletionReminder80(id)) {
+                reminded++;
+            }
+        }
+        if (reminded > 0) {
+            log.info("Sent {} completion reminder-80 notifications", reminded);
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${app.task-recovery.schedulerDelayMs:60000}")
+    public void autoCompleteExpiredConfirmations() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        List<UUID> expired = helpRequestService.findExpiredCompletionConfirmations(
+                now,
+                recoveryProperties.getSchedulerBatchSize()
+        );
+        if (expired.isEmpty()) {
+            return;
+        }
+        int completed = 0;
+        for (UUID id : expired) {
+            if (helpRequestService.autoCompletePendingConfirmation(id)) {
+                completed++;
+            }
+        }
+        if (completed > 0) {
+            log.info("Auto-completed {} pending confirmations", completed);
+        }
+    }
 }

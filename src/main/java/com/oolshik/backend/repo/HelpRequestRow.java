@@ -22,6 +22,8 @@ public interface HelpRequestRow {
     Instant getAssignmentExpiresAt();
     Instant getPendingAuthExpiresAt();
     Instant getCancelledAt();
+    Instant getWorkDoneAt();
+    Instant getCompletionConfirmationExpiresAt();
     Integer getReassignedCount();
     Integer getReleasedCount();
     Integer getRadiusStage();
@@ -38,4 +40,5 @@ public interface HelpRequestRow {
     BigDecimal getOfferAmount();
     String getOfferCurrency();
     Instant getOfferUpdatedAt();
+    String getCompletionMode();
 }

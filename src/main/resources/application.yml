@@ -70,6 +70,9 @@ app:
     acceptToStartSlaSeconds: ${ACCEPT_TO_START_SLA_SECONDS:420}
     assignmentTtlSeconds: ${ASSIGNMENT_TTL_SECONDS:2700}
     authTtlSeconds: ${AUTH_TTL_SECONDS:120}
+    completionConfirmationTtlHours: ${COMPLETION_CONFIRMATION_TTL_HOURS:12}
+    reminder50Percent: ${COMPLETION_REMINDER_50_PERCENT:0.5}
+    reminder80Percent: ${COMPLETION_REMINDER_80_PERCENT:0.8}
     maxReassign: ${MAX_REASSIGN:2}
     schedulerBatchSize: ${TASK_RECOVERY_BATCH_SIZE:100}
     schedulerDelayMs: ${TASK_RECOVERY_DELAY_MS:60000}

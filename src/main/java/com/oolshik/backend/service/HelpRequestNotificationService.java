@@ -43,6 +43,7 @@ public class HelpRequestNotificationService {
         payload.setOccurredAt(occurredAt);
         payload.setActorUserId(context.getActorUserId());
         payload.setRequesterUserId(task.getRequesterId());
+        payload.setHelperUserId(task.getHelperId());
         payload.setPreviousStatus(context.getPreviousStatus());
         payload.setNewStatus(context.getNewStatus());
         payload.setAssignmentChange(context.getAssignmentChange() == null

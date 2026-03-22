@@ -9,7 +9,9 @@ public final class HelpRequestActivityPolicy {
     private static final Set<HelpRequestStatus> ACTIVE_STATUS_SET = EnumSet.of(
             HelpRequestStatus.OPEN,
             HelpRequestStatus.PENDING_AUTH,
-            HelpRequestStatus.ASSIGNED
+            HelpRequestStatus.ASSIGNED,
+            HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+            HelpRequestStatus.REVIEW_REQUIRED
     );
 
     private static final List<HelpRequestStatus> ACTIVE_STATUSES = List.copyOf(ACTIVE_STATUS_SET);
