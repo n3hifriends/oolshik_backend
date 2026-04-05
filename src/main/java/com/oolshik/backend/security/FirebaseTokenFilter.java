@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -78,21 +79,25 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
 
         } catch (FirebaseAuthException e) {
             SecurityContextHolder.clearContext();
-            unauthorized(res, e.getAuthErrorCode() != null ? e.getAuthErrorCode().name() : "invalid_token");
+            chain.doFilter(req, res);
         } catch (Exception e) {
             SecurityContextHolder.clearContext();
-            unauthorized(res, "invalid_token");
+            chain.doFilter(req, res);
         }
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String p = request.getRequestURI();
-        return p.startsWith("/actuator")
+        return p.startsWith("/actuator/health")
                 || p.startsWith("/swagger")
                 || p.startsWith("/v3/api-docs")
                 || p.startsWith("/api/public")
-                || p.startsWith("/api/auth/echo");
+                || p.startsWith("/api/auth/echo")
+                || p.startsWith("/api/auth/otp")
+                || p.startsWith("/api/auth/login")
+                || p.startsWith("/api/auth/refresh")
+                || p.startsWith("/error");
     }
 
     private void unauthorized(HttpServletResponse res, String code) throws IOException {
@@ -113,6 +118,16 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
         return List.of();
     }
 
-    public record FirebaseUserPrincipal(String uid, String phone, String email) {
+    public record FirebaseUserPrincipal(String uid, String phone, String email) implements Principal {
+        @Override
+        public String getName() {
+            if (phone != null && !phone.isBlank()) {
+                return phone;
+            }
+            if (uid != null && !uid.isBlank()) {
+                return uid;
+            }
+            return email != null ? email : "";
+        }
     }
 }

@@ -1,0 +1,167 @@
+name: oolshik-backend-mvp
+region: blr
+
+services:
+  - name: api
+    github:
+      repo: n3hifriends/oolshik_backend
+      branch: main
+      deploy_on_push: false
+    source_dir: /
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /actuator/health
+      port: 8080
+    liveness_health_check:
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /actuator/health
+      port: 8080
+    alerts:
+      - rule: CPU_UTILIZATION
+        disabled: false
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        disabled: false
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        disabled: false
+        operator: GREATER_THAN
+        value: 3
+        window: FIVE_MINUTES
+    envs:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_HOST
+        value: REPLACE_WITH_MANAGED_DB_PRIVATE_HOST
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_PORT
+        value: "25060"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_NAME
+        value: oolshik
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_USER
+        value: oolshik_app
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_PASSWORD
+        value: REPLACE_WITH_MANAGED_DB_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: DB_SSLMODE
+        value: require
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_POOL_SIZE
+        value: "10"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DB_MIN_IDLE
+        value: "2"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: JWT_SECRET
+        value: REPLACE_WITH_32_PLUS_CHARACTER_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: APP_CORS_ALLOWED_ORIGINS
+        value: https://your-frontend-domain.example
+        scope: RUN_TIME
+        type: GENERAL
+      - key: APP_DOCS_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: APP_SECURITY_FIREBASE_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: APP_MESSAGING_KAFKA_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: ADMIN_SEED_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_STORAGE
+        value: s3
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_PROVIDER
+        value: digitalocean
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_BUCKET
+        value: REPLACE_WITH_SPACES_BUCKET
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_REGION
+        value: blr1
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_ENDPOINT
+        value: https://blr1.digitaloceanspaces.com
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_PATH_STYLE_ACCESS_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_DOWNLOAD_URL_MODE
+        value: presigned_get
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_PRESIGNED_GET_TTL_SECONDS
+        value: "900"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MEDIA_S3_PREFIX
+        value: audio/
+        scope: RUN_TIME
+        type: GENERAL
+      - key: AWS_ACCESS_KEY_ID
+        value: REPLACE_WITH_SPACES_ACCESS_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: AWS_SECRET_ACCESS_KEY
+        value: REPLACE_WITH_SPACES_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: JAVA_OPTS
+        value: -Xms256m -Xmx768m
+        scope: RUN_TIME
+        type: GENERAL
+
+ingress:
+  rules:
+    - component:
+        name: api
+      match:
+        path:
+          prefix: /
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED

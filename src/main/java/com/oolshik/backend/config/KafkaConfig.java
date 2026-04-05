@@ -5,6 +5,7 @@ import com.oolshik.backend.transcription.SttResultMessage;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -22,7 +23,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-@EnableConfigurationProperties({KafkaTopicProperties.class, NotificationProperties.class})
+@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
+@EnableConfigurationProperties(KafkaTopicProperties.class)
 public class KafkaConfig {
 
     @Bean

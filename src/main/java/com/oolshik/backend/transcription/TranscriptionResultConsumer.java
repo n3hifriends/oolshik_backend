@@ -4,10 +4,12 @@ import com.oolshik.backend.config.KafkaTopicProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
 public class TranscriptionResultConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(TranscriptionResultConsumer.class);

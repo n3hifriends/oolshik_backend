@@ -1,10 +1,12 @@
 package com.oolshik.backend.media;
 
+import com.oolshik.backend.config.MediaS3Properties;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -16,30 +18,56 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Objects;
+import java.util.Optional;
 
 public class S3StorageService implements StorageService {
 
     private final S3Client s3;
     private final S3Presigner presigner;
+    private final MediaS3Properties.Provider provider;
+    private final MediaS3Properties.DownloadUrlMode downloadUrlMode;
     private final String bucket;
+    private final String region;
     private final String prefix;
+    private final URI endpointUri;
+    private final boolean pathStyleAccessEnabled;
+    private final String publicBaseUrl;
+    private final long presignedGetTtlSeconds;
     private final Path tmpRoot;
 
-    public S3StorageService(String bucket, String region, String prefix, String endpoint, boolean pathStyle) throws IOException {
-        this.bucket = bucket;
-        this.prefix = prefix != null ? prefix : "audio/";
+    public S3StorageService(MediaS3Properties properties) throws IOException {
+        Objects.requireNonNull(properties, "properties");
+        this.provider = properties.getProvider() != null ? properties.getProvider() : MediaS3Properties.Provider.AWS;
+        this.downloadUrlMode = properties.getDownloadUrlMode() != null
+                ? properties.getDownloadUrlMode()
+                : MediaS3Properties.DownloadUrlMode.PRESIGNED_GET;
+        this.bucket = Objects.requireNonNull(properties.getBucket(), "bucket");
+        this.region = Objects.requireNonNull(properties.getRegion(), "region");
+        this.prefix = StringUtils.hasText(properties.getPrefix()) ? properties.getPrefix() : "audio/";
+        this.endpointUri = resolveEndpointUri(properties.getEndpoint(), this.provider, this.region);
+        this.pathStyleAccessEnabled = properties.isPathStyleAccessEnabled();
+        this.publicBaseUrl = normalizeBaseUrl(properties.getPublicBaseUrl());
+        this.presignedGetTtlSeconds = Math.max(1, properties.getPresignedGetTtlSeconds());
+
         var base = S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(DefaultCredentialsProvider.create());
-        var pre = S3Presigner.builder().region(Region.of(region)).credentialsProvider(DefaultCredentialsProvider.create());
-        if (StringUtils.hasText(endpoint)) {
-            var uri = URI.create(endpoint);
-            base = base.endpointOverride(uri);
-            pre = pre.endpointOverride(uri);
+        var pre = S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(DefaultCredentialsProvider.create());
+
+        if (endpointUri != null) {
+            base = base.endpointOverride(endpointUri);
+            pre = pre.endpointOverride(endpointUri);
         }
-        if (pathStyle) {
-            base = base.serviceConfiguration(cfg -> cfg.pathStyleAccessEnabled(true));
+
+        if (pathStyleAccessEnabled) {
+            S3Configuration cfg = S3Configuration.builder().pathStyleAccessEnabled(true).build();
+            base = base.serviceConfiguration(cfg);
+            pre = pre.serviceConfiguration(cfg);
         }
+
         this.s3 = base.build();
         this.presigner = pre.build();
         this.tmpRoot = Paths.get("./data/audio/tmp-s3").toAbsolutePath();
@@ -165,10 +193,78 @@ public class S3StorageService implements StorageService {
         return pre.url().toString();
     }
 
+    public String presignGetUrl(String key, Duration ttl) {
+        GetObjectRequest get = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build();
+        PresignedGetObjectRequest pre = presigner.presignGetObject(b -> b
+                .signatureDuration(ttl)
+                .getObjectRequest(get));
+        return pre.url().toString();
+    }
+
+    public Optional<String> resolveDownloadUrl(String key) {
+        return switch (downloadUrlMode) {
+            case NONE -> Optional.empty();
+            case PUBLIC -> Optional.of(buildPublicUrl(key));
+            case PRESIGNED_GET -> Optional.of(presignGetUrl(key, Duration.ofSeconds(presignedGetTtlSeconds)));
+        };
+    }
+
     public String toPublicUrl(String key) {
-        // naive S3 URL; if you use CloudFront, return that instead.
-        // Note: for private buckets this won’t be directly playable; you would need signed GETs.
-        String regionHost = "s3." + s3.serviceClientConfiguration().region().toString().toLowerCase() + ".amazonaws.com";
-        return "https://" + bucket + "." + regionHost + "/" + key;
+        return buildPublicUrl(key);
+    }
+
+    private String buildPublicUrl(String key) {
+        String normalizedKey = normalizeObjectKey(key);
+        if (publicBaseUrl != null) {
+            return publicBaseUrl + "/" + normalizedKey;
+        }
+
+        return switch (provider) {
+            case DIGITALOCEAN -> buildHostStyleUrl(
+                    endpointUri != null ? endpointUri : URI.create("https://" + region + ".digitaloceanspaces.com"),
+                    normalizedKey
+            );
+            case AWS -> endpointUri != null
+                    ? buildHostStyleUrl(endpointUri, normalizedKey)
+                    : "https://" + bucket + ".s3." + region.toLowerCase() + ".amazonaws.com/" + normalizedKey;
+        };
+    }
+
+    private String buildHostStyleUrl(URI baseUri, String normalizedKey) {
+        String scheme = StringUtils.hasText(baseUri.getScheme()) ? baseUri.getScheme() : "https";
+        String host = Objects.requireNonNull(baseUri.getHost(), "endpoint host");
+        String authority = baseUri.getPort() > 0 ? host + ":" + baseUri.getPort() : host;
+        if (pathStyleAccessEnabled) {
+            return scheme + "://" + authority + "/" + bucket + "/" + normalizedKey;
+        }
+        return scheme + "://" + bucket + "." + authority + "/" + normalizedKey;
+    }
+
+    private static URI resolveEndpointUri(
+            String configuredEndpoint,
+            MediaS3Properties.Provider provider,
+            String region
+    ) {
+        if (StringUtils.hasText(configuredEndpoint)) {
+            return URI.create(configuredEndpoint.trim());
+        }
+        if (provider == MediaS3Properties.Provider.DIGITALOCEAN) {
+            return URI.create("https://" + region.trim().toLowerCase() + ".digitaloceanspaces.com");
+        }
+        return null;
+    }
+
+    private static String normalizeBaseUrl(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim().replaceAll("/+$", "");
+    }
+
+    private static String normalizeObjectKey(String key) {
+        return key == null ? "" : key.replaceFirst("^/+", "");
     }
 }

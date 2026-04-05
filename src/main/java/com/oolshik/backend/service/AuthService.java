@@ -36,10 +36,14 @@ public class AuthService implements UserDetailsService {
     private String adminEmail;
     @Value("${ADMIN_PASSWORD:}")
     private String adminPassword;
+    @Value("${app.admin.seed.enabled:false}")
+    private boolean adminSeedEnabled;
 
     @PostConstruct
     public void seedAdmin() {
-        if (adminEmail != null && !adminEmail.isBlank() && adminPassword != null && !adminPassword.isBlank()) {
+        if (adminSeedEnabled
+                && adminEmail != null && !adminEmail.isBlank()
+                && adminPassword != null && !adminPassword.isBlank()) {
             userRepository.findByEmail(adminEmail).orElseGet(() -> {
                 UserEntity e = new UserEntity();
                 e.setEmail(adminEmail);

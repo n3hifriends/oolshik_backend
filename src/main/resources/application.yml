@@ -2,9 +2,12 @@ spring:
   application:
     name: oolshik-backend
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}?sslmode=${DB_SSLMODE:prefer}
     username: ${DB_USER:oolshik}
     password: ${DB_PASSWORD:oolshik}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -45,6 +48,12 @@ spring:
 server:
   port: 8080
 
+springdoc:
+  api-docs:
+    enabled: ${APP_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${APP_DOCS_ENABLED:true}
+
 firebase:
   project-id: ${FIREBASE_PROJECT_ID:dev-project}
   check-revoked: ${FIREBASE_CHECK_REVOKED:false}
@@ -54,6 +63,19 @@ app:
     secret: ${JWT_SECRET:CHANGEME_DEV_SECRET_32_CHARS_MINIMUM________}
     accessTokenTtlMinutes: 60
     refreshTokenTtlDays: 14
+  admin:
+    seed:
+      enabled: ${ADMIN_SEED_ENABLED:false}
+  security:
+    firebase:
+      enabled: ${APP_SECURITY_FIREBASE_ENABLED:false}
+  docs:
+    enabled: ${APP_DOCS_ENABLED:true}
+  messaging:
+    kafka:
+      enabled: ${APP_MESSAGING_KAFKA_ENABLED:false}
+  cors:
+    allowedOrigins: ${APP_CORS_ALLOWED_ORIGINS:}
   otp:
     ttlSeconds: 300
     cooldownSeconds: 30
@@ -106,10 +128,10 @@ app:
 logging:
   level:
     org.springframework.security: INFO
-    org.hibernate.SQL: DEBUG
-    com.oolshik.backend: DEBUG
+    org.hibernate.SQL: INFO
+    com.oolshik.backend: INFO
     org.springframework.web: INFO
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.type.descriptor.sql.BasicBinder: INFO
 
 management:
   endpoints:
@@ -119,17 +141,23 @@ management:
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
 
 media:
-  storage: local   # local | s3
+  storage: ${MEDIA_STORAGE:local}   # local | s3
 
   local:
-    root: ./data/audio
+    root: ${MEDIA_LOCAL_ROOT:./data/audio}
     publicStreamEnabled: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:false}
 
   s3:
-    bucket: your-bucket-name
-    region: ap-south-1
-    prefix: audio/
-    # endpoint: http://localhost:9000
-    # pathStyleAccessEnabled: true
+    provider: ${MEDIA_S3_PROVIDER:aws}   # aws | digitalocean
+    bucket: ${MEDIA_S3_BUCKET:your-bucket-name}
+    region: ${MEDIA_S3_REGION:ap-south-1}
+    prefix: ${MEDIA_S3_PREFIX:audio/}
+    endpoint: ${MEDIA_S3_ENDPOINT:}
+    pathStyleAccessEnabled: ${MEDIA_S3_PATH_STYLE_ACCESS_ENABLED:false}
+    downloadUrlMode: ${MEDIA_S3_DOWNLOAD_URL_MODE:presigned_get}   # none | public | presigned_get
+    publicBaseUrl: ${MEDIA_S3_PUBLIC_BASE_URL:}
+    presignedGetTtlSeconds: ${MEDIA_S3_PRESIGNED_GET_TTL_SECONDS:900}

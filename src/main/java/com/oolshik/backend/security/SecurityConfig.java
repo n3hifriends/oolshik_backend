@@ -4,7 +4,10 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -17,6 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.io.IOException;
 
 @Configuration
+@EnableConfigurationProperties(com.oolshik.backend.config.CorsProperties.class)
 public class SecurityConfig {
 
     @Value("${firebase.project-id}")
@@ -26,6 +30,7 @@ public class SecurityConfig {
     private boolean checkRevoked;
 
     @Bean
+    @ConditionalOnProperty(name = "app.security.firebase.enabled", havingValue = "true")
     public FirebaseAuth firebaseAuth() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
             FirebaseOptions options = FirebaseOptions.builder()
@@ -37,6 +42,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = "app.security.firebase.enabled", havingValue = "true")
     public FirebaseTokenFilter firebaseTokenFilter(FirebaseAuth firebaseAuth) {
         return new FirebaseTokenFilter(firebaseAuth, firebaseProjectId, checkRevoked);
     }
@@ -44,8 +50,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            FirebaseTokenFilter firebaseTokenFilter
-            // , JwtAuthFilter jwtAuthFilter   // <= Only if you still use your own HS256 tokens on *separate* endpoints
+            ObjectProvider<FirebaseTokenFilter> firebaseTokenFilterProvider,
+            JwtAuthFilter jwtAuthFilter
     ) throws Exception {
 
         http
@@ -53,19 +59,25 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(reg -> reg
                         .requestMatchers(
-                                "/actuator/**",
+                                "/actuator/health/**",
                                 "/swagger/**",
                                 "/v3/api-docs/**",
                                 "/api/public/**",
-                                "/api/auth/echo"
+                                "/api/auth/echo",
+                                "/api/auth/otp/**",
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/error"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                // Admin SDK verification for Firebase ID tokens
-                .addFilterBefore(firebaseTokenFilter, UsernamePasswordAuthenticationFilter.class)
-                // If you *must* keep JwtAuthFilter, only add it for endpoints that never carry Firebase tokens
-                // .addFilterAfter(jwtAuthFilter, FirebaseTokenFilter.class)
                 .cors(Customizer.withDefaults());
+
+        FirebaseTokenFilter firebaseTokenFilter = firebaseTokenFilterProvider.getIfAvailable();
+        if (firebaseTokenFilter != null) {
+            http.addFilterBefore(firebaseTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

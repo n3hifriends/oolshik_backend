@@ -1,0 +1,19 @@
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/dev-seed
+
+app:
+  admin:
+    seed:
+      enabled: true
+  security:
+    firebase:
+      enabled: true
+  messaging:
+    kafka:
+      enabled: true
+  cors:
+    allowedOrigins:
+      - "*"

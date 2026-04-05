@@ -18,7 +18,11 @@ public class TranscriptionAudioSourceProperties {
 
     private AudioSourceMode audioSourceMode = AudioSourceMode.REQUEST;
     private String demoAudioUrl = "https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav";
-    private List<String> s3AllowedHostSuffixes = new ArrayList<>(List.of(".amazonaws.com", ".cloudfront.net"));
+    private List<String> s3AllowedHostSuffixes = new ArrayList<>(List.of(
+            ".amazonaws.com",
+            ".cloudfront.net",
+            ".digitaloceanspaces.com"
+    ));
     private boolean rewriteLocalPublicStreamForWorker = true;
     private String localWorkerBaseUrl = "http://api:8080";
 
