@@ -6,7 +6,7 @@ import com.oolshik.backend.payment.dto.PaymentDtos.InitiatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.MarkPaidRequest;
 import com.oolshik.backend.payment.dto.PaymentResponse;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
@@ -39,7 +39,7 @@ public class PaymentRequestController {
 
     @PostMapping("/qr-scan")
     public ResponseEntity<?> create(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             HttpServletRequest http,
             @Valid @RequestBody CreatePaymentRequest body) {
         UserEntity scanner = requireAuthenticatedUser(principal);
@@ -60,7 +60,7 @@ public class PaymentRequestController {
 
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> get(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId);
@@ -70,7 +70,7 @@ public class PaymentRequestController {
 
     @GetMapping("/task/{taskId}/active")
     public ResponseEntity<PaymentResponse> getActiveByTask(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("taskId") String rawTaskId
     ) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -89,7 +89,7 @@ public class PaymentRequestController {
 
     @PostMapping("/{id}/initiate")
     public ResponseEntity<Map<String, Object>> initiate(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody(required = false) InitiatePaymentRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -102,7 +102,7 @@ public class PaymentRequestController {
 
     @PostMapping("/{id}/mark-paid")
     public ResponseEntity<Map<String, Object>> markPaid(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody(required = false) MarkPaidRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -116,7 +116,7 @@ public class PaymentRequestController {
 
     @PostMapping("/{id}/dispute")
     public ResponseEntity<Map<String, Object>> dispute(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody Map<String, String> body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -193,7 +193,7 @@ public class PaymentRequestController {
         return h != null ? h.split(",")[0].trim() : req.getRemoteAddr();
     }
 
-    private UserEntity requireAuthenticatedUser(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UserEntity requireAuthenticatedUser(AuthenticatedUserPrincipal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
@@ -204,10 +204,10 @@ public class PaymentRequestController {
         return user;
     }
 
-    private UserEntity resolveUser(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UserEntity resolveUser(AuthenticatedUserPrincipal principal) {
         if (principal == null) return null;
-        if (principal.uid() != null) {
-            var byUid = userRepository.findByFirebaseUid(principal.uid());
+        if (principal.isFirebaseIdentity() && principal.providerUserId() != null) {
+            var byUid = userRepository.findByFirebaseUid(principal.providerUserId());
             if (byUid.isPresent()) return byUid.get();
         }
         String phone = principal.phone();

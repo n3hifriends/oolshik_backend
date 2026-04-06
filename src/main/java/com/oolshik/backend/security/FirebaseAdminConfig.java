@@ -5,14 +5,14 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 import javax.annotation.PostConstruct;
 import java.io.*;
 
 @Configuration
-@ConditionalOnProperty(name = "app.security.firebase.enabled", havingValue = "true")
+@Conditional(FirebaseIdentityCondition.class)
 public class FirebaseAdminConfig {
     private static final Logger log = LoggerFactory.getLogger(FirebaseAdminConfig.class);
 

@@ -34,7 +34,7 @@ docker compose exec -T db \
 
 - API: http://localhost:8080
 - Swagger: http://localhost:8080/swagger-ui/index.html
-- Dev mode returns OTP code in response payload (for easy mobile integration/testing).
+- Dev mode can return OTP code in the response payload when `APP_OTP_DEV_ENABLED=true`.
 
 ### B) Local (no Docker)
 
@@ -42,7 +42,7 @@ docker compose exec -T db \
 2. Run:
 
 ```bash
-JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
+JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev APP_OTP_PROVIDER=dev APP_OTP_DEV_ENABLED=true ./mvnw spring-boot:run
 ```
 
 ## API (Phase 1)
@@ -53,7 +53,7 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
   ```json
   { "phone": "+919876543210" }
   ```
-  Dev mode response includes `"devCode"`.
+  Dev mode response includes `"devCode"` only when `APP_OTP_DEV_ENABLED=true`.
 - `POST /api/auth/otp/verify`
   ```json
   {
@@ -88,7 +88,11 @@ Environment variables (defaults in `application.yml`):
 - `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
-- `app.otp.ttlSeconds=300`, `app.otp.cooldownSeconds=30`, `app.otp.maxAttempts=5`
+- `APP_OTP_PROVIDER=dev|msg91`
+- `APP_OTP_DEV_ENABLED=false`
+- `APP_OTP_TTL_SECONDS=300`, `APP_OTP_COOLDOWN_SECONDS=30`, `APP_OTP_MAX_ATTEMPTS=5`
+- `APP_SECURITY_IDENTITY_PROVIDER=local|firebase`
+- `APP_OTP_MSG91_API_KEY`, `APP_OTP_MSG91_TEMPLATE_ID`, `APP_OTP_MSG91_SENDER_ID`, `APP_OTP_MSG91_ENTITY_ID`
 - `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
 - `KAFKA_CONSUMER_GROUP=oolshik-stt-backend`
 - `KAFKA_TOPIC_STT_JOBS=stt.jobs`, `KAFKA_TOPIC_STT_RESULTS=stt.results`, `KAFKA_TOPIC_STT_DLQ=stt.jobs.dlq`
@@ -122,9 +126,12 @@ Seeds an admin with placeholder phone `+910000000000`. Admin can login via `/api
 
 ## Design Notes
 
-- **OTP codes** are stored **hashed** (BCrypt), with TTL, resend cooldown, and attempt throttling.
+- **OTP codes** are stored **hashed** (BCrypt), with TTL, resend cooldown, provider metadata, and attempt throttling.
 - **Phone normalization**: simple E.164-ish helper defaults to +91 when obvious (10-digit input). Replace with libphonenumber later if needed.
-- **SMS sending**: pluggable `SmsSender` interface; dev profile logs messages; add Twilio/SNS later.
+- **OTP delivery**: pluggable `OtpProvider` with `dev` and `msg91` implementations, selected by `app.otp.provider`.
+- **Identity verification**: `app.security.identity-provider` independently controls Firebase bearer-token verification.
+- **Auditability**: OTP generation, delivery, cooldown blocks, and verification attempts are persisted in `otp_audit_log`.
+- **Logging**: OTPs, tokens, passwords, and full phone numbers are redacted from application logs.
 - **Nearby search**: simple equirectangular distance in SQL; swap to PostGIS later without changing controller/service contracts.
 - **Clean layering**: Controllers → Services → Repos → Entities; DTOs for requests/responses; exception handler for neat API errors.
 

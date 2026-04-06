@@ -4,7 +4,7 @@ import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.media.AudioFileRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.HelpRequestService;
 import com.oolshik.backend.service.HelpRequestRatingService;
 import com.oolshik.backend.transcription.TranscriptionAudioSourceResolver;
@@ -84,7 +84,7 @@ public class HelpRequestController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
+    public ResponseEntity<?> create(@AuthenticationPrincipal AuthenticatedUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(req.latitude(), req.longitude()); // 4326
         String voiceUrl = req.voiceUrl();
@@ -126,7 +126,7 @@ public class HelpRequestController {
 
     @GetMapping("/nearby")
     public Page<HelpRequestRowView> nearby(
-        @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+        @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
         @RequestParam double lat,
         @RequestParam double lng,
         @RequestParam int radiusMeters,
@@ -140,7 +140,7 @@ public class HelpRequestController {
 
     @GetMapping("/active-summary")
     public ActiveRequestSummaryResponse activeSummary(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         return service.getActiveSummary(requester.getId());
@@ -148,7 +148,7 @@ public class HelpRequestController {
 
     @GetMapping("/{taskId}")
     public HelpRequestRowView findTaskByTaskId(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID taskId
     ) {
         UUID viewerId = resolveViewerId(principal);
@@ -157,7 +157,7 @@ public class HelpRequestController {
 
 
     @PostMapping("/{id}/accept")
-    public ResponseEntity<?> accept(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id, @RequestBody AcceptHelpRequestReq acceptReq) {
+    public ResponseEntity<?> accept(@AuthenticationPrincipal AuthenticatedUserPrincipal principal, @PathVariable UUID id, @RequestBody AcceptHelpRequestReq acceptReq) {
         var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         Point point = toPoint(acceptReq.latitude(), acceptReq.longitude()); // 4326
         var updated = service.accept(id, helper.getId(), point);
@@ -165,7 +165,7 @@ public class HelpRequestController {
     }
 
     @PostMapping("/{id}/authorize")
-    public ResponseEntity<?> authorize(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal, @PathVariable UUID id) {
+    public ResponseEntity<?> authorize(@AuthenticationPrincipal AuthenticatedUserPrincipal principal, @PathVariable UUID id) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.authorize(id, requester.getId());
         return ResponseEntity.ok(view(updated, null, requester.getId()));
@@ -173,7 +173,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/reject")
     public ResponseEntity<?> reject(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID id,
             @RequestBody @Valid RejectRequest body
     ) {
@@ -184,7 +184,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/complete")
     public ResponseEntity<?> complete(@PathVariable UUID id,
-                                                    @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+                                                    @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
                                                     @RequestBody(required = false) CompletePayload payload) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         HelpRequestEntity updated;
@@ -199,7 +199,7 @@ public class HelpRequestController {
     @PostMapping("/{id}/mark-done")
     public ResponseEntity<?> markDone(
             @PathVariable UUID id,
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal
     ) {
         var helper = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.markDone(id, helper.getId());
@@ -209,7 +209,7 @@ public class HelpRequestController {
     @PostMapping("/{id}/confirm-completion")
     public ResponseEntity<?> confirmCompletion(
             @PathVariable UUID id,
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         var updated = service.confirmCompletion(id, requester.getId());
@@ -219,7 +219,7 @@ public class HelpRequestController {
     @PostMapping("/{id}/report-issue")
     public ResponseEntity<?> reportIssue(
             @PathVariable UUID id,
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody @Valid ReportIssueRequest body
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
@@ -229,7 +229,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/rate")
     public ResponseEntity<?> rate(@PathVariable UUID id,
-                                               @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+                                               @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
                                                @RequestBody RatePayload body) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
         HelpRequestEntity updated;
@@ -244,7 +244,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<?> cancel(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID id,
             @RequestBody(required = false) @Valid CancelRequest body
     ) {
@@ -255,7 +255,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/release")
     public ResponseEntity<?> release(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID id,
             @RequestBody(required = false) ReleaseRequest body
     ) {
@@ -266,7 +266,7 @@ public class HelpRequestController {
 
     @PostMapping("/{id}/reassign")
     public ResponseEntity<?> reassign(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID id
     ) {
         var requester = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
@@ -276,7 +276,7 @@ public class HelpRequestController {
 
     @PatchMapping("/{id}/offer")
     public ResponseEntity<OfferUpdateResponse> updateOffer(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable UUID id,
             @RequestBody @Valid OfferUpdateRequest body
     ) {
@@ -422,7 +422,7 @@ public class HelpRequestController {
         return null;
     }
 
-    private UUID resolveViewerId(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UUID resolveViewerId(AuthenticatedUserPrincipal principal) {
         if (principal == null || principal.phone() == null) return null;
         return userRepo.findByPhoneNumber(principal.phone())
                 .map(u -> u.getId())

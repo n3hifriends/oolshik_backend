@@ -2,7 +2,7 @@ package com.oolshik.backend.service;
 
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.web.AuthController;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,8 +57,8 @@ class AuthControllerLocaleTest {
 
     @Test
     void meReturnsNormalizedPreferredLanguage() {
-        FirebaseTokenFilter.FirebaseUserPrincipal principal =
-                new FirebaseTokenFilter.FirebaseUserPrincipal("uid-1", "+919999999999", "a@b.com");
+        AuthenticatedUserPrincipal principal =
+                new AuthenticatedUserPrincipal("firebase", "uid-1", "+919999999999", "a@b.com");
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setPhoneNumber(principal.phone());
@@ -75,8 +75,8 @@ class AuthControllerLocaleTest {
     @Test
     void updateMeNormalizesPreferredLanguageAndReturnsLocalizedMessage() {
         LocaleContextHolder.resetLocaleContext();
-        FirebaseTokenFilter.FirebaseUserPrincipal principal =
-                new FirebaseTokenFilter.FirebaseUserPrincipal("uid-2", "+918888888888", "x@y.com");
+        AuthenticatedUserPrincipal principal =
+                new AuthenticatedUserPrincipal("firebase", "uid-2", "+918888888888", "x@y.com");
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setPhoneNumber(principal.phone());
@@ -96,4 +96,3 @@ class AuthControllerLocaleTest {
         assertEquals("updated", body.get("message"));
     }
 }
-

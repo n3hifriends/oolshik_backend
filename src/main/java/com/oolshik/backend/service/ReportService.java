@@ -8,7 +8,7 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
 import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
 import jakarta.persistence.EntityNotFoundException;
@@ -35,7 +35,7 @@ public class ReportService {
     }
 
     @Transactional
-    public CreateResponse create(FirebaseTokenFilter.FirebaseUserPrincipal principal, CreateRequest req) {
+    public CreateResponse create(AuthenticatedUserPrincipal principal, CreateRequest req) {
         UserEntity reporter = resolveReporter(principal);
 
         // Validate context: **exactly one** of taskId or targetUserId
@@ -95,12 +95,12 @@ public class ReportService {
         return new CreateResponse(ev.getId());
     }
 
-    private UserEntity resolveReporter(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UserEntity resolveReporter(AuthenticatedUserPrincipal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "errors.auth.required");
         }
-        if (principal.uid() != null && !principal.uid().isBlank()) {
-            var byUid = userRepo.findByFirebaseUid(principal.uid());
+        if (principal.isFirebaseIdentity() && principal.providerUserId() != null && !principal.providerUserId().isBlank()) {
+            var byUid = userRepo.findByFirebaseUid(principal.providerUserId());
             if (byUid.isPresent()) {
                 return byUid.get();
             }

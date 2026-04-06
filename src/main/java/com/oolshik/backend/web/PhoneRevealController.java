@@ -1,7 +1,7 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.PhoneRevealService;
 import com.oolshik.backend.web.dto.PhoneRevealDtos.RevealPhoneResponse;
 import com.oolshik.backend.web.error.ConflictOperationException;
@@ -26,7 +26,7 @@ public class PhoneRevealController {
 
     @PostMapping("/{id}/revealPhone")
     public ResponseEntity<RevealPhoneResponse> revealPhone(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") UUID helpRequestId) {
 
         // principal.getUsername() is the login (your project logs show it is phone)

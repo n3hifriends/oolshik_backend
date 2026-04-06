@@ -3,7 +3,7 @@ package com.oolshik.backend.web;
 import com.oolshik.backend.config.LocaleSupport;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.service.AuthService;
 import com.oolshik.backend.service.OtpService;
@@ -73,7 +73,7 @@ public class AuthController {
 
     @PostMapping("/complete")
     public ResponseEntity<?> complete(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody CompleteProfileReq req
     ) {
         if (principal == null) return ResponseEntity.status(401).build();
@@ -98,7 +98,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> me(@AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    public ResponseEntity<?> me(@AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
         UserEntity u = requireCurrentUser(principal);
         String preferredLanguage = LocaleSupport.normalizeTag(u.getPreferredLanguage());
         Map<String, Object> out = new LinkedHashMap<>();
@@ -115,7 +115,7 @@ public class AuthController {
 
     @PutMapping("/me")
     public ResponseEntity<?> updateMe(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody Map<String, Object> patch
     ) {
         UserEntity u = requireCurrentUser(principal);
@@ -145,7 +145,7 @@ public class AuthController {
 
     @GetMapping("/me/language")
     public ResponseEntity<?> getPreferredLanguage(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal
     ) {
         UserEntity u = requireCurrentUser(principal);
         return ResponseEntity.ok(Map.of(
@@ -155,7 +155,7 @@ public class AuthController {
 
     @PutMapping("/me/language")
     public ResponseEntity<?> updatePreferredLanguage(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody Map<String, Object> body
     ) {
         UserEntity u = requireCurrentUser(principal);
@@ -175,7 +175,7 @@ public class AuthController {
         ));
     }
 
-    private UserEntity requireCurrentUser(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UserEntity requireCurrentUser(AuthenticatedUserPrincipal principal) {
         if (principal == null || principal.phone() == null || principal.phone().isBlank()) {
             throw new IllegalArgumentException("errors.auth.required");
         }

@@ -6,8 +6,8 @@ import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -30,7 +30,7 @@ public class SecurityConfig {
     private boolean checkRevoked;
 
     @Bean
-    @ConditionalOnProperty(name = "app.security.firebase.enabled", havingValue = "true")
+    @Conditional(FirebaseIdentityCondition.class)
     public FirebaseAuth firebaseAuth() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
             FirebaseOptions options = FirebaseOptions.builder()
@@ -42,7 +42,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.security.firebase.enabled", havingValue = "true")
+    @Conditional(FirebaseIdentityCondition.class)
     public FirebaseTokenFilter firebaseTokenFilter(FirebaseAuth firebaseAuth) {
         return new FirebaseTokenFilter(firebaseAuth, firebaseProjectId, checkRevoked);
     }

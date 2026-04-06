@@ -9,10 +9,13 @@ app:
     seed:
       enabled: true
   security:
-    firebase:
-      enabled: true
+    identity-provider: local
   messaging:
     kafka:
+      enabled: true
+  otp:
+    provider: dev
+    dev:
       enabled: true
   cors:
     allowedOrigins:

@@ -17,10 +17,13 @@ app:
     seed:
       enabled: false
   security:
-    firebase:
-      enabled: false
+    identity-provider: local
   messaging:
     kafka:
+      enabled: false
+  otp:
+    provider: msg91
+    dev:
       enabled: false
 
 logging:

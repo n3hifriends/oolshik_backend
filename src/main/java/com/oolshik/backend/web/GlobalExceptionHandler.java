@@ -6,6 +6,7 @@ import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
 import com.oolshik.backend.web.error.OtpCooldownException;
+import com.oolshik.backend.service.OtpDeliveryException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,6 +172,14 @@ public class GlobalExceptionHandler {
         log.warn("[{}] 429 rate_limited: {}", cid(), msg);
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(new ApiError(cid(), "rate_limited", msg));
+    }
+
+    @ExceptionHandler(OtpDeliveryException.class)
+    public ResponseEntity<ApiError> handleOtpDelivery(OtpDeliveryException ex) {
+        String msg = localizeBusinessMessage(ex.messageKey(), "errors.auth.otpDeliveryFailed");
+        log.error("[{}] 502 otp_delivery_failed: {}", cid(), msg);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ApiError(cid(), "otp_delivery_failed", msg));
     }
 
     /* ---------------------------

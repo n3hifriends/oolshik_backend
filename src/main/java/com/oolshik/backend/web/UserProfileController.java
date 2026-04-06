@@ -3,7 +3,7 @@ package com.oolshik.backend.web;
 import com.oolshik.backend.repo.HelpRequestRatingRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,7 +34,7 @@ public class UserProfileController {
 
     @GetMapping("/me/stats")
     public ResponseEntity<?> getMyStats(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal
     ) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
@@ -55,14 +55,14 @@ public class UserProfileController {
     }
 
     private com.oolshik.backend.entity.UserEntity resolveUser(
-            FirebaseTokenFilter.FirebaseUserPrincipal principal
+            AuthenticatedUserPrincipal principal
     ) {
         if (principal.phone() != null && !principal.phone().isBlank()) {
             var byPhone = userRepository.findByPhoneNumber(principal.phone());
             if (byPhone.isPresent()) return byPhone.get();
         }
-        if (principal.uid() != null && !principal.uid().isBlank()) {
-            var byUid = userRepository.findByFirebaseUid(principal.uid());
+        if (principal.isFirebaseIdentity() && principal.providerUserId() != null && !principal.providerUserId().isBlank()) {
+            var byUid = userRepository.findByFirebaseUid(principal.providerUserId());
             if (byUid.isPresent()) return byUid.get();
         }
         if (principal.email() != null && !principal.email().isBlank()) {

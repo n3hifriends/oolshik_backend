@@ -1,7 +1,7 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.UserDeviceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -27,7 +27,7 @@ public class UserDeviceController {
 
     @PostMapping("/device")
     public ResponseEntity<?> registerDevice(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody @Valid RegisterDeviceRequest request
     ) {
         if (principal == null) {
@@ -40,7 +40,7 @@ public class UserDeviceController {
 
     @DeleteMapping("/device")
     public ResponseEntity<?> unregisterDevice(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody @Valid UnregisterDeviceRequest request
     ) {
         if (principal == null) {

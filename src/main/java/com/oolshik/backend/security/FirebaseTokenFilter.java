@@ -15,7 +15,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.security.Principal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -71,7 +70,7 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
 
             Collection<SimpleGrantedAuthority> authorities = extractAuthorities(decoded);
 
-            FirebaseUserPrincipal principal = new FirebaseUserPrincipal(uid, phone, email);
+            AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal("firebase", uid, phone, email);
             var authToken = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
             SecurityContextHolder.getContext().setAuthentication(authToken);
@@ -118,16 +117,4 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
         return List.of();
     }
 
-    public record FirebaseUserPrincipal(String uid, String phone, String email) implements Principal {
-        @Override
-        public String getName() {
-            if (phone != null && !phone.isBlank()) {
-                return phone;
-            }
-            if (uid != null && !uid.isBlank()) {
-                return uid;
-            }
-            return email != null ? email : "";
-        }
-    }
 }

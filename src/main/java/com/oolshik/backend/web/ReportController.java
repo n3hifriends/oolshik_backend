@@ -2,7 +2,7 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.service.ReportService;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
 import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
 import jakarta.validation.Valid;
@@ -30,7 +30,7 @@ public class ReportController {
 
     @PostMapping
     public ResponseEntity<CreateResponse> create(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody @Valid CreateRequest req
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)

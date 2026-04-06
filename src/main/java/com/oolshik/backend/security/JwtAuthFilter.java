@@ -38,7 +38,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 String phone = c.get("phone", String.class);
                 if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UserDetails u = uds.loadUserByUsername(phone);
-                    var principal = new FirebaseTokenFilter.FirebaseUserPrincipal(null, phone, null);
+                    var principal = new AuthenticatedUserPrincipal("local", null, phone, null);
                     var auth = new UsernamePasswordAuthenticationToken(principal, null, u.getAuthorities());
                     auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(auth);
