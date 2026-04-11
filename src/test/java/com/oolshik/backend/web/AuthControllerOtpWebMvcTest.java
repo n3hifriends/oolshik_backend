@@ -6,6 +6,8 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.service.AuthService;
+import com.oolshik.backend.service.CurrentUserService;
+import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
 import com.oolshik.backend.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -51,6 +53,12 @@ class AuthControllerOtpWebMvcTest {
     @MockBean
     private JwtService jwtService;
 
+    @MockBean
+    private GoogleAuthService googleAuthService;
+
+    @MockBean
+    private CurrentUserService currentUserService;
+
     @Test
     void otpRequestPreservesContract() throws Exception {
         when(otpService.requestLoginOtp("+919876543210"))
@@ -87,5 +95,21 @@ class AuthControllerOtpWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access-token"))
                 .andExpect(jsonPath("$.refreshToken").value("refresh-token"));
+    }
+
+    @Test
+    void googleExchangeReturnsBackendTokens() throws Exception {
+        when(googleAuthService.authenticate("google-id-token", "+919876543210"))
+                .thenReturn(new com.oolshik.backend.web.dto.AuthDtos.TokenResponse("google-access", "google-refresh"));
+
+        mockMvc.perform(post("/api/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "idToken", "google-id-token",
+                                "phone", "+919876543210"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("google-access"))
+                .andExpect(jsonPath("$.refreshToken").value("google-refresh"));
     }
 }

@@ -7,7 +7,6 @@ import com.oolshik.backend.entity.ReportEventEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
-import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.web.dto.ReportDtos.CreateRequest;
 import com.oolshik.backend.web.dto.ReportDtos.CreateResponse;
@@ -22,16 +21,19 @@ import java.util.UUID;
 @Service
 public class ReportService {
 
-    private final UserRepository userRepo;
+    private final CurrentUserService currentUserService;
+    private final com.oolshik.backend.repo.UserRepository userRepo;
     private final HelpRequestRepository helpRepo;
     private final ReportEventRepository reportRepo;
 
-    public ReportService(UserRepository userRepo,
+    public ReportService(com.oolshik.backend.repo.UserRepository userRepo,
                          HelpRequestRepository helpRepo,
-                         ReportEventRepository reportRepo) {
+                         ReportEventRepository reportRepo,
+                         CurrentUserService currentUserService) {
         this.userRepo = userRepo;
         this.helpRepo = helpRepo;
         this.reportRepo = reportRepo;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
@@ -99,15 +101,9 @@ public class ReportService {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "errors.auth.required");
         }
-        if (principal.isFirebaseIdentity() && principal.providerUserId() != null && !principal.providerUserId().isBlank()) {
-            var byUid = userRepo.findByFirebaseUid(principal.providerUserId());
-            if (byUid.isPresent()) {
-                return byUid.get();
-            }
-        }
-        if (principal.phone() != null && !principal.phone().isBlank()) {
-            return userRepo.findByPhoneNumber(principal.phone())
-                    .orElseThrow(() -> new EntityNotFoundException("errors.report.reporterNotFound"));
+        UserEntity reporter = currentUserService.resolve(principal);
+        if (reporter != null) {
+            return reporter;
         }
         throw new EntityNotFoundException("errors.report.reporterNotFound");
     }

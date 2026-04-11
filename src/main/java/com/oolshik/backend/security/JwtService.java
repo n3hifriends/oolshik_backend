@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.security.Key;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
@@ -29,11 +30,16 @@ public class JwtService {
 
     public String generateAccessToken(UUID userId, String phone) {
         Instant now = Instant.now();
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("typ", "access");
+        if (phone != null && !phone.isBlank()) {
+            claims.put("phone", phone);
+        }
         return Jwts.builder()
                 .setSubject(userId.toString())
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plusSeconds(accessTtlMinutes * 60)))
-                .addClaims(Map.of("phone", phone, "typ", "access"))
+                .addClaims(claims)
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }

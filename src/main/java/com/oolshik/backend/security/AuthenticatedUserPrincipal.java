@@ -1,16 +1,21 @@
 package com.oolshik.backend.security;
 
 import java.security.Principal;
+import java.util.UUID;
 
 public record AuthenticatedUserPrincipal(
         String identityProvider,
         String providerUserId,
         String phone,
-        String email
+        String email,
+        UUID userId
 ) implements Principal {
 
     @Override
     public String getName() {
+        if (userId != null) {
+            return userId.toString();
+        }
         if (phone != null && !phone.isBlank()) {
             return phone;
         }

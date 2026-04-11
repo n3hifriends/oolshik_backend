@@ -1,11 +1,14 @@
 package com.oolshik.backend.web;
 
+import com.oolshik.backend.config.AuthProperties;
 import com.oolshik.backend.config.LocaleSupport;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.service.AuthService;
+import com.oolshik.backend.service.CurrentUserService;
+import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
 import com.oolshik.backend.service.UserService;
 import com.oolshik.backend.web.dto.AuthDtos.*;
@@ -16,7 +19,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+
+import com.oolshik.backend.web.error.ConflictOperationException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -27,7 +34,10 @@ public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final JwtService jwt;
+    private final GoogleAuthService googleAuthService;
+    private final CurrentUserService currentUserService;
     private final MessageSource messageSource;
+    private final AuthProperties authProperties;
 
     public AuthController(
             OtpService otp,
@@ -35,24 +45,36 @@ public class AuthController {
             AuthService authService,
             UserRepository userRepository,
             JwtService jwt,
-            MessageSource messageSource
+            GoogleAuthService googleAuthService,
+            CurrentUserService currentUserService,
+            MessageSource messageSource,
+            AuthProperties authProperties
     ) {
         this.otp = otp;
         this.userService = userService;
         this.authService = authService;
         this.userRepository = userRepository;
         this.jwt = jwt;
+        this.googleAuthService = googleAuthService;
+        this.currentUserService = currentUserService;
         this.messageSource = messageSource;
+        this.authProperties = authProperties;
     }
 
     @PostMapping("/otp/request")
     public ResponseEntity<?> otpRequest(@RequestBody @Valid OtpRequest req) {
+        if (!authProperties.getPhone().isOtpEnabled()) {
+            throw new IllegalArgumentException("errors.auth.phoneOtpDisabled");
+        }
         var res = otp.requestLoginOtp(req.phone());
         return ResponseEntity.ok(res);
     }
 
     @PostMapping("/otp/verify")
     public ResponseEntity<?> otpVerify(@RequestBody @Valid OtpVerify req) {
+        if (!authProperties.getPhone().isOtpEnabled()) {
+            throw new IllegalArgumentException("errors.auth.phoneOtpDisabled");
+        }
         boolean ok = otp.verifyLoginOtp(req.phone(), req.code());
         if (!ok) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -84,6 +106,14 @@ public class AuthController {
 
     public record CompleteProfileReq(String displayName, String email) {}
 
+    @PostMapping("/google")
+    public ResponseEntity<TokenResponse> google(@RequestBody @Valid GoogleExchangeRequest req) {
+        if (!authProperties.getGoogle().isEnabled()) {
+            throw new IllegalArgumentException("errors.auth.googleDisabled");
+        }
+        return ResponseEntity.ok(googleAuthService.authenticate(req.idToken(), req.phone()));
+    }
+
     // Admin password login (ops only)
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody @Valid LoginRequest req) {
@@ -105,6 +135,7 @@ public class AuthController {
         out.put("id", u.getId());
         out.put("phone", u.getPhoneNumber());
         out.put("email", u.getEmail());
+        out.put("emailVerified", u.isEmailVerified());
         out.put("displayName", u.getDisplayName());
         out.put("roles", u.getRoles());
         out.put("languages", u.getLanguages());
@@ -127,7 +158,19 @@ public class AuthController {
         if (patch.containsKey("language")) {
             u.setPreferredLanguage(LocaleSupport.normalizeTag(String.valueOf(patch.get("language"))));
         }
-        if (patch.containsKey("email")) u.setEmail(String.valueOf(patch.get("email")));
+        if (patch.containsKey("email")) {
+            String nextEmail = normalizeEmail(patch.get("email"));
+            String currentEmail = normalizeEmail(u.getEmail());
+            if (!Objects.equals(currentEmail, nextEmail)) {
+                userRepository.findByEmailIgnoreCase(nextEmail)
+                        .filter(existing -> !existing.getId().equals(u.getId()))
+                        .ifPresent(existing -> {
+                            throw new ConflictOperationException("errors.auth.emailInUse");
+                        });
+                u.setEmail(nextEmail);
+                u.setEmailVerified(false);
+            }
+        }
         if (u.getPreferredLanguage() == null || u.getPreferredLanguage().isBlank()) {
             u.setPreferredLanguage(LocaleSupport.EN_IN_TAG);
         }
@@ -176,10 +219,15 @@ public class AuthController {
     }
 
     private UserEntity requireCurrentUser(AuthenticatedUserPrincipal principal) {
-        if (principal == null || principal.phone() == null || principal.phone().isBlank()) {
+        if (principal == null) {
             throw new IllegalArgumentException("errors.auth.required");
         }
-        return userRepository.findByPhoneNumber(principal.phone())
-                .orElseThrow(() -> new IllegalArgumentException("errors.auth.userNotRegistered"));
+        return currentUserService.require(principal);
+    }
+
+    private String normalizeEmail(Object rawEmail) {
+        if (rawEmail == null) return null;
+        String normalized = String.valueOf(rawEmail).trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() ? null : normalized;
     }
 }

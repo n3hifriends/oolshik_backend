@@ -63,6 +63,14 @@ app:
     secret: ${JWT_SECRET:CHANGEME_DEV_SECRET_32_CHARS_MINIMUM________}
     accessTokenTtlMinutes: 60
     refreshTokenTtlDays: 14
+  auth:
+    phone:
+      otpEnabled: ${APP_AUTH_PHONE_OTP_ENABLED:true}
+    google:
+      enabled: ${APP_AUTH_GOOGLE_ENABLED:true}
+      requirePhone: ${APP_AUTH_GOOGLE_REQUIRE_PHONE:true}
+      autoLinkByEmail: ${APP_AUTH_GOOGLE_AUTO_LINK_BY_EMAIL:false}
+      allowedClientIds: ${APP_AUTH_GOOGLE_ALLOWED_CLIENT_IDS:}
   admin:
     seed:
       enabled: ${ADMIN_SEED_ENABLED:false}

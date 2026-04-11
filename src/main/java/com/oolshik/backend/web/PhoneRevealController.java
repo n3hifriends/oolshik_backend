@@ -2,6 +2,7 @@ package com.oolshik.backend.web;
 
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
+import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.PhoneRevealService;
 import com.oolshik.backend.web.dto.PhoneRevealDtos.RevealPhoneResponse;
 import com.oolshik.backend.web.error.ConflictOperationException;
@@ -17,11 +18,11 @@ import java.util.UUID;
 public class PhoneRevealController {
 
     private final PhoneRevealService phoneRevealService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public PhoneRevealController(PhoneRevealService phoneRevealService, UserRepository userRepository) {
+    public PhoneRevealController(PhoneRevealService phoneRevealService, CurrentUserService currentUserService) {
         this.phoneRevealService = phoneRevealService;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/{id}/revealPhone")
@@ -30,8 +31,10 @@ public class PhoneRevealController {
             @PathVariable("id") UUID helpRequestId) {
 
         // principal.getUsername() is the login (your project logs show it is phone)
-        var viewer = userRepository.findByPhoneNumber(principal.phone())
-                .orElseThrow(() -> new ConflictOperationException("Viewer not found"));
+        var viewer = currentUserService.resolve(principal);
+        if (viewer == null) {
+            throw new ConflictOperationException("Viewer not found");
+        }
 
         var body = phoneRevealService.revealPhone(helpRequestId, viewer.getId());
         return ResponseEntity.ok(body);

@@ -5,8 +5,8 @@ import com.oolshik.backend.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.InitiatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.MarkPaidRequest;
 import com.oolshik.backend.payment.dto.PaymentResponse;
-import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
+import com.oolshik.backend.service.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
@@ -30,11 +30,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/payments")
 public class PaymentRequestController {
     private final PaymentRequestService service;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public PaymentRequestController(PaymentRequestService service, UserRepository userRepository) {
+    public PaymentRequestController(PaymentRequestService service, CurrentUserService currentUserService) {
         this.service = service;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/qr-scan")
@@ -205,15 +205,6 @@ public class PaymentRequestController {
     }
 
     private UserEntity resolveUser(AuthenticatedUserPrincipal principal) {
-        if (principal == null) return null;
-        if (principal.isFirebaseIdentity() && principal.providerUserId() != null) {
-            var byUid = userRepository.findByFirebaseUid(principal.providerUserId());
-            if (byUid.isPresent()) return byUid.get();
-        }
-        String phone = principal.phone();
-        if (phone != null) {
-            return userRepository.findByPhoneNumber(phone).orElse(null);
-        }
-        return null;
+        return currentUserService.resolve(principal);
     }
 }

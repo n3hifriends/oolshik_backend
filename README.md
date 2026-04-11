@@ -18,6 +18,7 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
+export APP_AUTH_GOOGLE_ALLOWED_CLIENT_IDS="263296903071-l80n6ccefcn05s5apnobtlpl1cc0fd5t.apps.googleusercontent.com,263296903071-v73slipdgnp9ffj4vlnav47usqpf4l3t.apps.googleusercontent.com,263296903071-e6t5p5s4on6naqbkpieo1enrudr2d6ch.apps.googleusercontent.com"
 docker compose up -d --build <- this will build all i.e. backend, stt-worker, notification-worker
 docker compose logs -f api
 docker compose logs -f stt-worker
@@ -88,6 +89,11 @@ Environment variables (defaults in `application.yml`):
 - `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
+- `APP_AUTH_PHONE_OTP_ENABLED=true|false` (toggle phone OTP sign-in)
+- `APP_AUTH_GOOGLE_ENABLED=true|false` (toggle Google sign-in)
+- `APP_AUTH_GOOGLE_REQUIRE_PHONE=true|false` (require phone entry during Google sign-in)
+- `APP_AUTH_GOOGLE_AUTO_LINK_BY_EMAIL=true|false` (auto-link existing same-email users during Google sign-in)
+- `APP_AUTH_GOOGLE_ALLOWED_CLIENT_IDS=<web-client-id>,<android-client-id>,<ios-client-id>` (required for Google sign-in)
 - `APP_OTP_PROVIDER=dev|msg91`
 - `APP_OTP_DEV_ENABLED=false`
 - `APP_OTP_TTL_SECONDS=300`, `APP_OTP_COOLDOWN_SECONDS=30`, `APP_OTP_MAX_ATTEMPTS=5`

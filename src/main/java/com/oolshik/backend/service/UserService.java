@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Nullable;
+import java.util.Locale;
 import java.util.*;
 
 @Service
@@ -32,7 +33,7 @@ public class UserService {
         }
 
         if (normalizedEmail != null) {
-            Optional<UserEntity> byEmail = usersRepo.findByEmail(normalizedEmail);
+            Optional<UserEntity> byEmail = usersRepo.findByEmailIgnoreCase(normalizedEmail);
             if (byEmail.isPresent()) {
                 UserEntity existing = byEmail.get();
                 if (existing.getPhoneNumber() == null || existing.getPhoneNumber().isBlank()) {
@@ -62,9 +63,9 @@ public class UserService {
             }
         }
 
-        String normalizedEmail = normalizeEmail(emailHint);
+        String normalizedEmail = normalizeEmail(emailHint != null ? emailHint : p.email());
         if (normalizedEmail != null) {
-            Optional<UserEntity> byEmail = usersRepo.findByEmail(normalizedEmail);
+            Optional<UserEntity> byEmail = usersRepo.findByEmailIgnoreCase(normalizedEmail);
             if (byEmail.isPresent()) {
                 UserEntity existing = byEmail.get();
                 if (p.isFirebaseIdentity() && (existing.getFirebaseUid() == null || existing.getFirebaseUid().isBlank())) {
@@ -114,7 +115,7 @@ public class UserService {
 
     private String normalizeEmail(String email) {
         if (email == null) return null;
-        String trimmed = email.trim();
+        String trimmed = email.trim().toLowerCase(Locale.ROOT);
         return trimmed.isEmpty() ? null : trimmed;
     }
 

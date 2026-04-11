@@ -1,7 +1,7 @@
 package com.oolshik.backend.web;
 
-import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
+import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.UserDeviceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -18,11 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserDeviceController {
 
     private final UserDeviceService deviceService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public UserDeviceController(UserDeviceService deviceService, UserRepository userRepository) {
+    public UserDeviceController(UserDeviceService deviceService, CurrentUserService currentUserService) {
         this.deviceService = deviceService;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/device")
@@ -33,7 +33,7 @@ public class UserDeviceController {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        var user = userRepository.findByPhoneNumber(principal.phone()).orElseThrow();
+        var user = currentUserService.require(principal);
         deviceService.registerDevice(user.getId(), request.token(), request.platform());
         return ResponseEntity.ok().build();
     }
@@ -46,7 +46,7 @@ public class UserDeviceController {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        var user = userRepository.findByPhoneNumber(principal.phone()).orElseThrow();
+        var user = currentUserService.require(principal);
         deviceService.unregisterDevice(user.getId(), request.token());
         return ResponseEntity.noContent().build();
     }

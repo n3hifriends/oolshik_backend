@@ -70,7 +70,7 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
 
             Collection<SimpleGrantedAuthority> authorities = extractAuthorities(decoded);
 
-            AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal("firebase", uid, phone, email);
+            AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal("firebase", uid, phone, email, null);
             var authToken = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
             SecurityContextHolder.getContext().setAuthentication(authToken);

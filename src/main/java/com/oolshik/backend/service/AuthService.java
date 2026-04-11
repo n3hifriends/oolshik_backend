@@ -44,7 +44,7 @@ public class AuthService implements UserDetailsService {
         if (adminSeedEnabled
                 && adminEmail != null && !adminEmail.isBlank()
                 && adminPassword != null && !adminPassword.isBlank()) {
-            userRepository.findByEmail(adminEmail).orElseGet(() -> {
+            userRepository.findByEmailIgnoreCase(adminEmail).orElseGet(() -> {
                 UserEntity e = new UserEntity();
                 e.setEmail(adminEmail);
                 e.setPhoneNumber("+910000000000");
@@ -76,7 +76,7 @@ public class AuthService implements UserDetailsService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> loginWithPassword(String email, String password) {
-        UserEntity ue = userRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+        UserEntity ue = userRepository.findByEmailIgnoreCase(email).orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
         if (ue.getPasswordHash() == null || !encoder.matches(password, ue.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid credentials");
         }

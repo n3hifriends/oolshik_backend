@@ -24,4 +24,8 @@ public class AuthDtos {
 
     public record TokenResponse(String accessToken, String refreshToken) {}
     public record RefreshRequest(@Sensitive @NotBlank String refreshToken) {}
+    public record GoogleExchangeRequest(
+            @Sensitive @NotBlank String idToken,
+            @Sensitive String phone
+    ) {}
 }

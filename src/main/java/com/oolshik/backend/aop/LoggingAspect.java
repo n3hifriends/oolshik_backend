@@ -81,12 +81,16 @@ public class LoggingAspect {
             return null;
         }
         if (value instanceof AuthenticatedUserPrincipal principal) {
-            return Map.of(
-                    "identityProvider", principal.identityProvider(),
-                    "providerUserId", principal.providerUserId() != null ? "[redacted]" : null,
-                    "phone", MaskingUtils.maskPhone(principal.phone()),
-                    "email", redactGeneric(principal.email())
+            Map<String, Object> sanitizedPrincipal = new LinkedHashMap<>();
+            sanitizedPrincipal.put("identityProvider", principal.identityProvider());
+            sanitizedPrincipal.put(
+                    "providerUserId",
+                    principal.providerUserId() != null ? "[redacted]" : null
             );
+            sanitizedPrincipal.put("userId", principal.userId());
+            sanitizedPrincipal.put("phone", MaskingUtils.maskPhone(principal.phone()));
+            sanitizedPrincipal.put("email", redactGeneric(principal.email()));
+            return sanitizedPrincipal;
         }
         if (value instanceof CharSequence sequence) {
             return sanitizeScalar(name, sequence.toString());

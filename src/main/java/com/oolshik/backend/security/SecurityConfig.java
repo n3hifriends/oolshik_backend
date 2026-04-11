@@ -65,6 +65,7 @@ public class SecurityConfig {
                                 "/api/public/**",
                                 "/api/auth/echo",
                                 "/api/auth/otp/**",
+                                "/api/auth/google",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
                                 "/error"

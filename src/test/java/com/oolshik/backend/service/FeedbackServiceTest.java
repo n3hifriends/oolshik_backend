@@ -135,6 +135,6 @@ class FeedbackServiceTest {
     }
 
     private AuthenticatedUserPrincipal principal() {
-        return new AuthenticatedUserPrincipal("firebase", "uid", "+911234567890", "a@b.com");
+        return new AuthenticatedUserPrincipal("firebase", "uid", "+911234567890", "a@b.com", null);
     }
 }
