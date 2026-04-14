@@ -1,17 +1,20 @@
 package com.oolshik.backend.payment;
 
 import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.payment.dto.PaymentDtos.CreateDirectPaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.InitiatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.MarkPaidRequest;
 import com.oolshik.backend.payment.dto.PaymentResponse;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.CurrentUserService;
+import com.oolshik.backend.util.MaskingUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import java.net.URI;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -58,6 +61,27 @@ public class PaymentRequestController {
         }
     }
 
+    @PostMapping("/direct")
+    public ResponseEntity<?> createDirect(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
+            HttpServletRequest http,
+            @Valid @RequestBody CreateDirectPaymentRequest body
+    ) {
+        UserEntity actor = requireAuthenticatedUser(principal);
+        String ip = clientIp(http);
+
+        try {
+            PaymentRequest saved = service.createDirect(actor.getId(), ip, body);
+            PaymentResponse out = toResponse(saved, actor.getId());
+            return ResponseEntity.created(URI.create("/api/payments/" + saved.getId()))
+                    .body(out);
+        } catch (NoSuchAlgorithmException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> get(
             @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
@@ -85,6 +109,20 @@ public class PaymentRequestController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your payment request");
         }
         return ResponseEntity.ok(toResponse(active, caller.getId()));
+    }
+
+    @GetMapping("/task/{taskId}/active-options")
+    public ResponseEntity<List<PaymentResponse>> getActiveOptionsByTask(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
+            @PathVariable("taskId") String rawTaskId
+    ) {
+        UserEntity caller = requireAuthenticatedUser(principal);
+        UUID taskId = requireUuid(rawTaskId);
+        List<PaymentResponse> responses = service.getActiveOptionsForTask(taskId).stream()
+                .filter(payment -> service.isTaskParticipant(payment, caller.getId()))
+                .map(payment -> toResponse(payment, caller.getId()))
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 
     @PostMapping("/{id}/initiate")
@@ -132,16 +170,19 @@ public class PaymentRequestController {
         out.id = pr.getId();
         out.taskId = pr.getTaskId();
         out.status = pr.getStatus();
+        out.paymentMode = pr.getPaymentMode();
         out.upiIntent = upi;
         out.payerUserId = pr.getPayerUser();
         out.payerRole = pr.getPayerRole();
         out.requesterUserId = pr.getRequesterUser();
         out.helperUserId = pr.getHelperUser();
+        out.paymentProfileUserId = pr.getPaymentProfileUser();
         out.canPay = service.canPay(pr, callerUserId);
 
         out.snapshot = new PaymentResponse.Snapshot();
         out.snapshot.taskId = pr.getTaskId();
         out.snapshot.payeeVpa = pr.getPayeeVpa();
+        out.snapshot.payeeMaskedVpa = MaskingUtils.maskUpiId(pr.getPayeeVpa());
         out.snapshot.payeeName = pr.getPayeeName();
         out.snapshot.mcc = pr.getMcc();
         out.snapshot.merchantId = pr.getMerchantId();

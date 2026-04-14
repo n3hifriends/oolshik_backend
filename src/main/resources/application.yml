@@ -162,7 +162,7 @@ management:
         enabled: true
 
 media:
-  storage: ${MEDIA_STORAGE:s3} # local | s3
+  storage: ${MEDIA_STORAGE:local} # local | s3
 
   local:
     root: ${MEDIA_LOCAL_ROOT:./data/audio}

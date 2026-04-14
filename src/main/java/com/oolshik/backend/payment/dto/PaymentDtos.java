@@ -1,6 +1,7 @@
 package com.oolshik.backend.payment.dto;
 
 import com.oolshik.backend.payment.PaymentPayerRole;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -32,10 +33,22 @@ public class PaymentDtos {
     ) {
     }
 
+    public record CreateDirectPaymentRequest(
+            @NotNull UUID taskId,
+            @NotNull @DecimalMin(value = "0.01") BigDecimal amount,
+            String currency,
+            String note,
+            String appVersion,
+            String deviceId,
+            PaymentPayerRole payerRole
+    ) {
+    }
+
     public record PaymentRequestSnapshot(
             UUID id,
             UUID taskId,
             String payeeVpa,
+            String payeeMaskedVpa,
             String payeeName,
             String mcc,
             String merchantId,

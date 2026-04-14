@@ -26,4 +26,25 @@ public final class MaskingUtils {
     public static String redactOtp() {
         return "[redacted]";
     }
+
+    public static String maskUpiId(String upiId) {
+        if (upiId == null || upiId.isBlank()) {
+            return "[blank]";
+        }
+        String normalized = upiId.trim();
+        int atIndex = normalized.indexOf('@');
+        if (atIndex <= 0 || atIndex == normalized.length() - 1) {
+            return "[redacted]";
+        }
+
+        String handle = normalized.substring(0, atIndex);
+        String provider = normalized.substring(atIndex + 1);
+        String visiblePrefix = handle.substring(0, Math.min(2, handle.length()));
+        String visibleSuffix = handle.substring(Math.max(handle.length() - 1, 0));
+        String maskedHandle =
+                handle.length() <= 3
+                        ? visiblePrefix + "*".repeat(Math.max(1, handle.length() - visiblePrefix.length()))
+                        : visiblePrefix + "*".repeat(Math.max(2, handle.length() - 3)) + visibleSuffix;
+        return maskedHandle + "@" + provider;
+    }
 }

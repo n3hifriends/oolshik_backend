@@ -1,6 +1,7 @@
 package com.oolshik.backend.payment.dto;
 
 import com.oolshik.backend.payment.PaymentPayerRole;
+import com.oolshik.backend.payment.PaymentMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -10,6 +11,7 @@ public class PaymentResponse {
     public static final class Snapshot {
         public UUID taskId;
         public String payeeVpa;
+        public String payeeMaskedVpa;
         public String payeeName;
         public String mcc;
         public String merchantId;
@@ -25,11 +27,13 @@ public class PaymentResponse {
     public UUID id;
     public UUID taskId;
     public String status;
+    public PaymentMode paymentMode;
     public Snapshot snapshot;
     public String upiIntent;
     public UUID payerUserId;
     public PaymentPayerRole payerRole;
     public UUID requesterUserId;
     public UUID helperUserId;
+    public UUID paymentProfileUserId;
     public Boolean canPay;
 }
