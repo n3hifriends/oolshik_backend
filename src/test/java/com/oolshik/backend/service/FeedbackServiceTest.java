@@ -6,7 +6,7 @@ import com.oolshik.backend.domain.FeedbackType;
 import com.oolshik.backend.entity.FeedbackEventEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.FeedbackEventRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateRequest;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -134,7 +134,7 @@ class FeedbackServiceTest {
         assertThrows(ResponseStatusException.class, () -> service.create(principal(), "key-2", req));
     }
 
-    private FirebaseTokenFilter.FirebaseUserPrincipal principal() {
-        return new FirebaseTokenFilter.FirebaseUserPrincipal("uid", "+911234567890", "a@b.com");
+    private AuthenticatedUserPrincipal principal() {
+        return new AuthenticatedUserPrincipal("firebase", "uid", "+911234567890", "a@b.com", null);
     }
 }

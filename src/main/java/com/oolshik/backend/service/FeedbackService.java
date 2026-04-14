@@ -5,7 +5,7 @@ import com.oolshik.backend.domain.FeedbackType;
 import com.oolshik.backend.entity.FeedbackEventEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.FeedbackEventRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateRequest;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateResponse;
 import org.slf4j.Logger;
@@ -49,7 +49,7 @@ public class FeedbackService {
 
     @Transactional
     public CreateResponse create(
-            FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            AuthenticatedUserPrincipal principal,
             String idempotencyKey,
             CreateRequest req
     ) {

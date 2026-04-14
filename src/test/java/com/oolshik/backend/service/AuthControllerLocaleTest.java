@@ -1,8 +1,9 @@
 package com.oolshik.backend.service;
 
+import com.oolshik.backend.config.AuthProperties;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.web.AuthController;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,32 +40,41 @@ class AuthControllerLocaleTest {
     @Mock
     private JwtService jwtService;
     @Mock
+    private GoogleAuthService googleAuthService;
+    @Mock
+    private CurrentUserService currentUserService;
+    @Mock
     private MessageSource messageSource;
 
     private AuthController controller;
+    private AuthProperties authProperties;
 
     @BeforeEach
     void setUp() {
+        authProperties = new AuthProperties();
         controller = new AuthController(
                 otpService,
                 userService,
                 authService,
                 userRepository,
                 jwtService,
-                messageSource
+                googleAuthService,
+                currentUserService,
+                messageSource,
+                authProperties
         );
     }
 
     @Test
     void meReturnsNormalizedPreferredLanguage() {
-        FirebaseTokenFilter.FirebaseUserPrincipal principal =
-                new FirebaseTokenFilter.FirebaseUserPrincipal("uid-1", "+919999999999", "a@b.com");
+        AuthenticatedUserPrincipal principal =
+                new AuthenticatedUserPrincipal("firebase", "uid-1", "+919999999999", "a@b.com", null);
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setPhoneNumber(principal.phone());
         user.setPreferredLanguage("mr");
 
-        when(userRepository.findByPhoneNumber(principal.phone())).thenReturn(Optional.of(user));
+        when(currentUserService.require(principal)).thenReturn(user);
 
         ResponseEntity<?> response = controller.me(principal);
         Map<?, ?> body = (Map<?, ?>) response.getBody();
@@ -75,14 +85,14 @@ class AuthControllerLocaleTest {
     @Test
     void updateMeNormalizesPreferredLanguageAndReturnsLocalizedMessage() {
         LocaleContextHolder.resetLocaleContext();
-        FirebaseTokenFilter.FirebaseUserPrincipal principal =
-                new FirebaseTokenFilter.FirebaseUserPrincipal("uid-2", "+918888888888", "x@y.com");
+        AuthenticatedUserPrincipal principal =
+                new AuthenticatedUserPrincipal("firebase", "uid-2", "+918888888888", "x@y.com", null);
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setPhoneNumber(principal.phone());
         user.setPreferredLanguage("en-IN");
 
-        when(userRepository.findByPhoneNumber(principal.phone())).thenReturn(Optional.of(user));
+        when(currentUserService.require(principal)).thenReturn(user);
         when(messageSource.getMessage(eq("response.updated"), any(), eq("updated"), any()))
                 .thenReturn("updated");
 
@@ -96,4 +106,3 @@ class AuthControllerLocaleTest {
         assertEquals("updated", body.get("message"));
     }
 }
-

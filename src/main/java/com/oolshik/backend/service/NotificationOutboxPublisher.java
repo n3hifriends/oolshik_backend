@@ -12,12 +12,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
 public class NotificationOutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationOutboxPublisher.class);

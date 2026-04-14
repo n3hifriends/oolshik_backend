@@ -1,17 +1,20 @@
 package com.oolshik.backend.payment;
 
 import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.payment.dto.PaymentDtos.CreateDirectPaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.InitiatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.MarkPaidRequest;
 import com.oolshik.backend.payment.dto.PaymentResponse;
-import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
+import com.oolshik.backend.service.CurrentUserService;
+import com.oolshik.backend.util.MaskingUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import java.net.URI;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,16 +33,16 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/payments")
 public class PaymentRequestController {
     private final PaymentRequestService service;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
-    public PaymentRequestController(PaymentRequestService service, UserRepository userRepository) {
+    public PaymentRequestController(PaymentRequestService service, CurrentUserService currentUserService) {
         this.service = service;
-        this.userRepository = userRepository;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/qr-scan")
     public ResponseEntity<?> create(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             HttpServletRequest http,
             @Valid @RequestBody CreatePaymentRequest body) {
         UserEntity scanner = requireAuthenticatedUser(principal);
@@ -58,9 +61,30 @@ public class PaymentRequestController {
         }
     }
 
+    @PostMapping("/direct")
+    public ResponseEntity<?> createDirect(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
+            HttpServletRequest http,
+            @Valid @RequestBody CreateDirectPaymentRequest body
+    ) {
+        UserEntity actor = requireAuthenticatedUser(principal);
+        String ip = clientIp(http);
+
+        try {
+            PaymentRequest saved = service.createDirect(actor.getId(), ip, body);
+            PaymentResponse out = toResponse(saved, actor.getId());
+            return ResponseEntity.created(URI.create("/api/payments/" + saved.getId()))
+                    .body(out);
+        } catch (NoSuchAlgorithmException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> get(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId) {
         UserEntity caller = requireAuthenticatedUser(principal);
         UUID id = requireUuid(rawId);
@@ -70,7 +94,7 @@ public class PaymentRequestController {
 
     @GetMapping("/task/{taskId}/active")
     public ResponseEntity<PaymentResponse> getActiveByTask(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("taskId") String rawTaskId
     ) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -87,9 +111,23 @@ public class PaymentRequestController {
         return ResponseEntity.ok(toResponse(active, caller.getId()));
     }
 
+    @GetMapping("/task/{taskId}/active-options")
+    public ResponseEntity<List<PaymentResponse>> getActiveOptionsByTask(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
+            @PathVariable("taskId") String rawTaskId
+    ) {
+        UserEntity caller = requireAuthenticatedUser(principal);
+        UUID taskId = requireUuid(rawTaskId);
+        List<PaymentResponse> responses = service.getActiveOptionsForTask(taskId).stream()
+                .filter(payment -> service.isTaskParticipant(payment, caller.getId()))
+                .map(payment -> toResponse(payment, caller.getId()))
+                .toList();
+        return ResponseEntity.ok(responses);
+    }
+
     @PostMapping("/{id}/initiate")
     public ResponseEntity<Map<String, Object>> initiate(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody(required = false) InitiatePaymentRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -102,7 +140,7 @@ public class PaymentRequestController {
 
     @PostMapping("/{id}/mark-paid")
     public ResponseEntity<Map<String, Object>> markPaid(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody(required = false) MarkPaidRequest body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -116,7 +154,7 @@ public class PaymentRequestController {
 
     @PostMapping("/{id}/dispute")
     public ResponseEntity<Map<String, Object>> dispute(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @PathVariable("id") String rawId,
             @RequestBody Map<String, String> body) {
         UserEntity caller = requireAuthenticatedUser(principal);
@@ -132,16 +170,19 @@ public class PaymentRequestController {
         out.id = pr.getId();
         out.taskId = pr.getTaskId();
         out.status = pr.getStatus();
+        out.paymentMode = pr.getPaymentMode();
         out.upiIntent = upi;
         out.payerUserId = pr.getPayerUser();
         out.payerRole = pr.getPayerRole();
         out.requesterUserId = pr.getRequesterUser();
         out.helperUserId = pr.getHelperUser();
+        out.paymentProfileUserId = pr.getPaymentProfileUser();
         out.canPay = service.canPay(pr, callerUserId);
 
         out.snapshot = new PaymentResponse.Snapshot();
         out.snapshot.taskId = pr.getTaskId();
         out.snapshot.payeeVpa = pr.getPayeeVpa();
+        out.snapshot.payeeMaskedVpa = MaskingUtils.maskUpiId(pr.getPayeeVpa());
         out.snapshot.payeeName = pr.getPayeeName();
         out.snapshot.mcc = pr.getMcc();
         out.snapshot.merchantId = pr.getMerchantId();
@@ -193,7 +234,7 @@ public class PaymentRequestController {
         return h != null ? h.split(",")[0].trim() : req.getRemoteAddr();
     }
 
-    private UserEntity requireAuthenticatedUser(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
+    private UserEntity requireAuthenticatedUser(AuthenticatedUserPrincipal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
@@ -204,16 +245,7 @@ public class PaymentRequestController {
         return user;
     }
 
-    private UserEntity resolveUser(FirebaseTokenFilter.FirebaseUserPrincipal principal) {
-        if (principal == null) return null;
-        if (principal.uid() != null) {
-            var byUid = userRepository.findByFirebaseUid(principal.uid());
-            if (byUid.isPresent()) return byUid.get();
-        }
-        String phone = principal.phone();
-        if (phone != null) {
-            return userRepository.findByPhoneNumber(phone).orElse(null);
-        }
-        return null;
+    private UserEntity resolveUser(AuthenticatedUserPrincipal principal) {
+        return currentUserService.resolve(principal);
     }
 }

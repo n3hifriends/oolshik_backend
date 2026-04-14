@@ -70,7 +70,7 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
 
             Collection<SimpleGrantedAuthority> authorities = extractAuthorities(decoded);
 
-            FirebaseUserPrincipal principal = new FirebaseUserPrincipal(uid, phone, email);
+            AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal("firebase", uid, phone, email, null);
             var authToken = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
             SecurityContextHolder.getContext().setAuthentication(authToken);
@@ -78,21 +78,25 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
 
         } catch (FirebaseAuthException e) {
             SecurityContextHolder.clearContext();
-            unauthorized(res, e.getAuthErrorCode() != null ? e.getAuthErrorCode().name() : "invalid_token");
+            chain.doFilter(req, res);
         } catch (Exception e) {
             SecurityContextHolder.clearContext();
-            unauthorized(res, "invalid_token");
+            chain.doFilter(req, res);
         }
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String p = request.getRequestURI();
-        return p.startsWith("/actuator")
+        return p.startsWith("/actuator/health")
                 || p.startsWith("/swagger")
                 || p.startsWith("/v3/api-docs")
                 || p.startsWith("/api/public")
-                || p.startsWith("/api/auth/echo");
+                || p.startsWith("/api/auth/echo")
+                || p.startsWith("/api/auth/otp")
+                || p.startsWith("/api/auth/login")
+                || p.startsWith("/api/auth/refresh")
+                || p.startsWith("/error");
     }
 
     private void unauthorized(HttpServletResponse res, String code) throws IOException {
@@ -113,6 +117,4 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
         return List.of();
     }
 
-    public record FirebaseUserPrincipal(String uid, String phone, String email) {
-    }
 }

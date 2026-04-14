@@ -14,11 +14,14 @@ public class UserEntity {
     @Column(name = "firebase_uid", unique = true)
     private String firebaseUid;
 
-    @Column(name = "phone_number", nullable = false, unique = true)
+    @Column(name = "phone_number", unique = true)
     private String phoneNumber;
 
     @Column(unique = true)
     private String email;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
 
     @Column(name = "password_hash")
     private String passwordHash;
@@ -68,6 +71,7 @@ public class UserEntity {
     public UUID getId() { return id; }
     public String getPhoneNumber() { return phoneNumber; }
     public String getEmail() { return email; }
+    public boolean isEmailVerified() { return emailVerified; }
     public String getPasswordHash() { return passwordHash; }
     public String getDisplayName() { return displayName; }
     public String getRoles() { return roles; }
@@ -78,6 +82,7 @@ public class UserEntity {
     public void setId(UUID id) { this.id = id; }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public void setEmail(String email) { this.email = email; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setRoles(String roles) { this.roles = roles; }

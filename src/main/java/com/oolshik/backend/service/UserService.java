@@ -3,12 +3,13 @@ package com.oolshik.backend.service;
 import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.util.PhoneUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Nullable;
+import java.util.Locale;
 import java.util.*;
 
 @Service
@@ -32,7 +33,7 @@ public class UserService {
         }
 
         if (normalizedEmail != null) {
-            Optional<UserEntity> byEmail = usersRepo.findByEmail(normalizedEmail);
+            Optional<UserEntity> byEmail = usersRepo.findByEmailIgnoreCase(normalizedEmail);
             if (byEmail.isPresent()) {
                 UserEntity existing = byEmail.get();
                 if (existing.getPhoneNumber() == null || existing.getPhoneNumber().isBlank()) {
@@ -52,21 +53,23 @@ public class UserService {
     }
 
     @Transactional
-    public UserEntity getOrCreate(FirebaseTokenFilter.FirebaseUserPrincipal p, @Nullable String displayNameHint, @Nullable String emailHint) {
-        Optional<UserEntity> byUid = usersRepo.findByFirebaseUid(p.uid());
-        if (byUid.isPresent()) {
-            UserEntity existing = byUid.get();
-            applyProfileHints(existing, displayNameHint, normalizeEmail(emailHint));
-            return usersRepo.save(existing);
+    public UserEntity getOrCreate(AuthenticatedUserPrincipal p, @Nullable String displayNameHint, @Nullable String emailHint) {
+        if (p.isFirebaseIdentity() && p.providerUserId() != null && !p.providerUserId().isBlank()) {
+            Optional<UserEntity> byUid = usersRepo.findByFirebaseUid(p.providerUserId());
+            if (byUid.isPresent()) {
+                UserEntity existing = byUid.get();
+                applyProfileHints(existing, displayNameHint, normalizeEmail(emailHint));
+                return usersRepo.save(existing);
+            }
         }
 
-        String normalizedEmail = normalizeEmail(emailHint);
+        String normalizedEmail = normalizeEmail(emailHint != null ? emailHint : p.email());
         if (normalizedEmail != null) {
-            Optional<UserEntity> byEmail = usersRepo.findByEmail(normalizedEmail);
+            Optional<UserEntity> byEmail = usersRepo.findByEmailIgnoreCase(normalizedEmail);
             if (byEmail.isPresent()) {
                 UserEntity existing = byEmail.get();
-                if (existing.getFirebaseUid() == null || existing.getFirebaseUid().isBlank()) {
-                    existing.setFirebaseUid(p.uid());
+                if (p.isFirebaseIdentity() && (existing.getFirebaseUid() == null || existing.getFirebaseUid().isBlank())) {
+                    existing.setFirebaseUid(p.providerUserId());
                 }
                 if (existing.getPhoneNumber() == null || existing.getPhoneNumber().isBlank()) {
                     existing.setPhoneNumber(normalizePhone(p.phone()));
@@ -81,8 +84,8 @@ public class UserService {
             Optional<UserEntity> byPhone = usersRepo.findByPhoneNumber(phone);
             if (byPhone.isPresent()) {
                 UserEntity existing = byPhone.get();
-                if (existing.getFirebaseUid() == null || existing.getFirebaseUid().isBlank()) {
-                    existing.setFirebaseUid(p.uid());
+                if (p.isFirebaseIdentity() && (existing.getFirebaseUid() == null || existing.getFirebaseUid().isBlank())) {
+                    existing.setFirebaseUid(p.providerUserId());
                 }
                 applyProfileHints(existing, displayNameHint, normalizedEmail);
                 return usersRepo.save(existing);
@@ -90,7 +93,9 @@ public class UserService {
         }
 
         UserEntity u = new UserEntity();
-        u.setFirebaseUid(p.uid());
+        if (p.isFirebaseIdentity()) {
+            u.setFirebaseUid(p.providerUserId());
+        }
         u.setRoleSet(new HashSet<>(Collections.singletonList(Role.NETA)));
         u.setEmail(normalizedEmail);
         u.setPhoneNumber(phone);  // may be null
@@ -110,7 +115,7 @@ public class UserService {
 
     private String normalizeEmail(String email) {
         if (email == null) return null;
-        String trimmed = email.trim();
+        String trimmed = email.trim().toLowerCase(Locale.ROOT);
         return trimmed.isEmpty() ? null : trimmed;
     }
 
@@ -123,7 +128,7 @@ public class UserService {
         }
     }
 
-    private String defaultNameFrom(FirebaseTokenFilter.FirebaseUserPrincipal p) {
+    private String defaultNameFrom(AuthenticatedUserPrincipal p) {
         if (p.email() != null && !p.email().isBlank()) return p.email().split("@")[0];
         if (p.phone() != null && !p.phone().isBlank()) return p.phone();
         return "User";

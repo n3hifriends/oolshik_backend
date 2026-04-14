@@ -1,0 +1,11 @@
+project_name    = "oolshik-mvp"
+environment     = "prod"
+region          = "blr1"
+vpc_name        = "oolshik-blr1-vpc"
+vpc_ip_range    = "10.20.0.0/24"
+db_cluster_name = "oolshik-pg"
+db_engine_version = "16"
+db_size         = "db-s-1vcpu-1gb"
+db_node_count   = 1
+db_name         = "oolshik"
+db_user_name    = "oolshik_app"

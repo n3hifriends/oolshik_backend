@@ -4,9 +4,13 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.io.IOException;
 
 @Configuration
+@EnableConfigurationProperties(com.oolshik.backend.config.CorsProperties.class)
 public class SecurityConfig {
 
     @Value("${firebase.project-id}")
@@ -26,6 +31,7 @@ public class SecurityConfig {
     private boolean checkRevoked;
 
     @Bean
+    @Conditional(FirebaseIdentityCondition.class)
     public FirebaseAuth firebaseAuth() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
             FirebaseOptions options = FirebaseOptions.builder()
@@ -37,6 +43,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Conditional(FirebaseIdentityCondition.class)
     public FirebaseTokenFilter firebaseTokenFilter(FirebaseAuth firebaseAuth) {
         return new FirebaseTokenFilter(firebaseAuth, firebaseProjectId, checkRevoked);
     }
@@ -44,28 +51,41 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            FirebaseTokenFilter firebaseTokenFilter
-            // , JwtAuthFilter jwtAuthFilter   // <= Only if you still use your own HS256 tokens on *separate* endpoints
+            ObjectProvider<FirebaseTokenFilter> firebaseTokenFilterProvider,
+            JwtAuthFilter jwtAuthFilter
     ) throws Exception {
 
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) ->
+                                response.sendError(HttpStatus.UNAUTHORIZED.value(), "Unauthorized"))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                response.sendError(HttpStatus.FORBIDDEN.value(), "Forbidden"))
+                )
                 .authorizeHttpRequests(reg -> reg
                         .requestMatchers(
-                                "/actuator/**",
+                                "/actuator/health/**",
                                 "/swagger/**",
                                 "/v3/api-docs/**",
                                 "/api/public/**",
-                                "/api/auth/echo"
+                                "/api/auth/echo",
+                                "/api/auth/otp/**",
+                                "/api/auth/google",
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/error"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                // Admin SDK verification for Firebase ID tokens
-                .addFilterBefore(firebaseTokenFilter, UsernamePasswordAuthenticationFilter.class)
-                // If you *must* keep JwtAuthFilter, only add it for endpoints that never carry Firebase tokens
-                // .addFilterAfter(jwtAuthFilter, FirebaseTokenFilter.class)
                 .cors(Customizer.withDefaults());
+
+        FirebaseTokenFilter firebaseTokenFilter = firebaseTokenFilterProvider.getIfAvailable();
+        if (firebaseTokenFilter != null) {
+            http.addFilterBefore(firebaseTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

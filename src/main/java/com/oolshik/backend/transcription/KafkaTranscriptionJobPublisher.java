@@ -5,12 +5,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
 
 @Component
+@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
 public class KafkaTranscriptionJobPublisher implements TranscriptionJobPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaTranscriptionJobPublisher.class);

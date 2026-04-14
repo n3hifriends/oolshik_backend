@@ -1,8 +1,8 @@
 package com.oolshik.backend.web;
 
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
+import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.HelperLocationService;
-import com.oolshik.backend.repo.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.locationtech.jts.geom.Coordinate;
@@ -21,20 +21,20 @@ public class HelperLocationController {
             new GeometryFactory(new PrecisionModel(), 4326);
 
     private final HelperLocationService service;
-    private final UserRepository userRepo;
+    private final CurrentUserService currentUserService;
 
-    public HelperLocationController(HelperLocationService service, UserRepository userRepo) {
+    public HelperLocationController(HelperLocationService service, CurrentUserService currentUserService) {
         this.service = service;
-        this.userRepo = userRepo;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/location")
     public ResponseEntity<?> upsertLocation(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestBody @Valid UpdateLocationRequest body
     ) {
         Point point = GEOMETRY_FACTORY.createPoint(new Coordinate(body.longitude(), body.latitude()));
-        var user = userRepo.findByPhoneNumber(principal.phone()).orElseThrow();
+        var user = currentUserService.require(principal);
         service.upsert(user.getId(), point);
         return ResponseEntity.ok().build();
     }

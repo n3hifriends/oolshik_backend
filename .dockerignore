@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+target
+data
+models
+secrets
+notification-worker/target
+stt-worker/.venv
+stt-worker/__pycache__
+**/.DS_Store

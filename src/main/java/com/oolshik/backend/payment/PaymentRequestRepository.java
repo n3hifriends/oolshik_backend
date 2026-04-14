@@ -15,6 +15,14 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
 
     Optional<PaymentRequest> findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(UUID taskId, Collection<String> statuses);
 
+    Optional<PaymentRequest> findFirstByTaskIdAndPaymentModeAndStatusInOrderByCreatedAtDesc(
+            UUID taskId,
+            PaymentMode paymentMode,
+            Collection<String> statuses
+    );
+
+    List<PaymentRequest> findByTaskIdAndStatusInOrderByCreatedAtDesc(UUID taskId, Collection<String> statuses);
+
     @Query(value = """
         SELECT *
           FROM payment_requests

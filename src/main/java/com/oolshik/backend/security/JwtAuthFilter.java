@@ -5,25 +5,24 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.context.annotation.Lazy;
+import com.oolshik.backend.repo.UserRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import java.util.stream.Collectors;
 
-//@Component
+@Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsService uds;
+    private final UserRepository userRepository;
 
-    public JwtAuthFilter(JwtService jwtService, @Lazy UserDetailsService uds) {
+    public JwtAuthFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
-        this.uds = uds;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -33,16 +32,30 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
             try {
-                var jws = jwtService.parse(token); // HS256
+                var jws = jwtService.parse(token);
                 Claims c = jws.getBody();
-                String phone = c.get("phone", String.class);
-                if (phone != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    UserDetails u = uds.loadUserByUsername(phone);
-                    var auth = new UsernamePasswordAuthenticationToken(u, null, u.getAuthorities());
-                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(auth);
+                String tokenType = c.get("typ", String.class);
+                if ("access".equals(tokenType) && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    var userId = java.util.UUID.fromString(c.getSubject());
+                    userRepository.findById(userId).ifPresent(user -> {
+                        var authorities = user.getRoleSet().stream()
+                                .map(role -> new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.name()))
+                                .collect(Collectors.toList());
+                        var principal = new AuthenticatedUserPrincipal(
+                                "local",
+                                null,
+                                user.getPhoneNumber(),
+                                user.getEmail(),
+                                user.getId()
+                        );
+                        var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(auth);
+                    });
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+                SecurityContextHolder.clearContext();
+            }
         }
         chain.doFilter(request, response);
     }

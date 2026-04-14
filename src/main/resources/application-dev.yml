@@ -1,0 +1,22 @@
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/dev-seed
+
+app:
+  admin:
+    seed:
+      enabled: true
+  security:
+    identity-provider: local
+  messaging:
+    kafka:
+      enabled: true
+  otp:
+    provider: dev
+    dev:
+      enabled: true
+  cors:
+    allowedOrigins:
+      - "*"

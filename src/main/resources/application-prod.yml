@@ -1,0 +1,32 @@
+server:
+  forward-headers-strategy: framework
+
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+app:
+  docs:
+    enabled: false
+  admin:
+    seed:
+      enabled: false
+  security:
+    identity-provider: local
+  messaging:
+    kafka:
+      enabled: false
+  otp:
+    provider: msg91
+    dev:
+      enabled: false
+
+logging:
+  level:
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN

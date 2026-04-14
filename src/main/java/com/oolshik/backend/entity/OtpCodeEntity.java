@@ -16,6 +16,9 @@ public class OtpCodeEntity {
     @Column(name = "code_hash", nullable = false)
     private String codeHash;
 
+    @Column(length = 32)
+    private String provider;
+
     @Column(nullable = false)
     private String purpose; // LOGIN
 
@@ -50,6 +53,7 @@ public class OtpCodeEntity {
     public UUID getId() { return id; }
     public String getPhoneNumber() { return phoneNumber; }
     public String getCodeHash() { return codeHash; }
+    public String getProvider() { return provider; }
     public String getPurpose() { return purpose; }
     public OffsetDateTime getExpiresAt() { return expiresAt; }
     public OffsetDateTime getConsumedAt() { return consumedAt; }
@@ -60,6 +64,7 @@ public class OtpCodeEntity {
     public void setId(UUID id) { this.id = id; }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public void setCodeHash(String codeHash) { this.codeHash = codeHash; }
+    public void setProvider(String provider) { this.provider = provider; }
     public void setPurpose(String purpose) { this.purpose = purpose; }
     public void setExpiresAt(OffsetDateTime expiresAt) { this.expiresAt = expiresAt; }
     public void setConsumedAt(OffsetDateTime consumedAt) { this.consumedAt = consumedAt; }

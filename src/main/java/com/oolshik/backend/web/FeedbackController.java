@@ -1,6 +1,6 @@
 package com.oolshik.backend.web;
 
-import com.oolshik.backend.security.FirebaseTokenFilter;
+import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.FeedbackService;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateRequest;
 import com.oolshik.backend.web.dto.FeedbackDtos.CreateResponse;
@@ -22,7 +22,7 @@ public class FeedbackController {
 
     @PostMapping
     public ResponseEntity<CreateResponse> create(
-            @AuthenticationPrincipal FirebaseTokenFilter.FirebaseUserPrincipal principal,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody @Valid CreateRequest req
     ) {

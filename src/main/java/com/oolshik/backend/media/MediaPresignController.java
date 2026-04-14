@@ -20,7 +20,7 @@ public class MediaPresignController {
     }
 
     public record PresignReq(String contentType) {}
-    public record PresignResp(String uploadUrl, String fileUrl, String objectKey) {}
+    public record PresignResp(String uploadUrl, String fileUrl, String downloadUrl, String objectKey) {}
 
     @PostMapping("/pre-signed")
     public ResponseEntity<?> create(@RequestBody PresignReq req, Authentication auth) {
@@ -33,7 +33,8 @@ public class MediaPresignController {
         String objectKey = userId + "/direct/" + UUID.randomUUID() + ext;
         String uploadUrl = s3.presignPutUrl(objectKey, req.contentType(), Duration.ofMinutes(15));
         String fileUrl = s3.toPublicUrl(objectKey);
-        return ResponseEntity.ok(new PresignResp(uploadUrl, fileUrl, objectKey));
+        String downloadUrl = s3.resolveDownloadUrl(objectKey).orElse(fileUrl);
+        return ResponseEntity.ok(new PresignResp(uploadUrl, fileUrl, downloadUrl, objectKey));
     }
 
     private static String guessExt(String ct) {

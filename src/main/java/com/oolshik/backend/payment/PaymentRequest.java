@@ -41,6 +41,13 @@ public class PaymentRequest {
     @Column(nullable = false, name = "payer_role", length = 16)
     private PaymentPayerRole payerRole;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, name = "payment_mode", length = 32)
+    private PaymentMode paymentMode = PaymentMode.MERCHANT_QR;
+
+    @Column(name = "payment_profile_user")
+    private UUID paymentProfileUser;
+
     @Column(nullable = false, columnDefinition = "text")
     private String rawPayload;
 

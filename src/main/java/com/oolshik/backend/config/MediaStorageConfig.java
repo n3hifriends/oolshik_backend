@@ -22,12 +22,8 @@ public class MediaStorageConfig {
     @Bean // name: storageService
     @ConditionalOnProperty(name = "media.storage", havingValue = "s3")
     public StorageService storageServiceS3(
-            @Value("${media.s3.bucket}") String bucket,
-            @Value("${media.s3.region}") String region,
-            @Value("${media.s3.prefix:audio/}") String prefix,
-            @Value("${media.s3.endpoint:}") String endpoint,
-            @Value("${media.s3.pathStyleAccessEnabled:false}") boolean pathStyle
+            MediaS3Properties properties
     ) throws Exception {
-        return new S3StorageService(bucket, region, prefix, endpoint, pathStyle);
+        return new S3StorageService(properties);
     }
 }
