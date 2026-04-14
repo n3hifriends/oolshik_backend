@@ -14,7 +14,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-#        dialect:org.hibernate.spatial.dialect.postgis.PostgisDialect
+        #        dialect:org.hibernate.spatial.dialect.postgis.PostgisDialect
         jdbc:
           time_zone: UTC
   flyway:
@@ -162,19 +162,19 @@ management:
         enabled: true
 
 media:
-  storage: ${MEDIA_STORAGE:local}   # local | s3
+  storage: ${MEDIA_STORAGE:s3} # local | s3
 
   local:
     root: ${MEDIA_LOCAL_ROOT:./data/audio}
     publicStreamEnabled: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:false}
 
   s3:
-    provider: ${MEDIA_S3_PROVIDER:aws}   # aws | digitalocean
+    provider: ${MEDIA_S3_PROVIDER:aws} # aws | digitalocean
     bucket: ${MEDIA_S3_BUCKET:your-bucket-name}
     region: ${MEDIA_S3_REGION:ap-south-1}
     prefix: ${MEDIA_S3_PREFIX:audio/}
     endpoint: ${MEDIA_S3_ENDPOINT:}
     pathStyleAccessEnabled: ${MEDIA_S3_PATH_STYLE_ACCESS_ENABLED:false}
-    downloadUrlMode: ${MEDIA_S3_DOWNLOAD_URL_MODE:presigned_get}   # none | public | presigned_get
+    downloadUrlMode: ${MEDIA_S3_DOWNLOAD_URL_MODE:presigned_get} # none | public | presigned_get
     publicBaseUrl: ${MEDIA_S3_PUBLIC_BASE_URL:}
     presignedGetTtlSeconds: ${MEDIA_S3_PRESIGNED_GET_TTL_SECONDS:900}
