@@ -18,7 +18,6 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
-export APP_AUTH_GOOGLE_ALLOWED_CLIENT_IDS="263296903071-l80n6ccefcn05s5apnobtlpl1cc0fd5t.apps.googleusercontent.com,263296903071-v73slipdgnp9ffj4vlnav47usqpf4l3t.apps.googleusercontent.com,263296903071-e6t5p5s4on6naqbkpieo1enrudr2d6ch.apps.googleusercontent.com"
 docker compose up -d --build <- this will build all i.e. backend, stt-worker, notification-worker
 docker compose logs -f api
 docker compose logs -f stt-worker
@@ -86,7 +85,8 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 
 Environment variables (defaults in `application.yml`):
 
-- `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`
+- Preferred deployed datasource contract: `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`, `SPRING_DATASOURCE_USERNAME=<neon-username>`, `SPRING_DATASOURCE_PASSWORD=<neon-password>`
+- Local/dev fallback remains: `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`, `DB_SSLMODE=prefer`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
 - `APP_AUTH_PHONE_OTP_ENABLED=true|false` (toggle phone OTP sign-in)
@@ -109,6 +109,8 @@ Environment variables (defaults in `application.yml`):
 - `STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER=true` (in `REQUEST`, rewrites local stream URL host for worker reachability)
 - `STT_LOCAL_WORKER_BASE_URL=http://api:8080` (worker-reachable API base in Docker network)
 - `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false` (enable `/api/public/media/audio/{id}/stream` in local/demo only)
+
+For non-Docker local runs, `.env` is not auto-loaded by Spring Boot. Export datasource values in your shell before starting the app if you want to use Neon outside Docker.
 
 STT audio source modes:
 

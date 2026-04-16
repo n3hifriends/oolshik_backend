@@ -2,9 +2,9 @@ spring:
   application:
     name: notification-worker
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}
-    username: ${DB_USER:oolshik}
-    password: ${DB_PASSWORD:oolshik}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:oolshik}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:oolshik}}
   jpa:
     hibernate:
       ddl-auto: validate

@@ -90,14 +90,13 @@ Start from [.env.production.example](/Users/nitinkalokhe/Ni3/spring_boot_proj/oo
 
 Required values:
 
-- `DB_HOST`
-- `DB_PORT`
-- `DB_NAME`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_SSLMODE=require`
+- `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
 - `JWT_SECRET`
 - `APP_CORS_ALLOWED_ORIGINS`
+
+Keep the real Neon credentials in the deployment environment only. Do not commit them to tracked files. If you run the app outside Docker, export these variables in your shell because Spring Boot does not auto-load `.env`.
 
 For the API-only MVP, keep these disabled:
 
@@ -111,7 +110,7 @@ For the API-only MVP, keep these disabled:
 Edit [.do/app.yaml](/Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp/.do/app.yaml):
 
 1. Replace `YOUR_GITHUB_ORG/YOUR_REPO`.
-2. Replace the DB placeholders with the managed DB outputs.
+2. Replace the `SPRING_DATASOURCE_*` placeholders with the Neon connection values.
 3. Replace `JWT_SECRET`.
 4. Replace `APP_CORS_ALLOWED_ORIGINS`.
 
