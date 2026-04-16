@@ -26,9 +26,9 @@ services:
   db:
     image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_USER: oolshik
-      POSTGRES_PASSWORD: oolshik
-      POSTGRES_DB: oolshik
+      POSTGRES_USER: ${DB_USER:-oolshik}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-oolshik}
+      POSTGRES_DB: ${DB_NAME:-oolshik}
     ports:
       - "5432:5432"
     healthcheck:
@@ -39,15 +39,19 @@ services:
   api:
     build: .
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: oolshik
-      DB_USER: oolshik
-      DB_PASSWORD: oolshik
-      JWT_SECRET: devsecret_change_me_at_least_32_chars_long_123456
-      ADMIN_EMAIL: admin@oolshik.app
-      ADMIN_PASSWORD: Admin@123
-      SPRING_PROFILES_ACTIVE: dev
+      APP_DB_MODE: ${APP_DB_MODE:-local}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-oolshik}
+      DB_USER: ${DB_USER:-oolshik}
+      DB_PASSWORD: ${DB_PASSWORD:-oolshik}
+      NEON_DATASOURCE_URL: ${NEON_DATASOURCE_URL:-}
+      NEON_DATASOURCE_USERNAME: ${NEON_DATASOURCE_USERNAME:-}
+      NEON_DATASOURCE_PASSWORD: ${NEON_DATASOURCE_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-devsecret_change_me_at_least_32_chars_long_123456}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@oolshik.app}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       APP_AUTH_PHONE_OTP_ENABLED: ${APP_AUTH_PHONE_OTP_ENABLED:-false}
       APP_AUTH_GOOGLE_ENABLED: ${APP_AUTH_GOOGLE_ENABLED:-true}
       APP_AUTH_GOOGLE_REQUIRE_PHONE: ${APP_AUTH_GOOGLE_REQUIRE_PHONE:-true}
@@ -61,9 +65,9 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      FIREBASE_PROJECT_ID: oolshik
-      FIREBASE_CHECK_REVOKED: false
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-oolshik}
+      FIREBASE_CHECK_REVOKED: ${FIREBASE_CHECK_REVOKED:-false}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/firebase-sa.json}
       STT_AUDIO_SOURCE_MODE: ${STT_AUDIO_SOURCE_MODE:-REQUEST}
       STT_DEMO_AUDIO_URL: ${STT_DEMO_AUDIO_URL:-https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav}
       STT_S3_ALLOWED_HOST_SUFFIXES: ${STT_S3_ALLOWED_HOST_SUFFIXES:-.amazonaws.com,.cloudfront.net}
@@ -71,14 +75,14 @@ services:
       STT_LOCAL_WORKER_BASE_URL: ${STT_LOCAL_WORKER_BASE_URL:-http://api:8080}
       MEDIA_LOCAL_PUBLIC_STREAM_ENABLED: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:-true}
       APP_OTP_PROVIDER: ${APP_OTP_PROVIDER:-dev}
-      APP_OTP_DEV_ENABLED: "false"
+      APP_OTP_DEV_ENABLED: ${APP_OTP_DEV_ENABLED:-false}
       APP_OTP_MSG91_API_KEY: ${APP_OTP_MSG91_API_KEY}
       APP_OTP_MSG91_TEMPLATE_ID: ${APP_OTP_MSG91_TEMPLATE_ID}
       APP_OTP_MSG91_SENDER_ID: ${APP_OTP_MSG91_SENDER_ID}
       APP_OTP_MSG91_ENTITY_ID: ${APP_OTP_MSG91_ENTITY_ID}
     volumes:
       # LEFT side = host path, RIGHT side = container path
-      - ./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json:/secrets/firebase-sa.json:ro
+      - ${FIREBASE_ADMIN_JSON_HOST_PATH:-./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json}:${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/firebase-sa.json}:ro
       - ./data/audio:/app/data/audio
     ports:
       - "8080:8080"
@@ -122,11 +126,15 @@ services:
   notification-worker:
     build: ./notification-worker
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: oolshik
-      DB_USER: oolshik
-      DB_PASSWORD: oolshik
+      APP_DB_MODE: ${APP_DB_MODE:-local}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-oolshik}
+      DB_USER: ${DB_USER:-oolshik}
+      DB_PASSWORD: ${DB_PASSWORD:-oolshik}
+      NEON_DATASOURCE_URL: ${NEON_DATASOURCE_URL:-}
+      NEON_DATASOURCE_USERNAME: ${NEON_DATASOURCE_USERNAME:-}
+      NEON_DATASOURCE_PASSWORD: ${NEON_DATASOURCE_PASSWORD:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUMER_GROUP: notification-worker-v1
     depends_on:

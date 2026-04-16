@@ -2,9 +2,9 @@ spring:
   application:
     name: oolshik-backend
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}?sslmode=${DB_SSLMODE:prefer}
-    username: ${DB_USER:oolshik}
-    password: ${DB_PASSWORD:oolshik}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oolshik}?sslmode=${DB_SSLMODE:prefer}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:oolshik}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:oolshik}}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
       minimum-idle: ${DB_MIN_IDLE:2}

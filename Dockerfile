@@ -17,7 +17,9 @@ ENV SPRING_PROFILES_ACTIVE=prod
 ENV JAVA_OPTS=""
 
 COPY --chown=spring:spring --from=build /workspace/target/oolshik-backend-0.0.1-SNAPSHOT.jar /app/app.jar
+COPY --chown=spring:spring docker/api-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 USER spring
 EXPOSE 8080
-ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

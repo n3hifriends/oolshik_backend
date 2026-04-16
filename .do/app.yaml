@@ -49,30 +49,18 @@ services:
         value: prod
         scope: RUN_TIME
         type: GENERAL
-      - key: DB_HOST
-        value: REPLACE_WITH_MANAGED_DB_PRIVATE_HOST
+      - key: SPRING_DATASOURCE_URL
+        value: jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require
         scope: RUN_TIME
         type: GENERAL
-      - key: DB_PORT
-        value: "25060"
+      - key: SPRING_DATASOURCE_USERNAME
+        value: <neon-username>
         scope: RUN_TIME
         type: GENERAL
-      - key: DB_NAME
-        value: oolshik
-        scope: RUN_TIME
-        type: GENERAL
-      - key: DB_USER
-        value: oolshik_app
-        scope: RUN_TIME
-        type: GENERAL
-      - key: DB_PASSWORD
-        value: REPLACE_WITH_MANAGED_DB_PASSWORD
+      - key: SPRING_DATASOURCE_PASSWORD
+        value: <neon-password>
         scope: RUN_TIME
         type: SECRET
-      - key: DB_SSLMODE
-        value: require
-        scope: RUN_TIME
-        type: GENERAL
       - key: DB_POOL_SIZE
         value: "10"
         scope: RUN_TIME
