@@ -59,6 +59,12 @@ firebase:
   check-revoked: ${FIREBASE_CHECK_REVOKED:false}
 
 app:
+  secrets:
+    aws:
+      enabled: ${APP_SECRETS_AWS_ENABLED:false}
+      secretName: ${APP_SECRETS_AWS_SECRET_NAME:}
+      region: ${APP_SECRETS_AWS_REGION:}
+      failFast: ${APP_SECRETS_AWS_FAIL_FAST:true}
   jwt:
     secret: ${JWT_SECRET:CHANGEME_DEV_SECRET_32_CHARS_MINIMUM________}
     accessTokenTtlMinutes: 60

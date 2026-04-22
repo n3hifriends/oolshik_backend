@@ -39,7 +39,8 @@ docker compose exec -T db \
 ### B) Local (no Docker)
 
 1. Start PostgreSQL and create DB `oolshik` (user/pass `oolshik`), or set env vars below.
-2. Run:
+2. Put local overrides in `.env` if you prefer not to export them manually. The app now reads `.env` during startup for local runs.
+3. Run:
 
 ```bash
 JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev APP_OTP_PROVIDER=dev APP_OTP_DEV_ENABLED=true ./mvnw spring-boot:run
@@ -86,6 +87,8 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 Environment variables (defaults in `application.yml`):
 
 - Preferred deployed datasource contract: `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`, `SPRING_DATASOURCE_USERNAME=<neon-username>`, `SPRING_DATASOURCE_PASSWORD=<neon-password>`
+- AWS Secrets Manager bootstrap for deployed environments: `APP_SECRETS_AWS_ENABLED=true`, `APP_SECRETS_AWS_SECRET_NAME=<secret-name-or-arn>`, optional `APP_SECRETS_AWS_REGION=ap-south-1`, optional `APP_SECRETS_AWS_FAIL_FAST=true`
+- Expected AWS secret JSON keys: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET` (additional app properties are also supported)
 - Local/dev fallback remains: `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`, `DB_SSLMODE=prefer`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
@@ -110,7 +113,7 @@ Environment variables (defaults in `application.yml`):
 - `STT_LOCAL_WORKER_BASE_URL=http://api:8080` (worker-reachable API base in Docker network)
 - `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false` (enable `/api/public/media/audio/{id}/stream` in local/demo only)
 
-For non-Docker local runs, `.env` is not auto-loaded by Spring Boot. Export datasource values in your shell before starting the app if you want to use Neon outside Docker.
+When `APP_SECRETS_AWS_ENABLED=true`, the app skips local `.env` loading and fetches config from AWS Secrets Manager through the default AWS credential chain.
 
 STT audio source modes:
 
