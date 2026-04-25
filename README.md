@@ -18,6 +18,12 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
+aws:
+docker buildx build --platform linux/amd64 -t oolshik-api:v3 .
+docker tag oolshik-api:v3 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
+docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+local:
 docker compose up -d --build <- this will build all i.e. backend, stt-worker, notification-worker
 docker compose logs -f api
 docker compose logs -f stt-worker
@@ -86,9 +92,9 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 
 Environment variables (defaults in `application.yml`):
 
-- Preferred deployed datasource contract: `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`, `SPRING_DATASOURCE_USERNAME=<neon-username>`, `SPRING_DATASOURCE_PASSWORD=<neon-password>`
-- AWS Secrets Manager bootstrap for deployed environments: `APP_SECRETS_AWS_ENABLED=true`, `APP_SECRETS_AWS_SECRET_NAME=<secret-name-or-arn>`, optional `APP_SECRETS_AWS_REGION=ap-south-1`, optional `APP_SECRETS_AWS_FAIL_FAST=true`
-- Expected AWS secret JSON keys: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET` (additional app properties are also supported)
+- Preferred deployed datasource contract for AWS RDS PostgreSQL: `SPRING_DATASOURCE_URL="jdbc:postgresql://<rds-endpoint>:5432/<database-name>?sslmode=require"`, `SPRING_DATASOURCE_USERNAME=<rds-username>`, `SPRING_DATASOURCE_PASSWORD=<rds-password>`
+- AWS Secrets Manager bootstrap for deployed environments: `APP_SECRETS_AWS_ENABLED=true`, optional `APP_SECRETS_AWS_SECRET_NAME=<legacy-single-secret-or-comma-separated-list>`, or split secrets via `APP_SECRETS_AWS_DB_SECRET_NAME=oolshik/dev/db` and `APP_SECRETS_AWS_APP_SECRET_NAME=oolshik/dev/app`, plus optional `APP_SECRETS_AWS_REGION=ap-south-1`, optional `APP_SECRETS_AWS_FAIL_FAST=true`
+- Supported AWS secret JSON keys include direct Spring/env keys such as `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`, and translated short keys such as RDS secret fields (`host`, `port`, `dbname`, `username`, `password`) plus app secret fields (`jwtSecret`, `googleClientId` or `googleClientIds`, `s3Bucket`, `awsRegion`)
 - Local/dev fallback remains: `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`, `DB_SSLMODE=prefer`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
@@ -113,7 +119,7 @@ Environment variables (defaults in `application.yml`):
 - `STT_LOCAL_WORKER_BASE_URL=http://api:8080` (worker-reachable API base in Docker network)
 - `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false` (enable `/api/public/media/audio/{id}/stream` in local/demo only)
 
-When `APP_SECRETS_AWS_ENABLED=true`, the app skips local `.env` loading and fetches config from AWS Secrets Manager through the default AWS credential chain.
+When `APP_SECRETS_AWS_ENABLED=true`, the app skips local `.env` loading and fetches config from AWS Secrets Manager through the default AWS credential chain. The bootstrap region still comes from `APP_SECRETS_AWS_REGION` or the AWS runtime default region, and `SPRING_PROFILES_ACTIVE` still needs to be provided outside Secrets Manager so profile-specific config loads during bootstrap.
 
 STT audio source modes:
 

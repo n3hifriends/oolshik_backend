@@ -63,6 +63,8 @@ app:
     aws:
       enabled: ${APP_SECRETS_AWS_ENABLED:false}
       secretName: ${APP_SECRETS_AWS_SECRET_NAME:}
+      dbSecretName: ${APP_SECRETS_AWS_DB_SECRET_NAME:}
+      appSecretName: ${APP_SECRETS_AWS_APP_SECRET_NAME:}
       region: ${APP_SECRETS_AWS_REGION:}
       failFast: ${APP_SECRETS_AWS_FAIL_FAST:true}
   jwt:

@@ -2,6 +2,7 @@ package com.oolshik.backend.service;
 
 import com.oolshik.backend.config.OtpProperties;
 import com.oolshik.backend.util.PhoneUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
@@ -24,6 +25,7 @@ public class Msg91OtpProvider implements OtpProvider {
     private final RestTemplate restTemplate;
     private final OtpProperties.Msg91 properties;
 
+    @Autowired
     public Msg91OtpProvider(RestTemplateBuilder restTemplateBuilder, OtpProperties otpProperties) {
         this(
                 restTemplateBuilder

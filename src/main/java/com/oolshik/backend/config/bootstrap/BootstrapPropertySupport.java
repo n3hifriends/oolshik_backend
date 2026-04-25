@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -72,6 +73,7 @@ final class BootstrapPropertySupport {
 
             Map<String, Object> properties = new LinkedHashMap<>();
             flattenJson("", root, properties);
+            addDerivedSecretMappings(root, properties);
             return properties;
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("AWS secret payload must be valid JSON", e);
@@ -223,5 +225,113 @@ final class BootstrapPropertySupport {
             builder.append(Character.toUpperCase(current));
         }
         return builder.toString();
+    }
+
+    private static void addDerivedSecretMappings(JsonNode root, Map<String, Object> properties) {
+        mapRdsSecret(root, properties);
+        mapAppSecretAliases(root, properties);
+    }
+
+    private static void mapRdsSecret(JsonNode root, Map<String, Object> properties) {
+        String username = textValue(root, "username");
+        String password = textValue(root, "password");
+        String host = firstNonBlank(textValue(root, "host"), textValue(root, "hostname"));
+        String port = firstNonBlank(textValue(root, "port"), "5432");
+        String database = firstNonBlank(textValue(root, "dbname"), textValue(root, "database"), textValue(root, "dbName"));
+        String engine = firstNonBlank(textValue(root, "engine"), "postgres");
+        boolean looksLikeRdsSecret = (StringUtils.hasText(host) && StringUtils.hasText(database))
+                || (StringUtils.hasText(host) && root.has("dbInstanceIdentifier"));
+
+        if (!looksLikeRdsSecret) {
+            return;
+        }
+
+        if (StringUtils.hasText(username) && !hasAnyKey(properties, "SPRING_DATASOURCE_USERNAME", "spring.datasource.username")) {
+            putWithAliases(properties, "SPRING_DATASOURCE_USERNAME", username);
+            putWithAliases(properties, "DB_USER", username);
+        }
+        if (StringUtils.hasText(password) && !hasAnyKey(properties, "SPRING_DATASOURCE_PASSWORD", "spring.datasource.password")) {
+            putWithAliases(properties, "SPRING_DATASOURCE_PASSWORD", password);
+            putWithAliases(properties, "DB_PASSWORD", password);
+        }
+        if (StringUtils.hasText(host) && !hasAnyKey(properties, "DB_HOST", "db.host")) {
+            putWithAliases(properties, "DB_HOST", host);
+        }
+        if (StringUtils.hasText(port) && !hasAnyKey(properties, "DB_PORT", "db.port")) {
+            putWithAliases(properties, "DB_PORT", port);
+        }
+        if (StringUtils.hasText(database) && !hasAnyKey(properties, "DB_NAME", "db.name")) {
+            putWithAliases(properties, "DB_NAME", database);
+        }
+
+        if (!hasAnyKey(properties, "SPRING_DATASOURCE_URL", "spring.datasource.url")
+                && isPostgresLikeEngine(engine)
+                && StringUtils.hasText(host)
+                && StringUtils.hasText(database)) {
+            String jdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + database + "?sslmode=require";
+            putWithAliases(properties, "SPRING_DATASOURCE_URL", jdbcUrl);
+        }
+    }
+
+    private static void mapAppSecretAliases(JsonNode root, Map<String, Object> properties) {
+        putIfPresent(properties, "JWT_SECRET", textValue(root, "jwtSecret"));
+        putIfPresent(properties, "MEDIA_S3_BUCKET", textValue(root, "s3Bucket"));
+        putIfPresent(properties, "MEDIA_S3_REGION", textValue(root, "awsRegion"));
+
+        String googleClientIds = firstNonBlank(
+                textValue(root, "googleClientIds"),
+                textValue(root, "googleClientId")
+        );
+        if (StringUtils.hasText(googleClientIds)) {
+            putIfPresent(properties, "APP_AUTH_GOOGLE_ALLOWED_CLIENT_IDS", googleClientIds);
+        }
+    }
+
+    private static void putIfPresent(Map<String, Object> properties, String key, String value) {
+        if (!StringUtils.hasText(value) || hasAnyKey(properties, key, toDottedKey(key))) {
+            return;
+        }
+        putWithAliases(properties, key, value);
+    }
+
+    private static boolean hasAnyKey(Map<String, Object> properties, String... keys) {
+        for (String key : keys) {
+            if (properties.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String textValue(JsonNode root, String fieldName) {
+        JsonNode node = root.get(fieldName);
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isArray()) {
+            return StreamSupport.stream(node.spliterator(), false)
+                    .map(BootstrapPropertySupport::toPropertyValue)
+                    .filter(Objects::nonNull)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.joining(","));
+        }
+        return toPropertyValue(node);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static boolean isPostgresLikeEngine(String engine) {
+        if (!StringUtils.hasText(engine)) {
+            return true;
+        }
+        String normalized = engine.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("postgres") || normalized.equals("postgresql");
     }
 }

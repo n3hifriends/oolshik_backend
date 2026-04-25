@@ -16,7 +16,12 @@ import software.amazon.awssdk.services.secretsmanager.SecretsManagerClientBuilde
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AwsSecretsManagerEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
@@ -31,24 +36,37 @@ public class AwsSecretsManagerEnvironmentPostProcessor implements EnvironmentPos
             return;
         }
 
-        String secretName = environment.getProperty("app.secrets.aws.secretName");
         boolean failFast = environment.getProperty("app.secrets.aws.failFast", Boolean.class, true);
+        List<String> secretNames = resolveSecretNames(environment);
 
-        if (!StringUtils.hasText(secretName)) {
-            handleFailure(failFast, "AWS Secrets Manager is enabled but app.secrets.aws.secretName is empty", null);
+        if (secretNames.isEmpty()) {
+            handleFailure(failFast,
+                    "AWS Secrets Manager is enabled but no secret names are configured. Set app.secrets.aws.secretName, app.secrets.aws.dbSecretName, or app.secrets.aws.appSecretName",
+                    null);
             return;
         }
 
         try (SecretsManagerClient client = buildClient(environment)) {
-            GetSecretValueResponse response = client.getSecretValue(GetSecretValueRequest.builder()
-                    .secretId(secretName)
-                    .build());
+            Map<String, Object> properties = new LinkedHashMap<>();
+            List<String> loadedSecrets = new ArrayList<>();
+            for (String secretName : secretNames) {
+                try {
+                    GetSecretValueResponse response = client.getSecretValue(GetSecretValueRequest.builder()
+                            .secretId(secretName)
+                            .build());
+                    properties.putAll(BootstrapPropertySupport.parseSecretPayload(extractPayload(response)));
+                    loadedSecrets.add(secretName);
+                } catch (Exception e) {
+                    handleFailure(failFast, "Failed to load configuration from AWS Secrets Manager secret " + secretName, e);
+                }
+            }
 
-            Map<String, Object> properties = BootstrapPropertySupport.parseSecretPayload(extractPayload(response));
+            if (properties.isEmpty()) {
+                return;
+            }
+
             BootstrapPropertySupport.addBeforeSystemEnvironment(environment, PROPERTY_SOURCE_NAME, properties);
-            log.info("Loaded configuration from AWS Secrets Manager secret {}", secretName);
-        } catch (Exception e) {
-            handleFailure(failFast, "Failed to load configuration from AWS Secrets Manager secret " + secretName, e);
+            log.info("Loaded configuration from AWS Secrets Manager secrets {}", loadedSecrets);
         }
     }
 
@@ -93,5 +111,43 @@ public class AwsSecretsManagerEnvironmentPostProcessor implements EnvironmentPos
         }
 
         log.warn(message + ". Continuing without AWS secret overrides", cause);
+    }
+
+    static List<String> resolveSecretNames(ConfigurableEnvironment environment) {
+        Set<String> names = new LinkedHashSet<>();
+        addDelimitedNames(names, getConfiguredProperty(environment, "app.secrets.aws.secretName"));
+        addName(names, getConfiguredProperty(environment, "app.secrets.aws.dbSecretName"));
+        addName(names, getConfiguredProperty(environment, "app.secrets.aws.appSecretName"));
+        return List.copyOf(names);
+    }
+
+    private static void addDelimitedNames(Set<String> names, String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return;
+        }
+        for (String token : raw.split(",")) {
+            addName(names, token);
+        }
+    }
+
+    private static void addName(Set<String> names, String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return;
+        }
+        names.add(raw.trim());
+    }
+
+    private static String getConfiguredProperty(ConfigurableEnvironment environment, String key) {
+        String value = environment.getProperty(key);
+        if (StringUtils.hasText(value)) {
+            return value;
+        }
+        return environment.getProperty(toEnvKey(key));
+    }
+
+    private static String toEnvKey(String key) {
+        return key.toUpperCase()
+                .replace('.', '_')
+                .replace('-', '_');
     }
 }

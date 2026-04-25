@@ -12,17 +12,14 @@ case "$db_mode" in
     export DB_USER="${DB_USER:-oolshik}"
     export DB_PASSWORD="${DB_PASSWORD:-oolshik}"
     ;;
-  neon)
-    export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-${NEON_DATASOURCE_URL:-}}"
-    export SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME:-${NEON_DATASOURCE_USERNAME:-}}"
-    export SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-${NEON_DATASOURCE_PASSWORD:-}}"
+  external|rds)
+    : "${SPRING_DATASOURCE_URL:?Set SPRING_DATASOURCE_URL when APP_DB_MODE is external or rds}"
+    : "${SPRING_DATASOURCE_USERNAME:?Set SPRING_DATASOURCE_USERNAME when APP_DB_MODE is external or rds}"
+    : "${SPRING_DATASOURCE_PASSWORD:?Set SPRING_DATASOURCE_PASSWORD when APP_DB_MODE is external or rds}"
 
-    : "${SPRING_DATASOURCE_URL:?Set NEON_DATASOURCE_URL or SPRING_DATASOURCE_URL when APP_DB_MODE=neon}"
-    : "${SPRING_DATASOURCE_USERNAME:?Set NEON_DATASOURCE_USERNAME or SPRING_DATASOURCE_USERNAME when APP_DB_MODE=neon}"
-    : "${SPRING_DATASOURCE_PASSWORD:?Set NEON_DATASOURCE_PASSWORD or SPRING_DATASOURCE_PASSWORD when APP_DB_MODE=neon}"
     ;;
   *)
-    echo "Unsupported APP_DB_MODE: $db_mode. Use 'local' or 'neon'." >&2
+    echo "Unsupported APP_DB_MODE: $db_mode. Use 'local', 'external', or 'rds'." >&2
     exit 1
     ;;
 esac

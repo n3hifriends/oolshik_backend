@@ -587,6 +587,39 @@ If you want, I can also give you a compressed Atlas version that is shorter and 
 
 **\*** completion part **\*\*\***
 
+------ Milestone 1 -------
+
+1. Budget Alerts
+2. VPC -> vpc-0b7b2640eaecc30aa
+3. Subnet - 6 (alb, api, db) each 2 - 2
+4. Internet Gateway
+5. Route table - 3 (alb, api, db)
+6. Security Group - 3 (alb, api, db)
+7. S3
+8. RDS Subnet Group
+9. PostgreSQL - db name: oolshik username: oolshik_admin password stored in AWS Secrets Manager only
+10. **PostGIS enablement as pending**
+    10.1 psql "host=oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com port=5432 dbname=oolshik user=oolshik_admin sslmode=require"
+    10.2 CREATE EXTENSION IF NOT EXISTS postgis;
+    SELECT postgis_full_version();
+11. Later, EC2/Docker runtime will use (verify it):
+    APP_SECRETS_AWS_ENABLED=true
+    APP_SECRETS_AWS_REGION=ap-south-1
+    APP_SECRETS_AWS_DB_SECRET_NAME=oolshik/dev/db
+    APP_SECRETS_AWS_APP_SECRET_NAME=oolshik/dev/app
+    SPRING_PROFILES_ACTIVE=dev
+
+------ Milestone 2 -------
+
+12. create ECR repo -> create, push, tag
+13. API EC2 role created
+14. target group created
+15. ASG created -> created public ipv4 & set public subnet (later can be changed - ask to chatgpt)
+16. DEPLOYMENT DONE WITH "prod" user-data script
+17.
+
+**\*** completion part (discarded) **\*\*\***
+
 ---- milestone 1 ---- Account foundation
 
 1. Budget alerts created - 19 Apr 2026, 11:30AM
