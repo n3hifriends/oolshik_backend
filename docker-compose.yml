@@ -72,7 +72,7 @@ services:
       STT_DEMO_AUDIO_URL: ${STT_DEMO_AUDIO_URL:-https://github.com/voxserv/audio_quality_testing_samples/raw/refs/heads/master/mono_44100/127389__acclivity__thetimehascome.wav}
       STT_S3_ALLOWED_HOST_SUFFIXES: ${STT_S3_ALLOWED_HOST_SUFFIXES:-.amazonaws.com,.cloudfront.net}
       STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER: ${STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER:-true}
-      STT_LOCAL_WORKER_BASE_URL: ${STT_LOCAL_WORKER_BASE_URL:-http://api:8080}
+      STT_LOCAL_WORKER_BASE_URL: ${STT_LOCAL_WORKER_BASE_URL:-https://oolshik.in}
       MEDIA_LOCAL_PUBLIC_STREAM_ENABLED: ${MEDIA_LOCAL_PUBLIC_STREAM_ENABLED:-true}
       APP_OTP_PROVIDER: ${APP_OTP_PROVIDER:-dev}
       APP_OTP_DEV_ENABLED: ${APP_OTP_DEV_ENABLED:-false}

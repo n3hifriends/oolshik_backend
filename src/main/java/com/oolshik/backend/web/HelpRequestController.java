@@ -1,7 +1,7 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
-import com.oolshik.backend.media.AudioFileRepository;
+import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
@@ -55,7 +55,7 @@ public class HelpRequestController {
     private final HelpRequestRatingService ratingService;
     private final UserRepository userRepo;
     private final CurrentUserService currentUserService;
-    private final AudioFileRepository audioRepo; // NEW
+    private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     private final TranscriptionJobService transcriptionJobService;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
     private final TranscriptionAudioSourceResolver transcriptionAudioSourceResolver;
@@ -73,7 +73,7 @@ public class HelpRequestController {
                                  HelpRequestRatingService ratingService,
                                  UserRepository userRepo,
                                  CurrentUserService currentUserService,
-                                 AudioFileRepository audioRepo,
+                                 AudioPlaybackUrlResolver audioPlaybackUrlResolver,
                                  TranscriptionJobService transcriptionJobService,
                                  TranscriptionJobPublisher transcriptionJobPublisher,
                                  TranscriptionAudioSourceResolver transcriptionAudioSourceResolver) {
@@ -81,7 +81,7 @@ public class HelpRequestController {
         this.ratingService = ratingService;
         this.userRepo = userRepo;
         this.currentUserService = currentUserService;
-        this.audioRepo = audioRepo;
+        this.audioPlaybackUrlResolver = audioPlaybackUrlResolver;
         this.transcriptionJobService = transcriptionJobService;
         this.transcriptionJobPublisher = transcriptionJobPublisher;
         this.transcriptionAudioSourceResolver = transcriptionAudioSourceResolver;
@@ -297,10 +297,7 @@ public class HelpRequestController {
     }
 
     private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job, UUID viewerId) {
-        String url = audioRepo
-                .findFirstByRequestIdOrderByCreatedAtDesc(e.getId().toString())
-                .map(a -> "/api/media/audio/" + a.getId() + "/stream")
-                .orElse(e.getVoiceUrl());
+        String url = audioPlaybackUrlResolver.resolveStoredUrl(e.getVoiceUrl());
 
         UUID pendingHelperId = maskPendingHelperId(e.getPendingHelperId(), e.getRequesterId(), viewerId);
         HelpRequestRatingService.RatingSummary ratingSummary = ratingService.summaryForRequest(
@@ -357,6 +354,7 @@ public class HelpRequestController {
         Boolean canConfirm = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
         Boolean canReportIssue = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
         Boolean canRate = viewerCanRate(row.getStatus(), row.getRequesterId(), row.getHelperId(), viewerId);
+        String resolvedVoiceUrl = audioPlaybackUrlResolver.resolveStoredUrl(row.getVoiceUrl());
         return new HelpRequestRowView(
                 row.getId(),
                 row.getTitle(),
@@ -382,7 +380,7 @@ public class HelpRequestController {
                 row.getReleasedCount(),
                 row.getRadiusStage(),
                 row.getNextEscalationAt(),
-                row.getVoiceUrl(),
+                resolvedVoiceUrl,
                 row.getOfferAmount(),
                 row.getOfferCurrency(),
                 row.getOfferUpdatedAt(),

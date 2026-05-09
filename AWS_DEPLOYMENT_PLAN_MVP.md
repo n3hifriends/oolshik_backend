@@ -608,15 +608,95 @@ If you want, I can also give you a compressed Atlas version that is shorter and 
     APP_SECRETS_AWS_DB_SECRET_NAME=oolshik/dev/db
     APP_SECRETS_AWS_APP_SECRET_NAME=oolshik/dev/app
     SPRING_PROFILES_ACTIVE=dev
-
------- Milestone 2 -------
+    ------ Milestone 2 -------
 
 12. create ECR repo -> create, push, tag
 13. API EC2 role created
 14. target group created
 15. ASG created -> created public ipv4 & set public subnet (later can be changed - ask to chatgpt)
 16. DEPLOYMENT DONE WITH "prod" user-data script
-17.
+    ------ Milestone 2 -------
+17. launch template for kafka & notification worker
+18. launch template for stt-worker
+19. kafka + notification ec2 -> Later → move all to private subnet + endpoints as SSM session was not connected
+20. stt-worker ec2
+21. install docker on both ec2
+    sudo dnf update -y
+    sudo dnf install -y docker
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    sudo usermod -aG docker ec2-user
+    & then
+    sudo newgrp docker
+    sudo docker ps
+
+22. start notification-worker
+    sudo docker rm -f notification-worker
+
+sudo docker run -d \
+ --name notification-worker \
+ --restart unless-stopped \
+ -e APP_DB_MODE=rds \
+ -e SPRING_PROFILES_ACTIVE=prod \
+ -e SPRING_DATASOURCE_URL='jdbc:postgresql://oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com:5432/oolshik?sslmode=require' \
+ -e SPRING_DATASOURCE_USERNAME='oolshik_admin' \
+ -e SPRING_DATASOURCE_PASSWORD='Ndroid11!' \
+ -e KAFKA_BOOTSTRAP_SERVERS='10.20.0.13:9092' \
+ -e KAFKA_TOPIC_NOTIFICATION_EVENTS='notification.events' \
+ 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-notification-worker:amd64-test
+
+sudo docker logs -n 200 notification-worker
+
+23. start kafka
+    sudo docker rm -f kafka
+
+sudo docker run -d \
+ --name kafka \
+ --restart unless-stopped \
+ -p 9092:9092 \
+ -e KAFKA_NODE_ID=1 \
+ -e KAFKA_PROCESS_ROLES=broker,controller \
+ -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093 \
+ -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://10.20.0.13:9092 \
+ -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+ -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT \
+ -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+ -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+ -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+ -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+ -e KAFKA_NUM_PARTITIONS=1 \
+ -e KAFKA_LOG_RETENTION_HOURS=24 \
+ -e KAFKA_HEAP_OPTS="-Xms512M -Xmx1G" \
+ apache/kafka:latest
+
+24. stt-worker
+    aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
+
+docker buildx build \
+ --platform linux/amd64 \
+ --build-arg PRELOAD_ASR_MODEL=true \
+ --build-arg HF_TOKEN='' \
+ -t 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:indic-v1 \
+
+docker tag oolshik-stt-worker:v1 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1
+
+docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1
+
+sudo docker rm -f stt-worker || true
+
+sudo docker run -d \
+ --name stt-worker \
+ --restart unless-stopped \
+ -e SPRING_PROFILES_ACTIVE=dev \
+ -e AWS_REGION=ap-south-1 \
+ -e KAFKA_BOOTSTRAP_SERVERS=10.20.0.13:9092 \
+ -e SPRING_KAFKA_BOOTSTRAP_SERVERS=10.20.0.13:9092 \
+ -e STT_JOBS_TOPIC=stt.jobs \
+ -e STT_RESULTS_TOPIC=stt.results \
+ -e STT_DLQ_TOPIC=stt.jobs.dlq \
+ -e MEDIA_S3_BUCKET=oolshik-dev-ap-south-1-storage-6538 \
+ -e MEDIA_S3_REGION=ap-south-1 \
+ 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1
 
 **\*** completion part (discarded) **\*\*\***
 
