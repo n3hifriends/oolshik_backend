@@ -28,8 +28,25 @@ class LoggingAspectSanitizationTest {
         assertThat(output.getOut()).contains("[redacted]");
     }
 
+    @Test
+    void summarizesBinaryPayloads(CapturedOutput output) {
+        LoggingAspect aspect = new LoggingAspect();
+        TestTarget target = new TestTarget();
+        AspectJProxyFactory factory = new AspectJProxyFactory(target);
+        factory.addAspect(aspect);
+        TestTarget proxy = factory.getProxy();
+
+        proxy.upload(new byte[]{1, 2, 3, 4});
+
+        assertThat(output.getOut()).contains("[binary 4 bytes]");
+        assertThat(output.getOut()).doesNotContain("1, 2, 3, 4");
+    }
+
     static class TestTarget {
         public void submit(AuthDtos.OtpVerify request) {
+        }
+
+        public void upload(byte[] body) {
         }
     }
 }

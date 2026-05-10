@@ -21,8 +21,12 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 aws:
 docker buildx build --platform linux/amd64 -t oolshik-api:v3 .
 docker tag oolshik-api:v3 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+docker tag oolshik-api:v3 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
+
+
 aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
 docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
 ------------
 connect to RDS:
 psql "host=oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com port=5432 dbname=oolshik user=oolshik_admin sslmode=require"

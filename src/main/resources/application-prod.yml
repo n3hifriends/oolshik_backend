@@ -5,6 +5,9 @@ spring:
   flyway:
     locations:
       - classpath:db/migration
+  kafka:
+    consumer:
+      group-id: oolshik-stt-backend
   jpa:
     properties:
       hibernate:
@@ -18,15 +21,25 @@ app:
       enabled: false
   security:
     identity-provider: local
-  messaging:
-    kafka:
-      enabled: false
   otp:
     provider: msg91
     dev:
       enabled: false
+  transcription:
+    audioSourceMode: S3_ONLY
 
 logging:
   level:
     org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql.BasicBinder: WARN
+
+media:
+  local:
+    publicStreamEnabled: false
+  s3:
+    provider: aws
+    region: ap-south-1
+    prefix: audio/
+    pathStyleAccessEnabled: false
+    downloadUrlMode: presigned_get
+    presignedGetTtlSeconds: 900
