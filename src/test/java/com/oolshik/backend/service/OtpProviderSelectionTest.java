@@ -35,7 +35,9 @@ class OtpProviderSelectionTest {
                 .withPropertyValues(
                         "app.otp.provider=msg91",
                         "app.otp.msg91.api-key=test-key",
+                        "app.otp.msg91.sender-id=OOLSHK",
                         "app.otp.msg91.template-id=test-template",
+                        "app.otp.msg91.entity-id=test-entity",
                         "app.otp.msg91.base-url=http://localhost"
                 )
                 .run(context -> {

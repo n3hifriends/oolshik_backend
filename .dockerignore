@@ -9,3 +9,7 @@ notification-worker/target
 stt-worker/.venv
 stt-worker/__pycache__
 **/.DS_Store
+.env
+.git
+node_modules
+build

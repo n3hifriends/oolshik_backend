@@ -113,6 +113,9 @@ public class LoggingAspect {
             }
             return sanitized;
         }
+        if (value instanceof byte[] bytes) {
+            return "[binary " + bytes.length + " bytes]";
+        }
         if (value.getClass().isArray()) {
             int len = Array.getLength(value);
             List<Object> sanitized = new ArrayList<>(len);

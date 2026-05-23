@@ -38,14 +38,17 @@ import java.util.UUID;
 public class AudioController {
 
     private final MultipartUploadService multipart;
+    private final AudioFileRegistrationService registrationService;
     private final StorageService storage;
     private final AudioFileRepository repo;
 
     public AudioController(MultipartUploadService multipart,
+                           AudioFileRegistrationService registrationService,
                            StorageService storage,
                            AudioFileRepository repo) {
         this.multipart = multipart;
-        this.storage = storage; // single bean named 'storageService'
+        this.registrationService = registrationService;
+        this.storage = storage;
         this.repo = repo;
     }
 
@@ -67,17 +70,15 @@ public class AudioController {
         String userId = auth.getName();
         String finalKey = userId + "/" + req.uploadId() + ".m4a";
         String storageKey = multipart.finalizeUpload(req.uploadId(), finalKey);
-
-        AudioFile af = new AudioFile();
-        af.setOwnerUserId(userId);
-        af.setFilename(req.uploadId() + ".m4a");
-        af.setMimeType("audio/m4a");
-        af.setSizeBytes(storage.size(storageKey));
-        af.setStorageKey(storageKey);
-        af.setDurationMs(req.durationMs());
-        af.setSampleRate(req.sampleRate());
-        af.setRequestId(null);
-        return repo.save(af);
+        return registrationService.register(
+                userId,
+                req.uploadId() + ".m4a",
+                "audio/m4a",
+                storageKey,
+                req.durationMs(),
+                req.sampleRate(),
+                null
+        );
     }
 
     @GetMapping("/my")
@@ -148,11 +149,31 @@ public class AudioController {
     }
 
     @PostMapping("/mpu/complete")
-    public void mpuComplete(@RequestBody MpuCompleteReq req) {
+    public AudioFile mpuComplete(@RequestBody MpuCompleteReq req, Authentication auth) throws IOException {
         if (!(storage instanceof S3StorageService s3)) {
             throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
         }
-        s3.mpuComplete(req.uploadId(), req.objectKey(), req.parts());
+        String userId = auth.getName();
+        String objectKey = req.objectKey() == null ? null : req.objectKey().trim();
+        if (objectKey == null || objectKey.isBlank() || !objectKey.startsWith(userId + "/")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "errors.media.invalidObjectKey");
+        }
+        s3.mpuComplete(req.uploadId(), objectKey, req.parts());
+        String filename = (req.filename() == null || req.filename().isBlank())
+                ? objectKey.substring(objectKey.lastIndexOf('/') + 1)
+                : req.filename().trim();
+        String mimeType = (req.mimeType() == null || req.mimeType().isBlank())
+                ? inferMimeType(filename)
+                : req.mimeType().trim();
+        return registrationService.register(
+                userId,
+                filename,
+                mimeType,
+                objectKey,
+                req.durationMs(),
+                req.sampleRate(),
+                null
+        );
     }
 
     @PostMapping("/mpu/abort")
@@ -161,5 +182,14 @@ public class AudioController {
             throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "errors.media.mpuRequiresS3");
         }
         s3.mpuAbort(req.uploadId(), req.objectKey());
+    }
+
+    private static String inferMimeType(String filename) {
+        String lower = filename == null ? "" : filename.trim().toLowerCase();
+        if (lower.endsWith(".m4a") || lower.endsWith(".aac")) return "audio/m4a";
+        if (lower.endsWith(".mp3")) return "audio/mpeg";
+        if (lower.endsWith(".ogg") || lower.endsWith(".opus")) return "audio/ogg";
+        if (lower.endsWith(".wav")) return "audio/wav";
+        return "application/octet-stream";
     }
 }

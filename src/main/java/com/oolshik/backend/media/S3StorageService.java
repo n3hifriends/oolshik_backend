@@ -212,6 +212,17 @@ public class S3StorageService implements StorageService {
         };
     }
 
+    public AudioStorageMetadataResolver.StorageReference describe(String key) {
+        return new AudioStorageMetadataResolver.StorageReference(
+                provider.name(),
+                bucket,
+                key,
+                region,
+                endpointUri != null ? endpointUri.toString() : null,
+                pathStyleAccessEnabled
+        );
+    }
+
     public String toPublicUrl(String key) {
         return buildPublicUrl(key);
     }

@@ -80,8 +80,11 @@ public class HelpRequestEntity {
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
 
-    @Column(nullable = false)
+    @Column(name = "voice_url")
     private String voiceUrl;
+
+    @Column(name = "audio_file_id")
+    private UUID audioFileId;
 
     @Column(name = "rating_value")
     private BigDecimal ratingValue; // scale 1
@@ -263,6 +266,8 @@ public class HelpRequestEntity {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getVoiceUrl() { return voiceUrl; }
     public void setVoiceUrl(String voiceUrl) { this.voiceUrl = voiceUrl; }
+    public UUID getAudioFileId() { return audioFileId; }
+    public void setAudioFileId(UUID audioFileId) { this.audioFileId = audioFileId; }
     public BigDecimal getRatingValue() { return ratingValue; }
     public void setRatingValue(BigDecimal ratingValue) { this.ratingValue = ratingValue; }
     public UUID getRatedByUserId() { return ratedByUserId; }

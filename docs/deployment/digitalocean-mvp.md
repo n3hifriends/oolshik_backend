@@ -90,13 +90,13 @@ Start from [.env.production.example](/Users/nitinkalokhe/Ni3/spring_boot_proj/oo
 
 Required values:
 
-- `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`
+- `SPRING_DATASOURCE_URL="jdbc:postgresql://<database-private-host>:25060/<database-name>?sslmode=require"`
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 - `JWT_SECRET`
 - `APP_CORS_ALLOWED_ORIGINS`
 
-Keep the real Neon credentials in the deployment environment only. Do not commit them to tracked files. If you run the app outside Docker, export these variables in your shell because Spring Boot does not auto-load `.env`.
+Keep the real database credentials in the deployment environment only. Do not commit them to tracked files. If you run the app outside Docker, export these variables in your shell because Spring Boot does not auto-load `.env`.
 
 For the API-only MVP, keep these disabled:
 

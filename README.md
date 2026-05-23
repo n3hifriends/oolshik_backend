@@ -18,6 +18,21 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 ### A) Docker (recommended)
 
 ```bash
+aws:
+docker buildx build --platform linux/amd64 -t oolshik-api:v3 .
+docker tag oolshik-api:v3 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+docker tag oolshik-api:v3 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
+
+
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
+docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v3
+docker push 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
+------------
+connect to RDS:
+psql "host=oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com port=5432 dbname=oolshik user=oolshik_admin sslmode=require"
+Ndroid@1**
+----------
+local:
 docker compose up -d --build <- this will build all i.e. backend, stt-worker, notification-worker
 docker compose logs -f api
 docker compose logs -f stt-worker
@@ -39,7 +54,8 @@ docker compose exec -T db \
 ### B) Local (no Docker)
 
 1. Start PostgreSQL and create DB `oolshik` (user/pass `oolshik`), or set env vars below.
-2. Run:
+2. Put local overrides in `.env` if you prefer not to export them manually. The app now reads `.env` during startup for local runs.
+3. Run:
 
 ```bash
 JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app ADMIN_PASSWORD=Admin@123 SPRING_PROFILES_ACTIVE=dev APP_OTP_PROVIDER=dev APP_OTP_DEV_ENABLED=true ./mvnw spring-boot:run
@@ -85,7 +101,9 @@ JWT_SECRET=devsecret_at_least_32_chars_long_123456 ADMIN_EMAIL=admin@oolshik.app
 
 Environment variables (defaults in `application.yml`):
 
-- Preferred deployed datasource contract: `SPRING_DATASOURCE_URL="jdbc:postgresql://<neon-host>/neondb?sslmode=require&channelBinding=require"`, `SPRING_DATASOURCE_USERNAME=<neon-username>`, `SPRING_DATASOURCE_PASSWORD=<neon-password>`
+- Preferred deployed datasource contract for AWS RDS PostgreSQL: `SPRING_DATASOURCE_URL="jdbc:postgresql://<rds-endpoint>:5432/<database-name>?sslmode=require"`, `SPRING_DATASOURCE_USERNAME=<rds-username>`, `SPRING_DATASOURCE_PASSWORD=<rds-password>`
+- AWS Secrets Manager bootstrap for deployed environments: `APP_SECRETS_AWS_ENABLED=true`, optional `APP_SECRETS_AWS_SECRET_NAME=<legacy-single-secret-or-comma-separated-list>`, or split secrets via `APP_SECRETS_AWS_DB_SECRET_NAME=oolshik/dev/db` and `APP_SECRETS_AWS_APP_SECRET_NAME=oolshik/dev/app`, plus optional `APP_SECRETS_AWS_REGION=ap-south-1`, optional `APP_SECRETS_AWS_FAIL_FAST=true`
+- Supported AWS secret JSON keys include direct Spring/env keys such as `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`, and translated short keys such as RDS secret fields (`host`, `port`, `dbname`, `username`, `password`) plus app secret fields (`jwtSecret`, `googleClientId` or `googleClientIds`, `s3Bucket`, `awsRegion`)
 - Local/dev fallback remains: `DB_HOST=localhost`, `DB_PORT=5432`, `DB_NAME=oolshik`, `DB_USER=oolshik`, `DB_PASSWORD=oolshik`, `DB_SSLMODE=prefer`
 - `JWT_SECRET` (**required**; 32+ chars recommended)
 - `SPRING_PROFILES_ACTIVE=dev`
@@ -110,13 +128,20 @@ Environment variables (defaults in `application.yml`):
 - `STT_LOCAL_WORKER_BASE_URL=http://api:8080` (worker-reachable API base in Docker network)
 - `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=false` (enable `/api/public/media/audio/{id}/stream` in local/demo only)
 
-For non-Docker local runs, `.env` is not auto-loaded by Spring Boot. Export datasource values in your shell before starting the app if you want to use Neon outside Docker.
+When `APP_SECRETS_AWS_ENABLED=true`, the app skips local `.env` loading and fetches config from AWS Secrets Manager through the default AWS credential chain. The bootstrap region still comes from `APP_SECRETS_AWS_REGION` or the AWS runtime default region, and `SPRING_PROFILES_ACTIVE` still needs to be provided outside Secrets Manager so profile-specific config loads during bootstrap.
 
 STT audio source modes:
 
 - `REQUEST`: STT uses the incoming `voiceUrl` from frontend/backend request.
 - `DEMO_FIXED`: STT ignores request `voiceUrl` and always uses `STT_DEMO_AUDIO_URL`.
 - `S3_ONLY`: STT requires HTTPS URL and allowed S3 host suffixes, and rejects local `/api/media/audio/.../stream` URLs.
+
+Preferred voice upload flow:
+
+- Upload audio first through `/api/media/audio/complete`, `/api/media/audio/mpu/complete`, or `/api/media/pre-signed/complete`.
+- Use the returned `audio_files.id` as `audioFileId` in `POST /api/requests`.
+- Treat `voiceUrl` in `POST /api/requests` as a legacy fallback for externally hosted audio; do not send local backend stream URLs in `S3_ONLY`.
+- STT jobs now prefer storage references (`bucket` + `objectKey`) over persisted playback URLs.
 
 Recommended modes:
 

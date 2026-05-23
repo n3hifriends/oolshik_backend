@@ -20,6 +20,7 @@ from confluent_kafka import KafkaError, Message
 from pydantic import ValidationError
 
 from stt_worker.audio.http_fetcher import AudioDownloadError, HttpAudioFetcher
+from stt_worker.audio.s3_fetcher import S3AudioFetcher
 from stt_worker.config import Settings, settings
 from stt_worker.dlq import build_dlq_message
 from stt_worker.health import set_engine, set_ready, start_health_server
@@ -295,6 +296,7 @@ def process_message(
     engine: BaseEngine,
     fallback_engine: Optional[BaseEngine],
     fetcher: HttpAudioFetcher,
+    s3_fetcher: S3AudioFetcher,
     options: RuntimeOptions,
     completed_cache: TTLCache,
     msg: Message,
@@ -361,14 +363,27 @@ def process_message(
 
     try:
         download_start = time.perf_counter()
-        fetcher.fetch(
-            str(job.audioUrl),
-            dest_path=input_path,
-            timeout_sec=settings.audio_download_timeout_sec,
-            max_bytes=settings.max_audio_bytes,
-            retries=options.download_retries,
-            backoff_base_sec=options.download_backoff_sec,
-        )
+        if job.bucket and job.objectKey and (job.storageProvider or "").upper() != "LOCAL":
+            s3_fetcher.fetch(
+                job.bucket,
+                job.objectKey,
+                dest_path=input_path,
+                max_bytes=settings.max_audio_bytes,
+                region=job.region,
+                endpoint=job.endpoint,
+                path_style_access_enabled=bool(job.pathStyleAccessEnabled),
+            )
+        elif job.audioUrl is not None:
+            fetcher.fetch(
+                str(job.audioUrl),
+                dest_path=input_path,
+                timeout_sec=settings.audio_download_timeout_sec,
+                max_bytes=settings.max_audio_bytes,
+                retries=options.download_retries,
+                backoff_base_sec=options.download_backoff_sec,
+            )
+        else:
+            raise AudioDownloadError("DOWNLOAD_FAILED", "No audio source specified", False)
         STT_DOWNLOAD_SECONDS.observe(time.perf_counter() - download_start)
 
         ffmpeg_convert(input_path, wav_path)
@@ -626,6 +641,7 @@ def worker_loop(
     engine: BaseEngine,
     fallback_engine: Optional[BaseEngine],
     fetcher: HttpAudioFetcher,
+    s3_fetcher: S3AudioFetcher,
     options: RuntimeOptions,
     completed_cache: TTLCache,
     work_q: "queue.Queue[WorkItem]",
@@ -637,7 +653,7 @@ def worker_loop(
             item = work_q.get(timeout=0.5)
         except queue.Empty:
             continue
-        commit = process_message(settings, producer, engine, fallback_engine, fetcher, options, completed_cache, item.msg)
+        commit = process_message(settings, producer, engine, fallback_engine, fetcher, s3_fetcher, options, completed_cache, item.msg)
         result_q.put(Outcome(msg=item.msg, commit=commit))
         work_q.task_done()
 
@@ -650,6 +666,7 @@ def consume_loop(settings: Settings, engine: BaseEngine, fallback_engine: Option
     consumer = create_consumer(settings)
     producer = create_producer(settings)
     fetcher = HttpAudioFetcher()
+    s3_fetcher = S3AudioFetcher()
 
     completed_cache: TTLCache = TTLCache(maxsize=10000, ttl=3600)
     work_q: "queue.Queue[WorkItem]" = queue.Queue(maxsize=settings.queue_maxsize)
@@ -666,7 +683,7 @@ def consume_loop(settings: Settings, engine: BaseEngine, fallback_engine: Option
     for _ in range(max(1, settings.worker_concurrency)):
         thread = threading.Thread(
             target=worker_loop,
-            args=(settings, producer, engine, fallback_engine, fetcher, options, completed_cache, work_q, result_q, stop_event),
+            args=(settings, producer, engine, fallback_engine, fetcher, s3_fetcher, options, completed_cache, work_q, result_q, stop_event),
             daemon=True,
         )
         thread.start()

@@ -19,7 +19,10 @@ public class TranscriptionJobEntity {
     @Column(name = "task_id", nullable = false)
     private UUID taskId;
 
-    @Column(name = "audio_url", nullable = false, length = 500)
+    @Column(name = "audio_file_id")
+    private UUID audioFileId;
+
+    @Column(name = "audio_url", length = 500)
     private String audioUrl;
 
     @Enumerated(EnumType.STRING)
@@ -77,6 +80,8 @@ public class TranscriptionJobEntity {
     public void setJobId(UUID jobId) { this.jobId = jobId; }
     public UUID getTaskId() { return taskId; }
     public void setTaskId(UUID taskId) { this.taskId = taskId; }
+    public UUID getAudioFileId() { return audioFileId; }
+    public void setAudioFileId(UUID audioFileId) { this.audioFileId = audioFileId; }
     public String getAudioUrl() { return audioUrl; }
     public void setAudioUrl(String audioUrl) { this.audioUrl = audioUrl; }
     public TranscriptionStatus getStatus() { return status; }
