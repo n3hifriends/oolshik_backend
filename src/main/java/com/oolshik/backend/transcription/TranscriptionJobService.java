@@ -18,6 +18,7 @@ public class TranscriptionJobService {
 
     @Transactional
     public TranscriptionJobEntity createOrGet(UUID taskId,
+                                              UUID audioFileId,
                                               String audioUrl,
                                               String languageHint,
                                               String engine,
@@ -29,6 +30,7 @@ public class TranscriptionJobService {
 
         TranscriptionJobEntity job = new TranscriptionJobEntity();
         job.setTaskId(taskId);
+        job.setAudioFileId(audioFileId);
         job.setAudioUrl(audioUrl);
         job.setLanguageHint(languageHint);
         job.setEngine(engine);

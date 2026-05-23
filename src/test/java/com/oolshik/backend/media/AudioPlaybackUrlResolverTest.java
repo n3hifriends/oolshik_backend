@@ -66,6 +66,21 @@ class AudioPlaybackUrlResolverTest {
     }
 
     @Test
+    void resolveUsesAudioFileIdWhenStoredUrlMissing() throws Exception {
+        S3StorageService storage = mock(S3StorageService.class);
+        AudioFileRepository repo = mock(AudioFileRepository.class);
+        AudioPlaybackUrlResolver resolver = new AudioPlaybackUrlResolver(storage, repo);
+        AudioFile audioFile = audioFile("audio/user/file.m4a");
+
+        when(repo.findById(audioFile.getId())).thenReturn(Optional.of(audioFile));
+        when(storage.resolveDownloadUrl(audioFile.getStorageKey()))
+                .thenReturn(Optional.of("https://bucket.s3.ap-south-1.amazonaws.com/audio/user/file.m4a?sig=1"));
+
+        assertThat(resolver.resolve(audioFile.getId(), null))
+                .isEqualTo("https://bucket.s3.ap-south-1.amazonaws.com/audio/user/file.m4a?sig=1");
+    }
+
+    @Test
     void resolveStoredUrlLeavesRemoteUrlUntouched() {
         AudioPlaybackUrlResolver resolver = new AudioPlaybackUrlResolver(mock(StorageService.class), mock(AudioFileRepository.class));
 

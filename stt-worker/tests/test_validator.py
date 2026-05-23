@@ -19,6 +19,23 @@ def test_parse_job_valid():
     assert job.taskId == "456"
 
 
+def test_parse_job_valid_s3_object_ref():
+    payload = {
+        "jobId": "123",
+        "taskId": "456",
+        "audioFileId": "789",
+        "storageProvider": "AWS",
+        "bucket": "oolshik-dev-bucket",
+        "objectKey": "audio/u1/file.m4a",
+        "region": "ap-south-1",
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "correlationId": "corr-1",
+    }
+    job = parse_job(json_dumps(payload))
+    assert job.bucket == "oolshik-dev-bucket"
+    assert job.objectKey == "audio/u1/file.m4a"
+
+
 def test_parse_job_invalid():
     payload = {"taskId": "456"}
     with pytest.raises(Exception):

@@ -21,13 +21,15 @@ class TranscriptionJobServiceTest {
         TranscriptionJobEntity existing = new TranscriptionJobEntity();
         existing.setJobId(UUID.randomUUID());
         existing.setTaskId(taskId);
+        existing.setAudioFileId(UUID.randomUUID());
         existing.setAudioUrl("https://example.com/audio.m4a");
         existing.setEngine("faster-whisper");
         existing.setModelVersion("small");
 
         when(repo.findByTaskId(taskId)).thenReturn(Optional.of(existing));
 
-        TranscriptionJobEntity result = service.createOrGet(taskId, "https://example.com/audio.m4a", null,
+        UUID audioFileId = UUID.randomUUID();
+        TranscriptionJobEntity result = service.createOrGet(taskId, audioFileId, "https://example.com/audio.m4a", null,
                 "faster-whisper", "small");
 
         assertThat(result).isSameAs(existing);
@@ -40,10 +42,11 @@ class TranscriptionJobServiceTest {
         TranscriptionJobService service = new TranscriptionJobService(repo);
 
         UUID taskId = UUID.randomUUID();
+        UUID audioFileId = UUID.randomUUID();
         when(repo.findByTaskId(taskId)).thenReturn(Optional.empty());
         when(repo.save(any(TranscriptionJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TranscriptionJobEntity result = service.createOrGet(taskId, "https://example.com/audio.m4a", "hi-IN",
+        TranscriptionJobEntity result = service.createOrGet(taskId, audioFileId, "https://example.com/audio.m4a", "hi-IN",
                 "faster-whisper", "small");
 
         ArgumentCaptor<TranscriptionJobEntity> captor = ArgumentCaptor.forClass(TranscriptionJobEntity.class);
@@ -51,6 +54,7 @@ class TranscriptionJobServiceTest {
 
         TranscriptionJobEntity saved = captor.getValue();
         assertThat(saved.getTaskId()).isEqualTo(taskId);
+        assertThat(saved.getAudioFileId()).isEqualTo(audioFileId);
         assertThat(saved.getAudioUrl()).isEqualTo("https://example.com/audio.m4a");
         assertThat(saved.getLanguageHint()).isEqualTo("hi-IN");
         assertThat(saved.getEngine()).isEqualTo("faster-whisper");

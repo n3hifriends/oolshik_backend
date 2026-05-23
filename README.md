@@ -136,6 +136,13 @@ STT audio source modes:
 - `DEMO_FIXED`: STT ignores request `voiceUrl` and always uses `STT_DEMO_AUDIO_URL`.
 - `S3_ONLY`: STT requires HTTPS URL and allowed S3 host suffixes, and rejects local `/api/media/audio/.../stream` URLs.
 
+Preferred voice upload flow:
+
+- Upload audio first through `/api/media/audio/complete`, `/api/media/audio/mpu/complete`, or `/api/media/pre-signed/complete`.
+- Use the returned `audio_files.id` as `audioFileId` in `POST /api/requests`.
+- Treat `voiceUrl` in `POST /api/requests` as a legacy fallback for externally hosted audio; do not send local backend stream URLs in `S3_ONLY`.
+- STT jobs now prefer storage references (`bucket` + `objectKey`) over persisted playback URLs.
+
 Recommended modes:
 
 - Local end-to-end (recorded audio -> helper playback + STT): `STT_AUDIO_SOURCE_MODE=REQUEST`, `MEDIA_LOCAL_PUBLIC_STREAM_ENABLED=true`, `STT_REWRITE_LOCAL_PUBLIC_STREAM_FOR_WORKER=true`.

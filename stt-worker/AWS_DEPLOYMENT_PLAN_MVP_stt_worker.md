@@ -1,4 +1,4 @@
-Use this revised plan for `stt-worker` with **small image in ECR + model downloaded on EC2 host**.
+Use this revised plan for `stt-worker` with **small image in ECR + IndicConformer downloaded at runtime from Hugging Face**.
 
 Replace these placeholders first:
 
@@ -6,11 +6,11 @@ Replace these placeholders first:
 - `AWS_ACCOUNT_ID=653895707563`
 - `AWS_REGION=ap-south-1`
 - `ECR_IMAGE=oolshik-stt-worker`
-- `ECR_TAG=v1`
+- `ECR_TAG=latest`
 
 ## 1. Build and push the small image from your Mac
 
-Do **not** preload the model.
+Do **not** preload the model into the image.
 
 ```bash
 cd /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp/stt-worker
@@ -20,7 +20,7 @@ docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.ama
 
 docker buildx build \
   --platform linux/amd64 \
-  -t 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1 \
+  -t 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4 \
   --push .
 ```
 
@@ -30,54 +30,16 @@ docker buildx build \
 aws ecr get-login-password --region ap-south-1 | \
 sudo docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
 
-sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1
+sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4
 ```
 
-## 3. Download the IndicConformer model once on EC2 host
+## 3. Export the Hugging Face token on EC2
 
 ```bash
 export HF_TOKEN='HF_TOKEN_VALUE'
-
-sudo rm -rf /opt/oolshik/models/hf/indic-conformer
-sudo mkdir -p /opt/oolshik/models/hf/indic-conformer
-
-sudo docker run --rm \
-  -e HF_TOKEN \
-  -v /opt/oolshik/models/hf/indic-conformer:/model \
-  python:3.11-slim bash -lc '
-    pip install --no-cache-dir huggingface_hub &&
-    python - <<'"'"'PY'"'"'
-import os
-from huggingface_hub import snapshot_download
-
-snapshot_download(
-    repo_id="ai4bharat/indic-conformer-600m-multilingual",
-    token=os.environ["HF_TOKEN"],
-    local_dir="/model",
-)
-print("download complete")
-PY
-  '
-
-unset HF_TOKEN
 ```
 
-## 4. Verify the model actually downloaded
-
-```bash
-ls -lah /opt/oolshik/models/hf/indic-conformer | head -50
-test -f /opt/oolshik/models/hf/indic-conformer/config.json && echo "config.json present" || echo "config.json missing"
-du -sh /opt/oolshik/models/hf/indic-conformer
-find /opt/oolshik/models/hf/indic-conformer -type f | egrep 'bin|safetensors|pt|onnx'
-```
-
-You want:
-
-- `config.json present`
-- directory size much larger than a few KB
-- at least one real weight/artifact file
-
-## 5. Run `stt-worker` using the mounted local model
+## 4. Run `stt-worker` with runtime model download
 
 ```bash
 sudo docker rm -f stt-worker || true
@@ -90,13 +52,20 @@ sudo docker run -d \
   -e STT_RESULTS_TOPIC=stt.results \
   -e STT_DLQ_TOPIC=stt.jobs.dlq \
   -e STT_ENGINE=indicconformer \
-  -e STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=false \
-  -e ASR_MODEL_PATH=/models/hf/indic-conformer \
-  -v /opt/oolshik/models/hf/indic-conformer:/models/hf/indic-conformer \
-  653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1
+  -e STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true \
+  -e ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual \
+  -e ASR_MODEL_PATH= \
+  -e HF_TOKEN="$HF_TOKEN" \
+  653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4
 ```
 
-## 6. Verify startup
+Important:
+
+- `ASR_MODEL_PATH=` must stay empty. Do not mount `/models/hf/indic-conformer` in this mode.
+- `HF_TOKEN` must be present when you run `sudo docker run`. If needed, use `sudo --preserve-env=HF_TOKEN docker run ...`.
+- The first startup can take time because the worker downloads the model from Hugging Face.
+
+## 5. Verify startup
 
 ```bash
 sudo docker ps -a
@@ -105,17 +74,62 @@ sudo docker logs -n 200 stt-worker
 
 Expected:
 
-- no `IndicConformer init failed`
-- `Worker ready`
+- initial logs may show model download activity
+- you want `Worker ready`
 - `engine` should be `indicconformer`
+
+## 6. Verify effective runtime config
+
+```bash
+sudo docker exec -it stt-worker sh -lc 'echo "ASR_MODEL_PATH=<$ASR_MODEL_PATH>"; echo "ASR_MODEL_ID=<$ASR_MODEL_ID>"; echo "STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<$STT_ALLOW_RUNTIME_MODEL_DOWNLOAD>"; python - <<'"'"'"'"'"'"'"'"'PY'"'"'"'"'"'"'"'"'
+import os
+print("HF_TOKEN set =", bool(os.getenv("HF_TOKEN")))
+PY'
+```
+
+You want:
+
+- `ASR_MODEL_PATH=<>`
+- `ASR_MODEL_ID=<ai4bharat/indic-conformer-600m-multilingual>`
+- `STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<true>`
+- `HF_TOKEN set = True`
 
 ## 7. If it still falls back
 
-Check the mounted model again:
+Capture the actual engine-load error:
 
 ```bash
-find /opt/oolshik/models/hf/indic-conformer -maxdepth 2 -type f | sed -n '1,100p'
-du -sh /opt/oolshik/models/hf/indic-conformer
+sudo docker exec -it stt-worker sh -lc 'python - <<'"'"'"'"'"'"'"'"'PY'"'"'"'"'"'"'"'"'
+import os
+import traceback
+from stt_worker.transcribe.engine import IndicConformerEngine
+
+print("ASR_MODEL_PATH =", os.getenv("ASR_MODEL_PATH"))
+print("ASR_MODEL_ID   =", os.getenv("ASR_MODEL_ID"))
+print("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD =", os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD"))
+print("HF_TOKEN set   =", bool(os.getenv("HF_TOKEN")))
+
+try:
+    engine = IndicConformerEngine(
+        model_id=os.getenv("ASR_MODEL_ID", "ai4bharat/indic-conformer-600m-multilingual"),
+        revision=os.getenv("ASR_MODEL_REVISION") or None,
+        decoding=os.getenv("ASR_DECODING", "rnnt"),
+        allow_runtime_model_download=(os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD", "false").lower() == "true"),
+    )
+    print("ENGINE LOAD OK", engine.model_version)
+except Exception as e:
+    print("ENGINE LOAD FAILED:", repr(e))
+    traceback.print_exc()
+    if getattr(e, "__cause__", None) is not None:
+        print("\\nCAUSE:")
+        traceback.print_exception(type(e.__cause__), e.__cause__, e.__cause__.__traceback__)
+PY'
+```
+
+Then inspect:
+
+```bash
+sudo docker logs -n 200 stt-worker
 ```
 
 ## Optional test job
@@ -147,4 +161,5 @@ sudo docker logs -f stt-worker
 
 ## Important
 
-Rotate the exposed Hugging Face token and DB password after this.
+- Rotate the exposed Hugging Face token and DB password after this.
+- In this runtime-download mode, do not also configure a mounted local model path unless the worker code is explicitly updated to support it.

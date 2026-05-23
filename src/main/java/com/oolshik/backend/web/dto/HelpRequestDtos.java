@@ -20,6 +20,7 @@ public class HelpRequestDtos {
         String title,
         String description,
         String voiceUrl,
+        UUID audioFileId,
         @NotNull Double latitude,
         @NotNull Double longitude,
         @Min(50) @Max(10000) Integer radiusMeters,

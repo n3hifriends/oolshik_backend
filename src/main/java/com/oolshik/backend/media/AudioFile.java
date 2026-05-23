@@ -15,6 +15,11 @@ public class AudioFile {
     @Column(nullable = false) private String mimeType;
     @Column(nullable = false) private long sizeBytes;
     @Column(nullable = false) private String storageKey;
+    private String storageProvider;
+    private String storageBucket;
+    private String storageRegion;
+    private String storageEndpoint;
+    @Column(nullable = false) private boolean storagePathStyleAccessEnabled;
     @Column(nullable = false) private Instant createdAt = Instant.now();
     private Long durationMs;
     private Integer sampleRate;
@@ -31,6 +36,16 @@ public class AudioFile {
     public void setSizeBytes(long sizeBytes) { this.sizeBytes = sizeBytes; }
     public String getStorageKey() { return storageKey; }
     public void setStorageKey(String storageKey) { this.storageKey = storageKey; }
+    public String getStorageProvider() { return storageProvider; }
+    public void setStorageProvider(String storageProvider) { this.storageProvider = storageProvider; }
+    public String getStorageBucket() { return storageBucket; }
+    public void setStorageBucket(String storageBucket) { this.storageBucket = storageBucket; }
+    public String getStorageRegion() { return storageRegion; }
+    public void setStorageRegion(String storageRegion) { this.storageRegion = storageRegion; }
+    public String getStorageEndpoint() { return storageEndpoint; }
+    public void setStorageEndpoint(String storageEndpoint) { this.storageEndpoint = storageEndpoint; }
+    public boolean isStoragePathStyleAccessEnabled() { return storagePathStyleAccessEnabled; }
+    public void setStoragePathStyleAccessEnabled(boolean storagePathStyleAccessEnabled) { this.storagePathStyleAccessEnabled = storagePathStyleAccessEnabled; }
     public Instant getCreatedAt() { return createdAt; }
     public Long getDurationMs() { return durationMs; }
     public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }

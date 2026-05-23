@@ -32,6 +32,15 @@ public class AudioPlaybackUrlResolver {
         return "/api/media/audio/" + audioFile.getId() + "/stream";
     }
 
+    public String resolve(UUID audioFileId, String storedUrl) {
+        if (audioFileId != null) {
+            return audioRepo.findById(audioFileId)
+                    .map(this::resolve)
+                    .orElseGet(() -> resolveStoredUrl(storedUrl));
+        }
+        return resolveStoredUrl(storedUrl);
+    }
+
     public String resolveStoredUrl(String storedUrl) {
         if (storedUrl == null || storedUrl.isBlank()) {
             return storedUrl;
