@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 
 
 class JobMessage(BaseModel):
@@ -12,10 +12,25 @@ class JobMessage(BaseModel):
 
     jobId: str
     taskId: str
-    audioUrl: HttpUrl
+    audioFileId: Optional[str] = None
+    storageProvider: Optional[str] = None
+    bucket: Optional[str] = None
+    objectKey: Optional[str] = None
+    region: Optional[str] = None
+    endpoint: Optional[str] = None
+    pathStyleAccessEnabled: Optional[bool] = None
+    audioUrl: Optional[HttpUrl] = None
     languageHint: Optional[str] = None
     createdAt: datetime
     correlationId: Optional[str] = None
+
+    @model_validator(mode="after")
+    def ensure_audio_source(self) -> "JobMessage":
+        has_object_ref = bool(self.bucket and self.objectKey)
+        has_audio_url = self.audioUrl is not None
+        if not has_object_ref and not has_audio_url:
+            raise ValueError("Either audioUrl or bucket/objectKey is required")
+        return self
 
 
 class ResultStatus(str, Enum):

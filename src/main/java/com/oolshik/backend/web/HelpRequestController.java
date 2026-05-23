@@ -1,7 +1,10 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.media.AudioFile;
+import com.oolshik.backend.media.AudioFileRepository;
 import com.oolshik.backend.media.AudioPlaybackUrlResolver;
+import com.oolshik.backend.media.AudioStorageMetadataResolver;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
@@ -55,7 +58,9 @@ public class HelpRequestController {
     private final HelpRequestRatingService ratingService;
     private final UserRepository userRepo;
     private final CurrentUserService currentUserService;
+    private final AudioFileRepository audioRepo;
     private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
+    private final AudioStorageMetadataResolver audioStorageMetadataResolver;
     private final TranscriptionJobService transcriptionJobService;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
     private final TranscriptionAudioSourceResolver transcriptionAudioSourceResolver;
@@ -73,7 +78,9 @@ public class HelpRequestController {
                                  HelpRequestRatingService ratingService,
                                  UserRepository userRepo,
                                  CurrentUserService currentUserService,
+                                 AudioFileRepository audioRepo,
                                  AudioPlaybackUrlResolver audioPlaybackUrlResolver,
+                                 AudioStorageMetadataResolver audioStorageMetadataResolver,
                                  TranscriptionJobService transcriptionJobService,
                                  TranscriptionJobPublisher transcriptionJobPublisher,
                                  TranscriptionAudioSourceResolver transcriptionAudioSourceResolver) {
@@ -81,7 +88,9 @@ public class HelpRequestController {
         this.ratingService = ratingService;
         this.userRepo = userRepo;
         this.currentUserService = currentUserService;
+        this.audioRepo = audioRepo;
         this.audioPlaybackUrlResolver = audioPlaybackUrlResolver;
+        this.audioStorageMetadataResolver = audioStorageMetadataResolver;
         this.transcriptionJobService = transcriptionJobService;
         this.transcriptionJobPublisher = transcriptionJobPublisher;
         this.transcriptionAudioSourceResolver = transcriptionAudioSourceResolver;
@@ -91,28 +100,45 @@ public class HelpRequestController {
     public ResponseEntity<?> create(@AuthenticationPrincipal AuthenticatedUserPrincipal principal, @RequestBody @Valid CreateRequest req) {
         var requester = currentUserService.require(principal);
         Point point = toPoint(req.latitude(), req.longitude()); // 4326
+        AudioFile audioFile = resolveOwnedAudioFile(requester.getId(), req.audioFileId());
         String voiceUrl = req.voiceUrl();
         if (voiceUrl != null && voiceUrl.isBlank()) {
             voiceUrl = null;
         }
-        String transcriptionAudioUrl;
-        try {
-            transcriptionAudioUrl = transcriptionAudioSourceResolver.resolveForJob(voiceUrl);
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        UUID transcriptionAudioFileId = null;
+        String transcriptionAudioUrl = null;
+        if (audioFile != null) {
+            transcriptionAudioFileId = audioFile.getId();
+            AudioStorageMetadataResolver.StorageReference storageRef = audioStorageMetadataResolver.resolve(audioFile);
+            if (storageRef == null || !storageRef.isObjectStorage()) {
+                try {
+                    transcriptionAudioUrl = transcriptionAudioSourceResolver.resolveForJob("/api/media/audio/" + audioFile.getId() + "/stream");
+                } catch (IllegalArgumentException ex) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+                }
+            }
+            voiceUrl = null;
+        } else if (voiceUrl != null) {
+            try {
+                transcriptionAudioUrl = transcriptionAudioSourceResolver.resolveForJob(voiceUrl);
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+            }
         }
         HelpRequestEntity created = service.create(
                 requester.getId(),
                 req.title(), req.description(),
+                audioFile != null ? audioFile.getId() : null,
                 req.radiusMeters(),
                 voiceUrl, point,
                 req.offerAmount(),
                 req.offerCurrency()
         );
         TranscriptionJobEntity job = null;
-        if (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank()) {
+        if (created.getAudioFileId() != null || (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank())) {
             job = transcriptionJobService.createOrGet(
                     created.getId(),
+                    transcriptionAudioFileId,
                     transcriptionAudioUrl,
                     "auto",
                     TRANSCRIPTION_ENGINE,
@@ -297,7 +323,7 @@ public class HelpRequestController {
     }
 
     private HelpRequestView view(HelpRequestEntity e, TranscriptionJobEntity job, UUID viewerId) {
-        String url = audioPlaybackUrlResolver.resolveStoredUrl(e.getVoiceUrl());
+        String url = audioPlaybackUrlResolver.resolve(e.getAudioFileId(), e.getVoiceUrl());
 
         UUID pendingHelperId = maskPendingHelperId(e.getPendingHelperId(), e.getRequesterId(), viewerId);
         HelpRequestRatingService.RatingSummary ratingSummary = ratingService.summaryForRequest(
@@ -354,7 +380,7 @@ public class HelpRequestController {
         Boolean canConfirm = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
         Boolean canReportIssue = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
         Boolean canRate = viewerCanRate(row.getStatus(), row.getRequesterId(), row.getHelperId(), viewerId);
-        String resolvedVoiceUrl = audioPlaybackUrlResolver.resolveStoredUrl(row.getVoiceUrl());
+        String resolvedVoiceUrl = audioPlaybackUrlResolver.resolve(row.getAudioFileId(), row.getVoiceUrl());
         return new HelpRequestRowView(
                 row.getId(),
                 row.getTitle(),
@@ -427,6 +453,14 @@ public class HelpRequestController {
     private UUID resolveViewerId(AuthenticatedUserPrincipal principal) {
         var user = currentUserService.resolve(principal);
         return user == null ? null : user.getId();
+    }
+
+    private AudioFile resolveOwnedAudioFile(UUID requesterId, UUID audioFileId) {
+        if (audioFileId == null) {
+            return null;
+        }
+        return audioRepo.findByIdAndOwnerUserId(audioFileId, requesterId.toString())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "errors.media.audioNotFound"));
     }
 
     // payloads

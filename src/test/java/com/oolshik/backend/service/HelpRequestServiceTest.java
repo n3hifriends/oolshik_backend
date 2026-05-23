@@ -313,6 +313,7 @@ class HelpRequestServiceTest {
                 requesterId,
                 "Need help",
                 "desc",
+                null,
                 1000,
                 "voice",
                 null,
@@ -351,12 +352,12 @@ class HelpRequestServiceTest {
         when(repo.findFirstByRequesterIdAndStatusInOrderByCreatedAtAscIdAsc(eq(requesterId), any()))
                 .thenReturn(Optional.of(oldest));
 
-        service.create(requesterId, "First", "", 1000, null, null, null, null);
-        service.create(requesterId, "Second", "", 1000, null, null, null, null);
+        service.create(requesterId, "First", "", null, 1000, null, null, null, null);
+        service.create(requesterId, "Second", "", null, 1000, null, null, null, null);
 
         ActiveRequestCapReachedException ex = assertThrows(
                 ActiveRequestCapReachedException.class,
-                () -> service.create(requesterId, "Third", "", 1000, null, null, null, null)
+                () -> service.create(requesterId, "Third", "", null, 1000, null, null, null, null)
         );
 
         assertEquals(2, ex.response().cap());
@@ -388,6 +389,7 @@ class HelpRequestServiceTest {
                 requesterId,
                 "",
                 "voice-first",
+                null,
                 1000,
                 "https://example.com/voice.m4a",
                 null,
@@ -411,7 +413,7 @@ class HelpRequestServiceTest {
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
 
-        service.create(requesterId, "Need help", "", 1000, null, null, null, null);
+        service.create(requesterId, "Need help", "", null, 1000, null, null, null, null);
 
         ArgumentCaptor<Collection<HelpRequestStatus>> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
         verify(repo).countByRequesterIdAndStatusIn(eq(requesterId), statusesCaptor.capture());

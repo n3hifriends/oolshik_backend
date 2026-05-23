@@ -28,6 +28,7 @@ public interface HelpRequestRow {
     Integer getReleasedCount();
     Integer getRadiusStage();
     Instant getNextEscalationAt();
+    UUID getAudioFileId();
     String getVoiceUrl();
     BigDecimal getRatingValue();     // this task’s rating (nullable)
     BigDecimal getHelperAvgRating(); // computed avg for the helper (nullable)

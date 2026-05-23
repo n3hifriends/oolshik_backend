@@ -90,6 +90,7 @@ public class HelpRequestService {
             UUID requesterId,
             String title,
             String description,
+            UUID audioFileId,
             int radiusMeters,
             String voiceUrl,
             Point location,
@@ -101,7 +102,7 @@ public class HelpRequestService {
 
         boolean titleBlank = (title == null || title.isBlank());
         boolean descriptionBlank = (description == null || description.isBlank());
-        boolean hasVoice = voiceUrl != null && !voiceUrl.isBlank();
+        boolean hasVoice = audioFileId != null || (voiceUrl != null && !voiceUrl.isBlank());
         if (titleBlank && !hasVoice) {
             throw new IllegalArgumentException("errors.request.voiceUrlRequiredWhenTitleEmpty");
         }
@@ -126,6 +127,7 @@ public class HelpRequestService {
         e.setDescription(description);
         e.setRadiusMeters(radiusMeters);
         e.setStatus(nextStatus);
+        e.setAudioFileId(audioFileId);
         e.setVoiceUrl(voiceUrl);
         e.setLocation(location);
         e.setRadiusStage(0);

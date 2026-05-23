@@ -10,7 +10,15 @@ public class Dtos {
     public record MpuCreateResp(String uploadId, String objectKey) {}
     public record MpuSignPartReq(String uploadId, String objectKey, int partNumber) {}
     public record MpuSignedPart(int partNumber, String url) {}
-    public record MpuCompleteReq(String uploadId, String objectKey, java.util.List<PartETag> parts) {}
+    public record MpuCompleteReq(
+            String uploadId,
+            String objectKey,
+            java.util.List<PartETag> parts,
+            String filename,
+            String mimeType,
+            Long durationMs,
+            Integer sampleRate
+    ) {}
     public record PartETag(int partNumber, String eTag) {}
     public record MpuAbortReq(String uploadId, String objectKey) {}
 }

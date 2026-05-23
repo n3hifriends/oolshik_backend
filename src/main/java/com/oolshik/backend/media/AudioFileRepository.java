@@ -8,4 +8,5 @@ import java.util.UUID;
 public interface AudioFileRepository extends JpaRepository<AudioFile, UUID> {
     List<AudioFile> findByOwnerUserIdOrderByCreatedAtDesc(String ownerUserId);
     Optional<AudioFile> findFirstByRequestIdOrderByCreatedAtDesc(String requestId);
+    Optional<AudioFile> findByIdAndOwnerUserId(UUID id, String ownerUserId);
 }

@@ -1,6 +1,8 @@
 package com.oolshik.backend.transcription;
 
 import com.oolshik.backend.config.KafkaTopicProperties;
+import com.oolshik.backend.media.AudioFileRepository;
+import com.oolshik.backend.media.AudioStorageMetadataResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -55,6 +57,18 @@ class TranscriptionJobPublisherSelectionTest {
             KafkaTopicProperties properties = new KafkaTopicProperties();
             properties.setSttJobs("stt.jobs");
             return properties;
+        }
+
+        @Bean
+        @ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
+        AudioFileRepository audioFileRepository() {
+            return mock(AudioFileRepository.class);
+        }
+
+        @Bean
+        @ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
+        AudioStorageMetadataResolver audioStorageMetadataResolver() {
+            return mock(AudioStorageMetadataResolver.class);
         }
     }
 }

@@ -6,6 +6,13 @@ import java.util.UUID;
 public record SttJobMessage(
         UUID jobId,
         UUID taskId,
+        UUID audioFileId,
+        String storageProvider,
+        String bucket,
+        String objectKey,
+        String region,
+        String endpoint,
+        Boolean pathStyleAccessEnabled,
         String audioUrl,
         String languageHint,
         OffsetDateTime createdAt,
