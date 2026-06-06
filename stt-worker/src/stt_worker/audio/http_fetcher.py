@@ -88,6 +88,9 @@ class HttpAudioFetcher:
                 last_error = AudioDownloadError("DOWNLOAD_FAILED", str(exc), True)
                 if attempt >= attempts - 1:
                     raise last_error from exc
+            except OSError as exc:
+                last_error = AudioDownloadError("DOWNLOAD_FAILED", str(exc), False)
+                raise last_error from exc
 
             sleep_sec = backoff_base_sec * (2 ** attempt)
             time.sleep(sleep_sec)

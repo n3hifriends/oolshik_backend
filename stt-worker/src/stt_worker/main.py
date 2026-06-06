@@ -9,6 +9,7 @@ import threading
 import time
 import wave
 import warnings
+from array import array
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
@@ -168,13 +169,34 @@ def wav_duration_seconds(path: str) -> float:
 
 
 def preprocess_audio(wav_path: str) -> Tuple[torch.Tensor, float]:
-    waveform, sample_rate = torchaudio.load(wav_path)
-    if waveform.ndim == 1:
-        waveform = waveform.unsqueeze(0)
+    with wave.open(wav_path, "rb") as wf:
+        channels = wf.getnchannels()
+        sample_rate = wf.getframerate()
+        sample_width = wf.getsampwidth()
+        frames = wf.getnframes()
+        raw = wf.readframes(frames)
 
-    if waveform.shape[0] > 1:
-        waveform = waveform.mean(dim=0, keepdim=True)
+    if sample_width == 1:
+        samples = torch.tensor(list(raw), dtype=torch.float32).sub_(128.0).div_(128.0)
+    elif sample_width == 2:
+        pcm = array("h")
+        pcm.frombytes(raw)
+        if pcm.itemsize != 2:
+            raise AudioDownloadError("UNSUPPORTED_FORMAT", "Unsupported WAV sample width", False)
+        samples = torch.tensor(pcm, dtype=torch.float32).div_(32768.0)
+    elif sample_width == 4:
+        pcm = array("i")
+        pcm.frombytes(raw)
+        if pcm.itemsize != 4:
+            raise AudioDownloadError("UNSUPPORTED_FORMAT", "Unsupported WAV sample width", False)
+        samples = torch.tensor(pcm, dtype=torch.float32).div_(2147483648.0)
+    else:
+        raise AudioDownloadError("UNSUPPORTED_FORMAT", "Unsupported WAV sample width", False)
 
+    if channels > 1 and samples.numel() > 0:
+        samples = samples.reshape(-1, channels).mean(dim=1)
+
+    waveform = samples.unsqueeze(0)
     if sample_rate != 16000:
         waveform = torchaudio.functional.resample(waveform, sample_rate, 16000)
         sample_rate = 16000
@@ -183,10 +205,7 @@ def preprocess_audio(wav_path: str) -> Tuple[torch.Tensor, float]:
     if peak > 0:
         waveform = waveform / peak
 
-    duration = 0.0
-    if waveform.numel() > 0:
-        duration = float(waveform.shape[1]) / float(sample_rate)
-
+    duration = float(waveform.shape[1]) / float(sample_rate) if waveform.numel() > 0 else 0.0
     return waveform, duration
 
 
@@ -236,6 +255,7 @@ def handle_failure(
                 "stage": "retry",
                 "job_id": (job_payload or {}).get("jobId"),
                 "error_code": error.code,
+                "error_message": error.message,
             },
         )
         time.sleep(delay_ms / 1000.0)
@@ -614,6 +634,16 @@ def process_message(
         )
     except Exception as exc:  # noqa: BLE001
         error = classify_error(exc)
+        log.error(
+            "Unexpected error during job processing",
+            exc_info=True,
+            extra={
+                "stage": "internal",
+                "job_id": (raw_payload or {}).get("jobId"),
+                "error_code": error.code,
+                "error_message": error.message,
+            },
+        )
         return handle_failure(
             log,
             settings,
@@ -622,7 +652,7 @@ def process_message(
             raw_payload,
             attempt,
             error,
-            "PUBLISH",
+            "INTERNAL",
             engine.engine_name,
             engine.model_version,
         )
