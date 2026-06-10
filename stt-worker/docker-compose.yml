@@ -26,7 +26,10 @@ services:
       - LOG_LEVEL=INFO
       - STT_ENGINE=indicconformer
       - STT_ENABLE_FALLBACK=true
-      - STT_DEFAULT_LANG=mr
+      - STT_DEFAULT_LANG=auto
+      - STT_AUTO_ROUTE_PRIMARY_LANGS=mr,hi
+      - STT_AUTO_ROUTE_MIN_CONFIDENCE=0.30
+      - STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=mr
       - ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
       - ASR_DECODING=rnnt
       - STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true

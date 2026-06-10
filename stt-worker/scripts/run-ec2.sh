@@ -17,22 +17,26 @@
 #   ./run-ec2.sh [start|stop|restart|status|logs]
 #
 # Required env vars (export or set in /etc/stt-worker/env):
-#   IMAGE_URI              Full ECR image URI, e.g.:
-#                            653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1-cpu
-#   KAFKA_BOOTSTRAP_SERVERS  e.g. b-1.mskcluster.xxx.kafka.ap-south-1.amazonaws.com:9092
+#   KAFKA_BOOTSTRAP_SERVERS  e.g. 10.20.0.13:9092
 #
 # Optional env vars (sensible defaults provided):
+#   IMAGE_URI              Full ECR image URI
+#                          default: 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu
 #   COMPUTE                cpu | gpu            (default: cpu)
 #   DEVICE                 cpu | cuda           (default: cpu)
 #   HF_TOKEN               HuggingFace token    (default: empty — only for gated models)
 #   MODELS_DIR             Host path for model cache  (default: /opt/stt-worker/models)
-#   TMP_DIR                Host path for audio temp files (default: /tmp/stt-worker)
 #   AWS_REGION             default: ap-south-1
 #   STT_ENGINE             indicconformer | fasterwhisper  (default: indicconformer)
 #   STT_ENABLE_FALLBACK    true | false         (default: true)
-#   STT_DEFAULT_LANG       default: mr
+#   STT_DEFAULT_LANG       default: auto
+#   STT_AUTO_ROUTE_PRIMARY_LANGS  default: mr,hi
+#   STT_AUTO_ROUTE_MIN_CONFIDENCE default: 0.30
+#   STT_AUTO_ROUTE_INDIC_FALLBACK_LANG default: mr
+#   STT_PRESERVE_DEFAULT_LANG  set true to keep a legacy explicit default
 #   MODEL_SIZE             small | medium | large (default: small — FasterWhisper model)
 #   WORKER_CONCURRENCY     default: 1
+#   MEMORY_LIMIT           Docker memory limit   (default: no limit — set e.g. 4g on t3.medium, 6g on c5.xlarge)
 #   LOG_LEVEL              default: INFO
 #   CONTAINER_NAME         default: stt-worker
 set -euo pipefail
@@ -45,20 +49,24 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 # ── Config with defaults ──────────────────────────────────────────────────────
-IMAGE_URI="${IMAGE_URI:-}"
+IMAGE_URI="${IMAGE_URI:-653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu}"
 KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-}"
 COMPUTE="${COMPUTE:-cpu}"
 DEVICE="${DEVICE:-cpu}"
-COMPUTE_TYPE="${COMPUTE_TYPE:-}"          # blank → engine auto-selects
+COMPUTE_TYPE="${COMPUTE_TYPE:-}"
 HF_TOKEN="${HF_TOKEN:-}"
 MODELS_DIR="${MODELS_DIR:-/opt/stt-worker/models}"
-TMP_DIR="${TMP_DIR:-/tmp/stt-worker}"
 AWS_REGION="${AWS_REGION:-ap-south-1}"
 STT_ENGINE="${STT_ENGINE:-indicconformer}"
 STT_ENABLE_FALLBACK="${STT_ENABLE_FALLBACK:-true}"
-STT_DEFAULT_LANG="${STT_DEFAULT_LANG:-mr}"
+STT_DEFAULT_LANG="${STT_DEFAULT_LANG:-auto}"
+STT_AUTO_ROUTE_PRIMARY_LANGS="${STT_AUTO_ROUTE_PRIMARY_LANGS:-mr,hi}"
+STT_AUTO_ROUTE_MIN_CONFIDENCE="${STT_AUTO_ROUTE_MIN_CONFIDENCE:-0.30}"
+STT_AUTO_ROUTE_INDIC_FALLBACK_LANG="${STT_AUTO_ROUTE_INDIC_FALLBACK_LANG:-mr}"
+STT_PRESERVE_DEFAULT_LANG="${STT_PRESERVE_DEFAULT_LANG:-false}"
 MODEL_SIZE="${MODEL_SIZE:-small}"
 WORKER_CONCURRENCY="${WORKER_CONCURRENCY:-1}"
+MEMORY_LIMIT="${MEMORY_LIMIT:-}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 CONTAINER_NAME="${CONTAINER_NAME:-stt-worker}"
 
@@ -66,6 +74,11 @@ ECR_REGISTRY="${ECR_REGISTRY:-$(echo "$IMAGE_URI" | cut -d/ -f1)}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+if [[ "${STT_DEFAULT_LANG}" == "mr" && "${STT_PRESERVE_DEFAULT_LANG,,}" != "true" ]]; then
+  log "WARNING: STT_DEFAULT_LANG=mr detected. Migrating to 'auto' (set STT_PRESERVE_DEFAULT_LANG=true to keep 'mr')."
+  STT_DEFAULT_LANG="auto"
+fi
 
 require_var() {
   if [[ -z "${!1:-}" ]]; then
@@ -101,8 +114,21 @@ gpu_flags() {
   fi
 }
 
+ensure_models_dir() {
+  mkdir -p "${MODELS_DIR}"
+  if ! sudo chown -R 10001:10001 "${MODELS_DIR}" 2>/dev/null; then
+    if ! chown -R 10001:10001 "${MODELS_DIR}" 2>/dev/null; then
+      echo "ERROR: cannot chown ${MODELS_DIR} to 10001:10001 — model downloads will fail." >&2
+      exit 1
+    fi
+  fi
+  # Verify appuser can write
+  if ! sudo -u "#10001" test -w "${MODELS_DIR}" 2>/dev/null; then
+    log "WARNING: ${MODELS_DIR} may not be writable by UID 10001. Verify ownership with: ls -la ${MODELS_DIR}"
+  fi
+}
+
 do_start() {
-  require_var IMAGE_URI
   require_var KAFKA_BOOTSTRAP_SERVERS
   require_cmd docker
   require_cmd aws
@@ -114,27 +140,29 @@ do_start() {
     docker rm   "${CONTAINER_NAME}" 2>/dev/null || true
   fi
 
-  mkdir -p "${MODELS_DIR}" "${TMP_DIR}"
-  # appuser inside the container runs as UID 10001; the bind-mount dirs must be
-  # writable by that UID regardless of who created them on the host.
-  chown -R 10001:10001 "${MODELS_DIR}" "${TMP_DIR}" 2>/dev/null \
-    || sudo chown -R 10001:10001 "${MODELS_DIR}" "${TMP_DIR}"
+  ensure_models_dir
 
   ecr_login
   pull_image
 
-  log "Starting container: ${CONTAINER_NAME} (compute=${COMPUTE}, device=${DEVICE})"
+  local mem_flag=""
+  if [[ -n "${MEMORY_LIMIT}" ]]; then
+    mem_flag="--memory ${MEMORY_LIMIT}"
+  fi
 
-  # Build the docker run command
+  log "Starting container: ${CONTAINER_NAME} (compute=${COMPUTE}, device=${DEVICE}${MEMORY_LIMIT:+, memory=${MEMORY_LIMIT}})"
+
   # shellcheck disable=SC2046
   docker run -d \
     --name "${CONTAINER_NAME}" \
     --restart unless-stopped \
+    ${mem_flag} \
     $(gpu_flags) \
     -p 9108:9108 \
     -p 8081:8081 \
+    --log-opt max-size=100m \
+    --log-opt max-file=3 \
     -v "${MODELS_DIR}:/models/hf" \
-    -v "${TMP_DIR}:/app/tmp" \
     -e KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS}" \
     -e STT_JOBS_TOPIC="${STT_JOBS_TOPIC:-stt.jobs}" \
     -e STT_RESULTS_TOPIC="${STT_RESULTS_TOPIC:-stt.results}" \
@@ -143,6 +171,9 @@ do_start() {
     -e STT_ENGINE="${STT_ENGINE}" \
     -e STT_ENABLE_FALLBACK="${STT_ENABLE_FALLBACK}" \
     -e STT_DEFAULT_LANG="${STT_DEFAULT_LANG}" \
+    -e STT_AUTO_ROUTE_PRIMARY_LANGS="${STT_AUTO_ROUTE_PRIMARY_LANGS}" \
+    -e STT_AUTO_ROUTE_MIN_CONFIDENCE="${STT_AUTO_ROUTE_MIN_CONFIDENCE}" \
+    -e STT_AUTO_ROUTE_INDIC_FALLBACK_LANG="${STT_AUTO_ROUTE_INDIC_FALLBACK_LANG}" \
     -e ASR_MODEL_ID="${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}" \
     -e ASR_MODEL_PATH="${ASR_MODEL_PATH:-}" \
     -e ASR_DECODING="${ASR_DECODING:-rnnt}" \
@@ -155,15 +186,15 @@ do_start() {
     -e WORKER_CONCURRENCY="${WORKER_CONCURRENCY}" \
     -e AUDIO_DOWNLOAD_RETRIES=2 \
     -e AUDIO_DOWNLOAD_BACKOFF_SEC=0.5 \
-    -e TMP_DIR=/app/tmp \
     "${IMAGE_URI}"
 
-  log "Container started. Waiting for health check..."
-  local retries=30 i=0
+  # 60 retries × 5s = 5 minutes — enough for first-run model download
+  log "Container started. Waiting for health check (up to 5 min)..."
+  local retries=60 i=0
   until curl -fsS "http://localhost:8081/health" >/dev/null 2>&1; do
     i=$((i+1))
     if [[ $i -ge $retries ]]; then
-      echo "ERROR: health check did not pass after ${retries} attempts." >&2
+      echo "ERROR: health check did not pass after $((retries * 5))s." >&2
       echo "       Check logs: docker logs ${CONTAINER_NAME}" >&2
       exit 1
     fi

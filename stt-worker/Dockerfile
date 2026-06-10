@@ -66,7 +66,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TMP_DIR=/app/tmp \
     PYTHONPATH=/app/src \
     STT_ENGINE=indicconformer \
-    STT_DEFAULT_LANG=mr \
+    STT_DEFAULT_LANG=auto \
     STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=false
 
 # ffmpeg  – binary used by subprocess call + shared libs av needs at runtime

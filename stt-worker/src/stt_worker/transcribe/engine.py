@@ -15,6 +15,7 @@ from faster_whisper import WhisperModel
 from transformers import AutoConfig, AutoModel
 from transformers.dynamic_module_utils import get_class_from_dynamic_module
 
+from stt_worker.language import SUPPORTED_LANGUAGES, is_supported_lang
 from stt_worker.transcribe.normalization import normalize_text
 
 
@@ -22,32 +23,6 @@ ENGINE_INDICCONFORMER = "indicconformer"
 ENGINE_FASTERWHISPER = "fasterwhisper"
 
 _DEFAULT_LANG = "mr"
-_SUPPORTED_LANGUAGES = {
-    "as",
-    "bn",
-    "brx",
-    "doi",
-    "en",
-    "gom",
-    "gu",
-    "hi",
-    "kn",
-    "kok",
-    "mai",
-    "ml",
-    "mni",
-    "mr",
-    "ne",
-    "or",
-    "pa",
-    "sa",
-    "sat",
-    "sd",
-    "ta",
-    "te",
-    "ur",
-}
-
 
 _NOISY_INIT_LINES = (
     "Please check FRAME_DURATION_MS. The timestamps can be inaccurate",
@@ -95,21 +70,27 @@ class BaseEngine(ABC):
 
     def __init__(self, default_lang: str = _DEFAULT_LANG) -> None:
         self.default_lang = (default_lang or _DEFAULT_LANG).strip().lower()
-        if self.default_lang not in _SUPPORTED_LANGUAGES:
+        if self.default_lang in {"auto", "detect"}:
+            self.default_lang = "auto"
+        elif self.default_lang not in SUPPORTED_LANGUAGES:
             self.default_lang = _DEFAULT_LANG
 
     def resolve_lang(self, lang: Optional[str], *, allow_auto: bool = True) -> Optional[str]:
         candidate = (lang or "").strip().lower()
         if candidate in {"", "auto", "detect"}:
-            return None if allow_auto else self.default_lang
+            if allow_auto or self.default_lang == "auto":
+                return None
+            return self.default_lang
         # Accept locale-style hints like "en-IN" / "mr_IN" by reducing to the base code.
         for sep in ("-", "_"):
             if sep in candidate:
                 base = candidate.split(sep, 1)[0].strip()
-                if base in _SUPPORTED_LANGUAGES:
+                if base in SUPPORTED_LANGUAGES:
                     candidate = base
                     break
-        if candidate not in _SUPPORTED_LANGUAGES:
+        if not is_supported_lang(candidate):
+            if self.default_lang == "auto":
+                return None
             return self.default_lang
         return candidate
 
@@ -128,6 +109,7 @@ class FasterWhisperEngine(BaseEngine):
         default_lang: str = _DEFAULT_LANG,
     ) -> None:
         super().__init__(default_lang=default_lang)
+        compute_type = (compute_type or "").strip() or None
         if compute_type is None:
             compute_type = "float16" if device == "cuda" else "int8"
 

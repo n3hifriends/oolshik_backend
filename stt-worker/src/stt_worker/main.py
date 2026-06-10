@@ -27,6 +27,7 @@ from stt_worker.dlq import build_dlq_message
 from stt_worker.health import set_engine, set_ready, start_health_server
 from stt_worker.kafka_consumer import create_consumer, pause_consumer, resume_consumer
 from stt_worker.kafka_producer import create_producer, flush_producer, produce_json
+from stt_worker.language import canonical_lang_code, is_supported_lang, resolve_requested_lang
 from stt_worker.logging import configure_logging, with_context
 from stt_worker.metrics import (
     STT_DOWNLOAD_SECONDS,
@@ -71,6 +72,7 @@ class RuntimeOptions:
     fallback_enabled: bool
     auto_route_primary_langs: frozenset[str]
     auto_route_min_confidence: float
+    auto_route_indic_fallback_lang: Optional[str]
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -87,24 +89,13 @@ def _normalize_engine_name(value: str) -> str:
     return ENGINE_INDICCONFORMER
 
 
-def _canonical_lang_code(value: Any) -> Optional[str]:
-    candidate = str(value or "").strip().lower()
-    if candidate in {"", "auto", "detect"}:
-        return None
-    for sep in ("-", "_"):
-        if sep in candidate:
-            candidate = candidate.split(sep, 1)[0].strip()
-            break
-    return candidate or None
-
-
 def _parse_lang_csv(value: str, default: tuple[str, ...]) -> frozenset[str]:
     raw = value.strip()
     if not raw:
         items = default
     else:
         items = tuple(part.strip() for part in raw.split(","))
-    normalized = {_canonical_lang_code(item) for item in items}
+    normalized = {canonical_lang_code(item) for item in items}
     return frozenset(lang for lang in normalized if lang)
 
 
@@ -369,9 +360,8 @@ def process_message(
     start = time.perf_counter()
     attempt = get_attempt(msg)
     raw_language_hint = (job.languageHint or "").strip().lower()
-    default_language_hint = (options.default_lang or "mr").strip().lower()
-    effective_language_hint = raw_language_hint or default_language_hint
-    selected_lang = None if effective_language_hint in {"", "auto", "detect"} else effective_language_hint
+    default_language_hint = (options.default_lang or "auto").strip().lower()
+    selected_lang, auto_detect = resolve_requested_lang(raw_language_hint, default_language_hint)
     log_lang = selected_lang or "auto"
 
     tmp_dir = settings.tmp_dir
@@ -417,7 +407,28 @@ def process_message(
 
         transcribe_start = time.perf_counter()
         try:
-            if selected_lang is None and engine.engine_name == ENGINE_INDICCONFORMER:
+            if selected_lang == "en" and engine.engine_name == ENGINE_INDICCONFORMER:
+                if fallback_engine is None:
+                    raise TranscribeError(
+                        "FALLBACK_UNAVAILABLE",
+                        "English transcription requires faster-whisper fallback",
+                        False,
+                    )
+                fallback_used = True
+                used_engine = fallback_engine
+                log.info(
+                    "Using fallback engine for English transcription",
+                    extra={
+                        "stage": "transcribe",
+                        "job_id": job.jobId,
+                        "engine": fallback_engine.engine_name,
+                        "lang": log_lang,
+                        "fallback_used": True,
+                        "error_code": None,
+                    },
+                )
+                result = fallback_engine.transcribe(wav_tensor, selected_lang)
+            elif auto_detect and engine.engine_name == ENGINE_INDICCONFORMER:
                 if fallback_engine is None:
                     raise TranscribeError(
                         "LANGUAGE_HINT_REQUIRED",
@@ -438,13 +449,15 @@ def process_message(
                     },
                 )
                 fallback_result = fallback_engine.transcribe(wav_tensor, selected_lang)
-                detected_lang = _canonical_lang_code(fallback_result.get("language"))
+                detected_lang = canonical_lang_code(fallback_result.get("language"))
                 detected_confidence = _coerce_optional_float(fallback_result.get("confidence"))
                 if detected_lang and detected_lang != fallback_result.get("language"):
                     fallback_result = dict(fallback_result)
                     fallback_result["language"] = detected_lang
                 result = fallback_result
 
+                route_lang = detected_lang
+                route_reason = "language_not_routed"
                 primary_accepts_detected_lang = bool(detected_lang) and (
                     engine.resolve_lang(detected_lang, allow_auto=True) == detected_lang
                 )
@@ -454,6 +467,21 @@ def process_message(
                     and detected_confidence is not None
                     and detected_confidence >= options.auto_route_min_confidence
                 )
+                if should_route_to_primary:
+                    route_reason = "detected_primary_language"
+                elif (
+                    detected_lang
+                    and detected_lang != "en"
+                    and is_supported_lang(detected_lang)
+                    and options.auto_route_indic_fallback_lang
+                    and detected_confidence is not None
+                    and detected_confidence >= options.auto_route_min_confidence
+                    and engine.resolve_lang(options.auto_route_indic_fallback_lang, allow_auto=True)
+                    == options.auto_route_indic_fallback_lang
+                ):
+                    route_lang = options.auto_route_indic_fallback_lang
+                    should_route_to_primary = True
+                    route_reason = "indic_fallback_language"
                 if should_route_to_primary:
                     log.info(
                         "Routing auto-detected language to primary engine",
@@ -466,13 +494,14 @@ def process_message(
                             "error_code": None,
                             "detected_lang": detected_lang,
                             "detected_confidence": round(detected_confidence, 3),
+                            "route_reason": route_reason,
                         },
                     )
                     try:
-                        routed_result = engine.transcribe(wav_tensor, detected_lang)
+                        routed_result = engine.transcribe(wav_tensor, route_lang)
                         if not routed_result.get("language"):
                             routed_result = dict(routed_result)
-                            routed_result["language"] = detected_lang
+                            routed_result["language"] = route_lang
                         result = routed_result
                         used_engine = engine
                     except TranscribeError as route_exc:
@@ -487,12 +516,12 @@ def process_message(
                                 "error_code": route_exc.code,
                                 "detected_lang": detected_lang,
                                 "detected_confidence": round(detected_confidence, 3),
+                                "route_reason": route_reason,
                             },
                         )
                         result = fallback_result
                         used_engine = fallback_engine
                 else:
-                    route_reason = "language_not_routed"
                     if not detected_lang:
                         route_reason = "missing_detected_language"
                     elif detected_lang in options.auto_route_primary_langs and not primary_accepts_detected_lang:
@@ -546,7 +575,7 @@ def process_message(
         STT_TRANSCRIBE_SECONDS.observe(time.perf_counter() - transcribe_start)
 
         transcript_text = result.get("text") or None
-        detected_language = _canonical_lang_code(result.get("language")) or result.get("language")
+        detected_language = canonical_lang_code(result.get("language")) or result.get("language")
         confidence = _coerce_optional_float(result.get("confidence"))
 
         result_payload = build_result(
@@ -774,8 +803,11 @@ def init_tracing(settings: Settings) -> None:
 
 def initialize_engines(settings: Settings) -> Tuple[BaseEngine, Optional[BaseEngine], RuntimeOptions]:
     requested_engine = _normalize_engine_name(os.getenv("STT_ENGINE", ENGINE_INDICCONFORMER))
-    default_lang = (os.getenv("STT_DEFAULT_LANG", "mr") or "mr").strip().lower()
+    default_lang = (os.getenv("STT_DEFAULT_LANG", "auto") or "auto").strip().lower()
     asr_revision = (os.getenv("ASR_MODEL_REVISION") or "").strip() or None
+    indic_fallback_lang = canonical_lang_code(os.getenv("STT_AUTO_ROUTE_INDIC_FALLBACK_LANG", "mr"))
+    if not is_supported_lang(indic_fallback_lang):
+        indic_fallback_lang = None
 
     options = RuntimeOptions(
         default_lang=default_lang,
@@ -785,10 +817,11 @@ def initialize_engines(settings: Settings) -> Tuple[BaseEngine, Optional[BaseEng
         auto_route_primary_langs=_parse_lang_csv(os.getenv("STT_AUTO_ROUTE_PRIMARY_LANGS", "mr,hi"), ("mr", "hi")),
         auto_route_min_confidence=_env_float_clamped(
             "STT_AUTO_ROUTE_MIN_CONFIDENCE",
-            0.70,
+            0.30,
             minimum=0.0,
             maximum=1.0,
         ),
+        auto_route_indic_fallback_lang=indic_fallback_lang,
     )
 
     if requested_engine == ENGINE_FASTERWHISPER:
@@ -844,11 +877,13 @@ def initialize_engines(settings: Settings) -> Tuple[BaseEngine, Optional[BaseEng
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Fallback engine init failed; continuing without fallback",
+                exc_info=True,
                 extra={
                     "engine": ENGINE_INDICCONFORMER,
                     "model_ready": True,
                     "fallback_used": False,
                     "error_code": getattr(exc, "code", "FALLBACK_INIT_FAILED"),
+                    "error_message": str(exc),
                 },
             )
 

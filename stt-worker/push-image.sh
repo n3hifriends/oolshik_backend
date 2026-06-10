@@ -87,6 +87,8 @@ build_and_push() {
     docker buildx build \
       --platform "$IMAGE_PLATFORM" \
       --build-arg COMPUTE="${compute}" \
+      --provenance=false \
+      --sbom=false \
       -t "${remote_version_tag}" \
       -t "${remote_latest_tag}" \
       --push \
