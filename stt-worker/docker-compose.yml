@@ -4,9 +4,11 @@
 # Environment variables you can override via a local .env file or export:
 #   COMPUTE          cpu | gpu          (build-time, default: cpu)
 #   DEVICE           cpu | cuda         (runtime, default: cpu)
-#   COMPUTE_TYPE     int8 | float16 | auto (runtime, default: auto-selected by engine)
-#   HF_TOKEN         HuggingFace token  (needed only for gated models)
-#   ASR_MODEL_PATH   path inside container where model lives (default: /models/hf/indic-conformer)
+#   COMPUTE_TYPE     int8 | float16     (runtime, default: int8)
+#   MODEL_SIZE       medium | large-v3  (runtime, default: small locally to avoid pulling 3 GB)
+#
+# Note: EC2 uses MODEL_SIZE=large-v3 set via /etc/stt-worker/env.
+#       Locally MODEL_SIZE defaults to small to keep startup fast.
 
 services:
   worker:
@@ -14,36 +16,22 @@ services:
       context: .
       args:
         COMPUTE: ${COMPUTE:-cpu}
-        PRELOAD_ASR_MODEL: ${PRELOAD_ASR_MODEL:-false}
-        ASR_MODEL_ID: ${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}
-        ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-}
-        HF_TOKEN: ${HF_TOKEN:-}
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - STT_JOBS_TOPIC=stt.jobs
       - STT_RESULTS_TOPIC=stt.results
       - STT_DLQ_TOPIC=stt.jobs.dlq
       - LOG_LEVEL=INFO
-      - STT_ENGINE=indicconformer
-      - STT_ENABLE_FALLBACK=true
+      - STT_ENGINE=fasterwhisper
       - STT_DEFAULT_LANG=auto
-      - STT_AUTO_ROUTE_PRIMARY_LANGS=mr,hi
-      - STT_AUTO_ROUTE_MIN_CONFIDENCE=0.30
-      - STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=mr
-      - ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
-      - ASR_DECODING=rnnt
-      - STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true
+      - MODEL_SIZE=${MODEL_SIZE:-small}
+      - DEVICE=${DEVICE:-cpu}
+      - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
       - HF_HOME=/models/hf
       - TMP_DIR=/app/tmp
-      - HF_TOKEN=${HF_TOKEN:-}
-      - ASR_MODEL_PATH=${ASR_MODEL_PATH:-/models/hf/indic-conformer}
       - AUDIO_DOWNLOAD_RETRIES=2
       - AUDIO_DOWNLOAD_BACKOFF_SEC=0.5
-      - MODEL_SIZE=small
-      # Switch DEVICE=cuda when using the GPU override
-      - DEVICE=${DEVICE:-cpu}
-      # Leave blank to let engine auto-select (int8 for cpu, float16 for cuda)
-      - COMPUTE_TYPE=${COMPUTE_TYPE:-}
+      - WORKER_CONCURRENCY=1
     ports:
       - "9108:9108"
       - "8081:8081"
@@ -51,6 +39,7 @@ services:
       - oolshik-backend-otp_default
     volumes:
       - ../models/hf:/models/hf
+      - ../tmp:/app/tmp
 
 networks:
   oolshik-backend-otp_default:

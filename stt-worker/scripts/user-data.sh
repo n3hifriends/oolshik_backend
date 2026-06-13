@@ -1,9 +1,98 @@
 #!/usr/bin/env bash
+# EC2 user-data bootstrap script for stt-worker.
+# Paste this into EC2 → Advanced Details → User data at instance launch.
+# Runs once as root on first boot.
+#
+# Before use — edit the two placeholders marked with <EDIT>:
+#   1. KAFKA_BOOTSTRAP_SERVERS in Section 5 (env file)
+#   2. IMAGE_URI in Section 5 if the ECR URI has changed
+#
+# Debug a failed boot:
+#   cat /var/log/stt-worker-init.log
+#   journalctl -u stt-worker -f
+#   docker logs -f stt-worker
+
+exec > >(tee /var/log/stt-worker-init.log | logger -t stt-worker-init) 2>&1
+set -euo pipefail
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+log "Starting stt-worker bootstrap..."
+
+# ── Section 1: System prep ────────────────────────────────────────────────────
+log "Section 1: System prep..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get upgrade -y
+apt-get install -y --no-install-recommends curl jq unzip ca-certificates gnupg lsb-release
+
+# ── Section 2: Install Docker CE ─────────────────────────────────────────────
+log "Section 2: Installing Docker CE..."
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" \
+  | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt-get update -y
+apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
+
+systemctl enable docker
+systemctl start docker
+usermod -aG docker ubuntu
+log "Docker installed: $(docker --version)"
+
+# ── Section 3: Install AWS CLI v2 ────────────────────────────────────────────
+log "Section 3: Installing AWS CLI v2..."
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin
+rm -rf /tmp/awscliv2.zip /tmp/aws
+log "AWS CLI installed: $(aws --version)"
+
+# ── Section 4: Create directories ────────────────────────────────────────────
+log "Section 4: Creating directories..."
+mkdir -p /opt/stt-worker/models
+mkdir -p /opt/stt-worker/tmp
+mkdir -p /etc/stt-worker
+
+chown 10001:10001 /opt/stt-worker/models
+chown 10001:10001 /opt/stt-worker/tmp
+log "Directories created and owned by UID 10001."
+
+# ── Section 5: Write env file ─────────────────────────────────────────────────
+log "Section 5: Writing env file..."
+cat > /etc/stt-worker/env <<'ENVEOF'
+# <EDIT> Set your Kafka broker private IP before launching
+KAFKA_BOOTSTRAP_SERVERS=<your-kafka-private-ip>:9092
+# <EDIT> Update IMAGE_URI if your ECR URI or tag has changed
+IMAGE_URI=653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu
+STT_ENGINE=fasterwhisper
+MODEL_SIZE=large-v3
+COMPUTE_TYPE=int8
+DEVICE=cpu
+MEMORY_LIMIT=6g
+MODELS_DIR=/opt/stt-worker/models
+TMP_DIR=/opt/stt-worker/tmp
+AWS_REGION=ap-south-1
+LOG_LEVEL=INFO
+ENVEOF
+log "Env file written to /etc/stt-worker/env"
+
+# ── Section 6: Write run-ec2.sh ───────────────────────────────────────────────
+log "Section 6: Writing run-ec2.sh..."
+cat > /opt/stt-worker/run-ec2.sh <<'RUNEOF'
+#!/usr/bin/env bash
 # Run stt-worker on an EC2 instance.
 # Pull the image from ECR and start the container with the correct runtime config.
 #
 # Prerequisites on the EC2 host:
-#   - Docker installed (run install-docker.sh if needed)
+#   - Docker installed
 #   - IAM role attached to the instance with:
 #       ecr:GetAuthorizationToken, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer
 #       s3:GetObject (for audio files fetched from S3)
@@ -32,14 +121,11 @@
 #   CONTAINER_NAME         default: stt-worker
 set -euo pipefail
 
-# ── Load env file if present ──────────────────────────────────────────────────
 ENV_FILE="${ENV_FILE:-/etc/stt-worker/env}"
 if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
 fi
 
-# ── Config with defaults ──────────────────────────────────────────────────────
 IMAGE_URI="${IMAGE_URI:-653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu}"
 KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-}"
 COMPUTE="${COMPUTE:-cpu}"
@@ -52,16 +138,18 @@ STT_ENGINE="${STT_ENGINE:-fasterwhisper}"
 STT_DEFAULT_LANG="${STT_DEFAULT_LANG:-auto}"
 MODEL_SIZE="${MODEL_SIZE:-large-v3}"
 WORKER_CONCURRENCY="${WORKER_CONCURRENCY:-1}"
-TRANSCRIBE_TIMEOUT="${TRANSCRIBE_TIMEOUT:-600}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-6g}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 CONTAINER_NAME="${CONTAINER_NAME:-stt-worker}"
 
 ECR_REGISTRY="${ECR_REGISTRY:-$(echo "$IMAGE_URI" | cut -d/ -f1)}"
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+if [[ "${STT_DEFAULT_LANG}" == "mr" ]]; then
+  log "WARNING: STT_DEFAULT_LANG=mr detected. Migrating to 'auto'."
+  STT_DEFAULT_LANG="auto"
+fi
 
 require_var() {
   if [[ -z "${!1:-}" ]]; then
@@ -122,7 +210,6 @@ do_start() {
   require_cmd docker
   require_cmd aws
 
-  # Stop any existing container with the same name
   if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     log "Stopping existing container: ${CONTAINER_NAME}"
     docker stop "${CONTAINER_NAME}" 2>/dev/null || true
@@ -167,7 +254,6 @@ do_start() {
     -e COMPUTE_TYPE="${COMPUTE_TYPE}" \
     -e TMP_DIR=/app/tmp \
     -e WORKER_CONCURRENCY="${WORKER_CONCURRENCY}" \
-    -e TRANSCRIBE_TIMEOUT="${TRANSCRIBE_TIMEOUT}" \
     -e AUDIO_DOWNLOAD_RETRIES=2 \
     -e AUDIO_DOWNLOAD_BACKOFF_SEC=0.5 \
     "${IMAGE_URI}"
@@ -213,7 +299,6 @@ do_logs() {
   docker logs -f "${CONTAINER_NAME}"
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 ACTION="${1:-start}"
 
 case "$ACTION" in
@@ -227,3 +312,41 @@ case "$ACTION" in
     exit 1
     ;;
 esac
+RUNEOF
+
+chmod +x /opt/stt-worker/run-ec2.sh
+log "run-ec2.sh written to /opt/stt-worker/run-ec2.sh"
+
+# ── Section 7: Systemd service ────────────────────────────────────────────────
+log "Section 7: Creating systemd service..."
+cat > /etc/systemd/system/stt-worker.service <<'UNITEOF'
+[Unit]
+Description=Oolshik STT Worker
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=1200
+EnvironmentFile=/etc/stt-worker/env
+ExecStart=/opt/stt-worker/run-ec2.sh start
+ExecStop=/opt/stt-worker/run-ec2.sh stop
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+
+systemctl daemon-reload
+systemctl enable stt-worker
+log "stt-worker.service enabled."
+
+# ── Section 8: Start the worker ───────────────────────────────────────────────
+log "Section 8: Starting stt-worker..."
+log "First boot: ECR pull + large-v3 model download will take ~10-15 min."
+systemctl start stt-worker
+
+log "Bootstrap complete."
+log "  Monitor : journalctl -u stt-worker -f"
+log "  Health  : curl http://localhost:8081/health"
+log "  Logs    : docker logs -f stt-worker"

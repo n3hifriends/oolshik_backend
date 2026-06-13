@@ -65,9 +65,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/models/hf \
     TMP_DIR=/app/tmp \
     PYTHONPATH=/app/src \
-    STT_ENGINE=indicconformer \
-    STT_DEFAULT_LANG=auto \
-    STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=false
+    STT_ENGINE=fasterwhisper \
+    STT_DEFAULT_LANG=auto
 
 # ffmpeg  – binary used by subprocess call + shared libs av needs at runtime
 # libgomp1 – OpenMP, required by ctranslate2 / faster-whisper
@@ -86,44 +85,7 @@ RUN useradd -m -u 10001 appuser
 
 WORKDIR /app
 
-# ── Optional: bake model into image at build time ─────────────────────────────
-# Pass --build-arg PRELOAD_ASR_MODEL=true (plus HF_TOKEN if the repo is gated)
-# to embed the IndicConformer snapshot; otherwise it downloads at first run.
-# ──────────────────────────────────────────────────────────────────────────────
-ARG PRELOAD_ASR_MODEL=false
-ARG ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
-ARG ASR_MODEL_REVISION=
-ARG HF_TOKEN=
-
-RUN mkdir -p /models/hf \
-    && PRELOAD_ASR_MODEL="$PRELOAD_ASR_MODEL" \
-       ASR_MODEL_ID="$ASR_MODEL_ID" \
-       ASR_MODEL_REVISION="$ASR_MODEL_REVISION" \
-       HF_TOKEN="$HF_TOKEN" \
-       python - <<'PY'
-import os, sys, traceback
-from huggingface_hub import snapshot_download
-
-if os.environ.get("PRELOAD_ASR_MODEL", "false").strip().lower() != "true":
-    raise SystemExit(0)
-
-repo_id  = os.environ["ASR_MODEL_ID"]
-revision = os.environ.get("ASR_MODEL_REVISION") or None
-token    = os.environ.get("HF_TOKEN") or None
-
-print(f"Preloading ASR model: repo_id={repo_id}, revision={revision}", flush=True)
-try:
-    snapshot_download(
-        repo_id=repo_id,
-        revision=revision,
-        token=token,
-        local_dir="/models/hf/indic-conformer",
-    )
-except Exception as exc:
-    print(f"Model preload failed: {exc}", file=sys.stderr, flush=True)
-    traceback.print_exc()
-    raise
-PY
+RUN mkdir -p /models/hf
 
 COPY src /app/src
 
@@ -133,8 +95,7 @@ RUN mkdir -p /app/.cache /app/tmp /models/hf \
 USER appuser
 
 # Expose which compute variant this image was built with
-ENV COMPUTE_VARIANT=${COMPUTE} \
-    ASR_MODEL_PATH=/models/hf/indic-conformer
+ENV COMPUTE_VARIANT=${COMPUTE}
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
   CMD curl -fsS http://localhost:8081/health || exit 1
