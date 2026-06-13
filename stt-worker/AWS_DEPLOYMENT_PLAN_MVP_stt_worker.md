@@ -85,7 +85,7 @@ sudo tee /etc/stt-worker/env <<'EOF'
 # Required
 IMAGE_URI=653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu
 KAFKA_BOOTSTRAP_SERVERS=10.20.0.13:9092
-HF_TOKEN=REMOVED_HF_TOKEN
+HF_TOKEN=
 
 # Optional — defaults shown
 COMPUTE=cpu
