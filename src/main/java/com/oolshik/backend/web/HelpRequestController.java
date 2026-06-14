@@ -136,10 +136,6 @@ public class HelpRequestController {
         );
         TranscriptionJobEntity job = null;
         if (created.getAudioFileId() != null || (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank())) {
-            String langHint = requester.getPreferredLanguage();
-            if (langHint == null || langHint.isBlank() || langHint.equalsIgnoreCase("auto")) {
-                langHint = "mr";
-            }
             job = transcriptionJobService.createOrGet(
                     created.getId(),
                     transcriptionAudioFileId,

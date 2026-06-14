@@ -66,7 +66,6 @@ docker_build_and_push() {
   if docker buildx version >/dev/null 2>&1; then
     docker buildx build \
       --platform "$IMAGE_PLATFORM" \
-      --provenance=false \
       -t "${remote_version_tag}" \
       -t "${remote_latest_tag}" \
       --push \
@@ -82,7 +81,7 @@ docker_build_and_push() {
   docker build -t "${local_version_tag}" .
   docker tag "$local_version_tag" "$local_latest_tag"
   docker tag "$local_version_tag" "$remote_version_tag"
-  docker tag "$local_version_tag" "$remote_latest_tag"
+  docker tag "$local_latest_tag" "$remote_latest_tag"
   docker push "$remote_version_tag"
   docker push "$remote_latest_tag"
 }

@@ -1,8 +1,12 @@
-# STT Worker — AWS Deployment Guide
+Use this revised plan for `stt-worker` with **small image in ECR + IndicConformer downloaded at runtime from Hugging Face**.
 
 **Strategy:** small image in ECR + models downloaded at first run on EC2 into a persistent host-mounted cache.
 
-Replace these placeholders wherever they appear:
+- `HF_TOKEN_VALUE`
+- `AWS_ACCOUNT_ID=653895707563`
+- `AWS_REGION=ap-south-1`
+- `ECR_IMAGE=oolshik-stt-worker`
+- `ECR_TAG=latest`
 
 | Placeholder      | Your value             |
 | ---------------- | ---------------------- |
@@ -12,42 +16,7 @@ Replace these placeholders wherever they appear:
 | `ECR_REPO`       | `oolshik-stt-worker`   |
 | `KAFKA_BROKERS`  | e.g. `10.20.0.13:9092` |
 
----
-
-## Compute variants
-
-| Variant | When to use          | Image size (approx) | EC2 instance types             |
-| ------- | -------------------- | ------------------- | ------------------------------ |
-| `cpu`   | MVP / cost-sensitive | ~1.2 GB             | t3.medium, c5.xlarge, m5.large |
-| `gpu`   | Higher throughput    | ~3 GB               | g4dn.xlarge, g5.xlarge         |
-
----
-
-## Quick reference
-
-```
-# LOCAL ──────────────────────────────────────────────────────────────
-./scripts/build.sh                        # build cpu (default)
-./scripts/build.sh gpu                    # build gpu
-docker-compose up                         # run cpu locally
-docker-compose -f docker-compose.yml \
-               -f docker-compose.gpu.yml up   # run gpu locally
-
-# PUSH TO ECR ─────────────────────────────────────────────────────────
-./push-image.sh oolshik-stt-worker        # push cpu  → v<N>-cpu, latest-cpu
-./push-image.sh oolshik-stt-worker gpu    # push gpu  → v<N>-gpu, latest-gpu
-
-# EC2 ─────────────────────────────────────────────────────────────────
-./scripts/run-ec2.sh start
-./scripts/run-ec2.sh status
-./scripts/run-ec2.sh logs
-./scripts/run-ec2.sh restart
-./scripts/run-ec2.sh stop
-```
-
----
-
-## 1. Build and push from your Mac
+Do **not** preload the model into the image.
 
 ```bash
 cd /path/to/oolshik-backend-otp/stt-worker
@@ -55,8 +24,10 @@ cd /path/to/oolshik-backend-otp/stt-worker
 # CPU build (default — use this for MVP)
 ./push-image.sh oolshik-stt-worker
 
-# GPU build (when moving to GPU instances)
-./push-image.sh oolshik-stt-worker gpu
+docker buildx build \
+  --platform linux/amd64 \
+  -t 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4 \
+  --push .
 ```
 
 The script handles ECR login, auto-increments the version tag, and prints the full image URI on completion.
@@ -78,98 +49,44 @@ sudo usermod -aG docker ubuntu
 
 ### 2b. Create the env file (one time, stays on the instance)
 
-```bash
-sudo mkdir -p /etc/stt-worker
-
-sudo tee /etc/stt-worker/env <<'EOF'
-# Required
-IMAGE_URI=653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu
-KAFKA_BOOTSTRAP_SERVERS=10.20.0.13:9092
-HF_TOKEN=
-
-# Optional — defaults shown
-COMPUTE=cpu
-DEVICE=cpu
-COMPUTE_TYPE=
-MODELS_DIR=/opt/stt-worker/models
-TMP_DIR=/tmp/stt-worker
-AWS_REGION=ap-south-1
-STT_ENGINE=indicconformer
-STT_ENABLE_FALLBACK=true
-STT_DEFAULT_LANG=auto
-STT_AUTO_ROUTE_PRIMARY_LANGS=mr,hi
-STT_AUTO_ROUTE_MIN_CONFIDENCE=0.30
-STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=mr
-MODEL_SIZE=small
-WORKER_CONCURRENCY=1
-LOG_LEVEL=INFO
-EOF
-
-sudo chmod 600 /etc/stt-worker/env
+sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4
 ```
 
-### 2c. Prepare model cache directory
+## 3. Export the Hugging Face token on EC2
 
 ```bash
-sudo mkdir -p /opt/stt-worker/models
-sudo chown -R 10001:10001 /opt/stt-worker/models
+export HF_TOKEN='HF_TOKEN_VALUE'
 ```
 
-The IndicConformer and FasterWhisper models download here on first start and are reused on every subsequent restart — no re-download needed.
-
-### 2d. Copy run-ec2.sh to the instance
-
-From your Mac:
-
-```bash
-scp -i your-key.pem \
-    stt-worker/scripts/run-ec2.sh \
-    ubuntu@<EC2_PUBLIC_IP>:/home/ubuntu/run-ec2.sh
-
-ssh -i your-key.pem ubuntu@<EC2_PUBLIC_IP>
-chmod +x ~/run-ec2.sh
-```
-
----
-
-## 3. Start the worker on EC2
-
-```bash
-~/run-ec2.sh start
-```
-
-The script:
-
-1. Logs in to ECR using the instance IAM role
-2. Pulls the image
-3. Starts the container with `--restart unless-stopped`
-4. Polls `http://localhost:8081/health` until the worker is ready (model download happens here on first run — may take a few minutes)
-
----
-
-## 4. Verify startup
+## 4. Run `stt-worker` with runtime model download
 
 ```bash
 ~/run-ec2.sh status
 ~/run-ec2.sh logs
 ```
 
-In the logs you want to see:
-
-- model download activity on first run (normal)
-- `Worker ready` with `engine=indicconformer`
-- fallback logs only after a primary IndicConformer failure
-
-```bash
-# Quick health check
-curl -s http://localhost:8081/health
-# Metrics endpoint
-curl -s http://localhost:9108/metrics | grep stt_
+sudo docker run -d \
+  --name stt-worker \
+  --restart unless-stopped \
+  -e KAFKA_BOOTSTRAP_SERVERS=10.20.0.13:9092 \
+  -e STT_JOBS_TOPIC=stt.jobs \
+  -e STT_RESULTS_TOPIC=stt.results \
+  -e STT_DLQ_TOPIC=stt.jobs.dlq \
+  -e STT_ENGINE=indicconformer \
+  -e STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true \
+  -e ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual \
+  -e ASR_MODEL_PATH= \
+  -e HF_TOKEN="$HF_TOKEN" \
+  653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4
 ```
 
----
+Important:
 
-## 5. Verify effective runtime config inside the container
+- `ASR_MODEL_PATH=` must stay empty. Do not mount `/models/hf/indic-conformer` in this mode.
+- `HF_TOKEN` must be present when you run `sudo docker run`. If needed, use `sudo --preserve-env=HF_TOKEN docker run ...`.
+- The first startup can take time because the worker downloads the model from Hugging Face.
+
+## 5. Verify startup
 
 ```bash
 sudo docker exec -it stt-worker sh -lc '
@@ -189,34 +106,39 @@ python -c "import os; print(\"HF_TOKEN set =\", bool(os.getenv(\"HF_TOKEN\")))"
 
 Expected:
 
-```
-ASR_MODEL_ID=<ai4bharat/indic-conformer-600m-multilingual>
-HF_HOME=</models/hf>
-STT_DEFAULT_LANG=<auto>
-STT_AUTO_ROUTE_PRIMARY_LANGS=<mr,hi>
-STT_AUTO_ROUTE_MIN_CONFIDENCE=<0.30>
-STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=<mr>
-STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<true>
-STT_ENABLE_FALLBACK=<true>
-COMPUTE_VARIANT=<cpu>
-HF_TOKEN set = True
-```
+- initial logs may show model download activity
+- you want `Worker ready`
+- `engine` should be `indicconformer`
 
----
-
-## 6. Diagnose IndicConformer load failure
-
-If the worker falls back to FasterWhisper at startup or logs `MODEL_LOAD_FAILED`, run this inside the container:
+## 6. Verify effective runtime config
 
 ```bash
-sudo docker exec -it stt-worker sh -lc 'python - <<'"'"'PY'"'"'
-import os, traceback
+sudo docker exec -it stt-worker sh -lc 'echo "ASR_MODEL_PATH=<$ASR_MODEL_PATH>"; echo "ASR_MODEL_ID=<$ASR_MODEL_ID>"; echo "STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<$STT_ALLOW_RUNTIME_MODEL_DOWNLOAD>"; python - <<'"'"'"'"'"'"'"'"'PY'"'"'"'"'"'"'"'"'
+import os
+print("HF_TOKEN set =", bool(os.getenv("HF_TOKEN")))
+PY'
+```
+
+You want:
+
+- `ASR_MODEL_PATH=<>`
+- `ASR_MODEL_ID=<ai4bharat/indic-conformer-600m-multilingual>`
+- `STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<true>`
+- `HF_TOKEN set = True`
+
+## 7. If it still falls back
+
+Capture the actual engine-load error:
+
+```bash
+sudo docker exec -it stt-worker sh -lc 'python - <<'"'"'"'"'"'"'"'"'PY'"'"'"'"'"'"'"'"'
+import os
+import traceback
 from stt_worker.transcribe.engine import IndicConformerEngine
 
 print("ASR_MODEL_PATH =", os.getenv("ASR_MODEL_PATH"))
 print("ASR_MODEL_ID   =", os.getenv("ASR_MODEL_ID"))
-print("HF_HOME        =", os.getenv("HF_HOME"))
-print("ALLOW_DOWNLOAD =", os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD"))
+print("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD =", os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD"))
 print("HF_TOKEN set   =", bool(os.getenv("HF_TOKEN")))
 
 try:
@@ -224,15 +146,22 @@ try:
         model_id=os.getenv("ASR_MODEL_ID", "ai4bharat/indic-conformer-600m-multilingual"),
         revision=os.getenv("ASR_MODEL_REVISION") or None,
         decoding=os.getenv("ASR_DECODING", "rnnt"),
-        allow_runtime_model_download=(
-            os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD", "false").lower() == "true"
-        ),
+        allow_runtime_model_download=(os.getenv("STT_ALLOW_RUNTIME_MODEL_DOWNLOAD", "false").lower() == "true"),
     )
-    print("ENGINE LOAD OK:", engine.model_version)
+    print("ENGINE LOAD OK", engine.model_version)
 except Exception as e:
     print("ENGINE LOAD FAILED:", repr(e))
     traceback.print_exc()
+    if getattr(e, "__cause__", None) is not None:
+        print("\\nCAUSE:")
+        traceback.print_exception(type(e.__cause__), e.__cause__, e.__cause__.__traceback__)
 PY'
+```
+
+Then inspect:
+
+```bash
+sudo docker logs -n 200 stt-worker
 ```
 
 ---
@@ -311,8 +240,5 @@ That is the only change required to switch from CPU to GPU.
 
 ## Notes
 
-- `STT_DEFAULT_LANG=auto` — unknown language jobs use a FasterWhisper pre-pass before routing Marathi/Hindi to IndicConformer.
-- `STT_ENABLE_FALLBACK=true` — FasterWhisper is used only when IndicConformer fails, not as default.
-- `COMPUTE_TYPE` — leave blank; engines auto-select `int8` on CPU and `float16` on CUDA.
-- First startup takes longer due to model download. Subsequent restarts are fast because `/opt/stt-worker/models` is persisted on the host.
-- Rotate `HF_TOKEN` and any exposed credentials after initial setup.
+- Rotate the exposed Hugging Face token and DB password after this.
+- In this runtime-download mode, do not also configure a mounted local model path unless the worker code is explicitly updated to support it.

@@ -12,8 +12,7 @@ DB_USER="oolshik_admin"
 export PGPASSWORD="${PGPASSWORD:-Ndroid11!}"
 
 AWS_REGION="ap-south-1"
-SSM_TARGET="${SSM_TARGET:-i-0fa45b589d5e37630}" # STT worker EC2 (has RDS network access)
-SSM_TARGET_NAME_PATTERN="${SSM_TARGET_NAME_PATTERN:-*stt-worker*}"
+SSM_TARGET="i-01df733407d06e44b"           # STT worker EC2 (has RDS network access)
 RDS_HOST="oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com"
 RDS_PORT="5432"
 
@@ -24,75 +23,19 @@ port_in_use() {
   nc -z 127.0.0.1 "$DB_PORT" 2>/dev/null
 }
 
-ssm_target_online() {
-  local target="$1"
-  local status
-  if ! status=$(aws ssm describe-instance-information \
-    --region "$AWS_REGION" \
-    --filters "Key=InstanceIds,Values=${target}" \
-    --query 'InstanceInformationList[0].PingStatus' \
-    --output text)
-  then
-    return 1
-  fi
-  [[ "$status" == "Online" ]]
-}
-
-discover_ssm_target() {
-  local candidates id
-  candidates=$(aws ec2 describe-instances \
-    --region "$AWS_REGION" \
-    --filters "Name=tag:Name,Values=${SSM_TARGET_NAME_PATTERN}" "Name=instance-state-name,Values=running" \
-    --query 'Reservations[].Instances[].InstanceId' \
-    --output text)
-
-  for id in $candidates; do
-    if ssm_target_online "$id"; then
-      printf '%s\n' "$id"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-resolve_ssm_target() {
-  if ssm_target_online "$SSM_TARGET"; then
-    printf '%s\n' "$SSM_TARGET"
-    return 0
-  fi
-
-  local discovered
-  if discovered=$(discover_ssm_target); then
-    echo "[db-rds] Configured SSM target ${SSM_TARGET} is not online. Using discovered target ${discovered}." >&2
-    printf '%s\n' "$discovered"
-    return 0
-  fi
-
-  echo "[db-rds] ERROR: configured SSM target ${SSM_TARGET} is not connected to SSM, and no online '${SSM_TARGET_NAME_PATTERN}' instance was found." >&2
-  echo "[db-rds] Set SSM_TARGET=<instance-id> or start/fix SSM on the worker instance, then retry." >&2
-  return 1
-}
-
-start_ssm_session() {
-  local target
-  target=$(resolve_ssm_target)
-  aws ssm start-session \
-    --region "$AWS_REGION" \
-    --target "$target" \
-    --document-name AWS-StartPortForwardingSessionToRemoteHost \
-    --parameters "{\"host\":[\"${RDS_HOST}\"],\"portNumber\":[\"${RDS_PORT}\"],\"localPortNumber\":[\"${DB_PORT}\"]}" \
-    >/dev/null &
-}
-
 tunnel_start() {
   if port_in_use; then
     echo "[db-rds] Tunnel already running on port ${DB_PORT}."
     return
   fi
 
-  echo "[db-rds] Starting persistent SSM tunnel -> ${RDS_HOST}:${RDS_PORT} ..."
-  start_ssm_session
+  echo "[db-rds] Starting persistent SSM tunnel → ${RDS_HOST}:${RDS_PORT} via ${SSM_TARGET} ..."
+  aws ssm start-session \
+    --region "$AWS_REGION" \
+    --target "$SSM_TARGET" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"host\":[\"${RDS_HOST}\"],\"portNumber\":[\"${RDS_PORT}\"],\"localPortNumber\":[\"${DB_PORT}\"]}" \
+    >/dev/null &
   echo $! > "$TUNNEL_PID_FILE"
 
   local retries=20
@@ -123,7 +66,12 @@ ensure_tunnel() {
     return  # reuse whatever is holding the port (persistent or manual)
   fi
   echo "[db-rds] No tunnel on port ${DB_PORT}. Starting one-shot tunnel for this query..."
-  start_ssm_session
+  aws ssm start-session \
+    --region "$AWS_REGION" \
+    --target "$SSM_TARGET" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"host\":[\"${RDS_HOST}\"],\"portNumber\":[\"${RDS_PORT}\"],\"localPortNumber\":[\"${DB_PORT}\"]}" \
+    >/dev/null &
   local ssm_pid=$!
   trap "kill $ssm_pid 2>/dev/null; exit" EXIT
 
@@ -167,7 +115,6 @@ Query commands (auto-start a one-shot tunnel if none is running):
   payment-requests      Recent 20 payment requests
   flyway                Flyway migration history
   run <sql>             Run an arbitrary SQL statement
-  <sql>                 Run an arbitrary SQL statement directly
 
 Recommended workflow:
   ./db-rds.sh tunnel-start   # once
@@ -177,9 +124,6 @@ Recommended workflow:
 
 Override password at runtime:
   PGPASSWORD=secret ./db-rds.sh users
-
-Override SSM target at runtime:
-  SSM_TARGET=i-0123456789abcdef0 ./db-rds.sh users
 EOF
 }
 
@@ -210,11 +154,6 @@ esac
 
 # All query commands go through ensure_tunnel (reuses persistent tunnel if up)
 ensure_tunnel
-
-run_sql() {
-  local sql="$1"
-  psql_cmd -c "${sql}"
-}
 
 case "$CMD" in
   connect)
@@ -326,11 +265,7 @@ case "$CMD" in
   run)
     SQL="${2:-}"
     if [[ -z "$SQL" ]]; then echo "Usage: $0 run '<sql>'"; exit 1; fi
-    run_sql "$SQL"
-    ;;
-
-  SELECT*|select*|INSERT*|insert*|UPDATE*|update*|DELETE*|delete*|WITH*|with*|ALTER*|alter*|CREATE*|create*|DROP*|drop*|TRUNCATE*|truncate*|DO*|do*)
-    run_sql "$CMD"
+    psql_cmd -c "${SQL}"
     ;;
 
   *)
