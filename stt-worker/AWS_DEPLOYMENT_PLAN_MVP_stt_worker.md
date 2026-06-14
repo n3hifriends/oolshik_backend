@@ -1,6 +1,6 @@
 Use this revised plan for `stt-worker` with **small image in ECR + IndicConformer downloaded at runtime from Hugging Face**.
 
-Replace these placeholders first:
+**Strategy:** small image in ECR + models downloaded at first run on EC2 into a persistent host-mounted cache.
 
 - `HF_TOKEN_VALUE`
 - `AWS_ACCOUNT_ID=653895707563`
@@ -8,15 +8,21 @@ Replace these placeholders first:
 - `ECR_IMAGE=oolshik-stt-worker`
 - `ECR_TAG=latest`
 
-## 1. Build and push the small image from your Mac
+| Placeholder      | Your value             |
+| ---------------- | ---------------------- |
+| `HF_TOKEN_VALUE` | HuggingFace token      |
+| `AWS_ACCOUNT_ID` | `653895707563`         |
+| `AWS_REGION`     | `ap-south-1`           |
+| `ECR_REPO`       | `oolshik-stt-worker`   |
+| `KAFKA_BROKERS`  | e.g. `10.20.0.13:9092` |
 
 Do **not** preload the model into the image.
 
 ```bash
-cd /Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp/stt-worker
+cd /path/to/oolshik-backend-otp/stt-worker
 
-aws ecr get-login-password --region ap-south-1 | \
-docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
+# CPU build (default — use this for MVP)
+./push-image.sh oolshik-stt-worker
 
 docker buildx build \
   --platform linux/amd64 \
@@ -24,11 +30,24 @@ docker buildx build \
   --push .
 ```
 
-## 2. Pull the image on EC2
+The script handles ECR login, auto-increments the version tag, and prints the full image URI on completion.
+
+---
+
+## 2. One-time EC2 setup
+
+### 2a. Install Docker (if not already installed)
 
 ```bash
-aws ecr get-login-password --region ap-south-1 | \
-sudo docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
+sudo apt-get update
+sudo apt-get install -y docker.io awscli
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker ubuntu
+# Log out and back in for group membership to take effect
+```
+
+### 2b. Create the env file (one time, stays on the instance)
 
 sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v4
 ```
@@ -42,7 +61,9 @@ export HF_TOKEN='HF_TOKEN_VALUE'
 ## 4. Run `stt-worker` with runtime model download
 
 ```bash
-sudo docker rm -f stt-worker || true
+~/run-ec2.sh status
+~/run-ec2.sh logs
+```
 
 sudo docker run -d \
   --name stt-worker \
@@ -68,8 +89,19 @@ Important:
 ## 5. Verify startup
 
 ```bash
-sudo docker ps -a
-sudo docker logs -n 200 stt-worker
+sudo docker exec -it stt-worker sh -lc '
+echo "ASR_MODEL_PATH=<$ASR_MODEL_PATH>"
+echo "ASR_MODEL_ID=<$ASR_MODEL_ID>"
+echo "HF_HOME=<$HF_HOME>"
+echo "STT_DEFAULT_LANG=<$STT_DEFAULT_LANG>"
+echo "STT_AUTO_ROUTE_PRIMARY_LANGS=<$STT_AUTO_ROUTE_PRIMARY_LANGS>"
+echo "STT_AUTO_ROUTE_MIN_CONFIDENCE=<$STT_AUTO_ROUTE_MIN_CONFIDENCE>"
+echo "STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=<$STT_AUTO_ROUTE_INDIC_FALLBACK_LANG>"
+echo "STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<$STT_ALLOW_RUNTIME_MODEL_DOWNLOAD>"
+echo "STT_ENABLE_FALLBACK=<$STT_ENABLE_FALLBACK>"
+echo "COMPUTE_VARIANT=<$COMPUTE_VARIANT>"
+python -c "import os; print(\"HF_TOKEN set =\", bool(os.getenv(\"HF_TOKEN\")))"
+'
 ```
 
 Expected:
@@ -132,7 +164,11 @@ Then inspect:
 sudo docker logs -n 200 stt-worker
 ```
 
-## Optional test job
+---
+
+## 7. Send a test job
+
+From the EC2 instance or any machine with Kafka access:
 
 ```bash
 sudo docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh \
@@ -140,7 +176,7 @@ sudo docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh \
   --topic stt.jobs
 ```
 
-Paste:
+Paste this payload (Ctrl+D to send):
 
 ```json
 {
@@ -153,13 +189,56 @@ Paste:
 }
 ```
 
-Then watch:
+Watch the result:
 
 ```bash
-sudo docker logs -f stt-worker
+~/run-ec2.sh logs
 ```
 
-## Important
+---
+
+## 8. Moving to GPU (zero code changes)
+
+### 8a. Push the GPU image from your Mac
+
+```bash
+./push-image.sh oolshik-stt-worker gpu
+# Prints: 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:v1-gpu
+```
+
+### 8b. Install nvidia-container-toolkit on the GPU EC2 instance
+
+```bash
+# On the EC2 instance (g4dn / g5 class)
+distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor \
+    -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+### 8c. Update the env file and restart
+
+```bash
+sudo tee -a /etc/stt-worker/env <<'EOF'
+IMAGE_URI=653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-stt-worker:latest-cpu
+COMPUTE=cpu
+DEVICE=cpu
+EOF
+
+~/run-ec2.sh restart
+```
+
+That is the only change required to switch from CPU to GPU.
+
+---
+
+## Notes
 
 - Rotate the exposed Hugging Face token and DB password after this.
 - In this runtime-download mode, do not also configure a mounted local model path unless the worker code is explicitly updated to support it.

@@ -1,6 +1,10 @@
 package com.oolshik.backend.transcription;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -10,4 +14,19 @@ public interface TranscriptionJobRepository extends JpaRepository<TranscriptionJ
     Optional<TranscriptionJobEntity> findByTaskId(UUID taskId);
 
     List<TranscriptionJobEntity> findTop50ByStatusOrderByUpdatedAtAsc(TranscriptionStatus status);
+
+    List<TranscriptionJobEntity> findByStatusOrderByUpdatedAtAsc(TranscriptionStatus status, Pageable pageable);
+
+    long countByStatus(TranscriptionStatus status);
+
+    @Query(value = """
+            select t from TranscriptionJobEntity t
+            where (:status is null or t.status = :status)
+            order by t.createdAt desc
+            """,
+            countQuery = """
+            select count(t) from TranscriptionJobEntity t
+            where (:status is null or t.status = :status)
+            """)
+    Page<TranscriptionJobEntity> findForAdmin(@Param("status") TranscriptionStatus status, Pageable pageable);
 }

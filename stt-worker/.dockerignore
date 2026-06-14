@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Python cache / bytecode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+.venv
+venv
+env
+
+# Tests and dev-only files
+tests/
+requirements-dev.txt
+
+# Local config / secrets
+.env
+*.env
+*.local
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Editor / IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Models — never bake from local cache accidentally
+../models/
+
+# Docs
+*.md

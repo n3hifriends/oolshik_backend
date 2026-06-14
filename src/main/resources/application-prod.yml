@@ -14,6 +14,9 @@ spring:
         format_sql: false
 
 app:
+  messaging:
+    kafka:
+      enabled: true
   docs:
     enabled: false
   admin:

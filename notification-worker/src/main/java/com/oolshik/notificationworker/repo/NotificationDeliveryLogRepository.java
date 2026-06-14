@@ -28,4 +28,21 @@ public interface NotificationDeliveryLogRepository extends JpaRepository<Notific
             @Param("lastError") String lastError,
             @Param("updatedAt") OffsetDateTime updatedAt
     );
+
+    @Modifying
+    @Query("""
+        update NotificationDeliveryLogEntity l
+           set l.status = :status,
+               l.provider = :provider,
+               l.lastError = :lastError,
+               l.updatedAt = :updatedAt
+         where l.id = :id
+        """)
+    int updateStatusAndProvider(
+            @Param("id") UUID id,
+            @Param("status") String status,
+            @Param("provider") String provider,
+            @Param("lastError") String lastError,
+            @Param("updatedAt") OffsetDateTime updatedAt
+    );
 }

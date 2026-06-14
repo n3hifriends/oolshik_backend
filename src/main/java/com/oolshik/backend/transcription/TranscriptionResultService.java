@@ -6,7 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.notification.NotificationEventContext;
+import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.service.HelpRequestNotificationService;
 
 @Service
 public class TranscriptionResultService {
@@ -15,11 +18,14 @@ public class TranscriptionResultService {
 
     private final TranscriptionJobRepository repository;
     private final HelpRequestRepository helpRequestRepository;
+    private final HelpRequestNotificationService notificationService;
 
     public TranscriptionResultService(TranscriptionJobRepository repository,
-                                      HelpRequestRepository helpRequestRepository) {
+                                      HelpRequestRepository helpRequestRepository,
+                                      HelpRequestNotificationService notificationService) {
         this.repository = repository;
         this.helpRequestRepository = helpRequestRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -93,11 +99,17 @@ public class TranscriptionResultService {
         if (descriptionMissing) {
             task.setDescription(transcript);
         }
+        String previousStatus = task.getStatus().name();
         if (task.getStatus() == HelpRequestStatus.DRAFT) {
             task.setStatus(HelpRequestStatus.OPEN);
         }
         helpRequestRepository.save(task);
         log.info("Updated help request from transcript taskId={} status={}", taskId, task.getStatus());
+
+        NotificationEventContext ctx = new NotificationEventContext();
+        ctx.setPreviousStatus(previousStatus);
+        ctx.setNewStatus(task.getStatus().name());
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_CREATED, task, ctx);
     }
 
     private String buildTitle(String transcript) {

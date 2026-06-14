@@ -9,6 +9,8 @@ public class NotificationWorkerProperties {
     private int maxSendAttempts = 3;
     private int coalesceWindowSeconds = 10;
     private int expoBatchSize = 100;
+    private boolean fcmEnabled = true;
+    private int fcmBatchSize = 500;
 
     public String getExpoEndpoint() {
         return expoEndpoint;
@@ -40,5 +42,21 @@ public class NotificationWorkerProperties {
 
     public void setExpoBatchSize(int expoBatchSize) {
         this.expoBatchSize = expoBatchSize;
+    }
+
+    public boolean isFcmEnabled() {
+        return fcmEnabled;
+    }
+
+    public void setFcmEnabled(boolean fcmEnabled) {
+        this.fcmEnabled = fcmEnabled;
+    }
+
+    public int getFcmBatchSize() {
+        return fcmBatchSize;
+    }
+
+    public void setFcmBatchSize(int fcmBatchSize) {
+        this.fcmBatchSize = fcmBatchSize;
     }
 }

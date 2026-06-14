@@ -1,6 +1,7 @@
 package com.oolshik.backend.web;
 
 import com.oolshik.backend.config.AuthProperties;
+import com.oolshik.backend.config.CommonBeans;
 import com.oolshik.backend.config.LocalizationConfig;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtAuthFilter;
@@ -22,14 +23,17 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc
-@Import({SecurityConfig.class, JwtAuthFilter.class, GlobalExceptionHandler.class, LocalizationConfig.class})
+@Import({SecurityConfig.class, JwtAuthFilter.class, CommonBeans.class, GlobalExceptionHandler.class, LocalizationConfig.class})
 @TestPropertySource(properties = {
         "firebase.project-id=test-project",
-        "app.security.identity-provider=local"
+        "app.security.identity-provider=local",
+        "app.cors.allowedOrigins[0]=https://www.oolshik.in"
 })
 class AuthSecurityWebMvcTest {
 
@@ -67,5 +71,25 @@ class AuthSecurityWebMvcTest {
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer expired-token"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loginPreflightIsAllowedForConfiguredOrigin() throws Exception {
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://www.oolshik.in")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type,x-correlation-id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://www.oolshik.in"));
+    }
+
+    @Test
+    void adminPatchPreflightIsAllowedForConfiguredOrigin() throws Exception {
+        mockMvc.perform(options("/api/admin/reports/00000000-0000-0000-0000-000000000000/status")
+                        .header("Origin", "https://www.oolshik.in")
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "authorization,content-type,x-correlation-id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://www.oolshik.in"));
     }
 }

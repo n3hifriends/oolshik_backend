@@ -140,7 +140,7 @@ public class HelpRequestController {
                     created.getId(),
                     transcriptionAudioFileId,
                     transcriptionAudioUrl,
-                    "auto",
+                    langHint,
                     TRANSCRIPTION_ENGINE,
                     TRANSCRIPTION_MODEL_VERSION
             );

@@ -19,6 +19,9 @@ public class OtpAuditLogEntity {
     @Column(name = "masked_phone", nullable = false, length = 32)
     private String maskedPhone;
 
+    @Column(name = "phone_hash", length = 64)
+    private String phoneHash;
+
     @Column(nullable = false, length = 32)
     private String provider;
 
@@ -58,6 +61,14 @@ public class OtpAuditLogEntity {
 
     public void setMaskedPhone(String maskedPhone) {
         this.maskedPhone = maskedPhone;
+    }
+
+    public String getPhoneHash() {
+        return phoneHash;
+    }
+
+    public void setPhoneHash(String phoneHash) {
+        this.phoneHash = phoneHash;
     }
 
     public String getProvider() {

@@ -30,13 +30,11 @@ public class UserDeviceService {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("errors.device.tokenRequired");
         }
-        if (!EXPO_TOKEN_PATTERN.matcher(token).matches()) {
-            throw new IllegalArgumentException("errors.device.invalidExpoToken");
-        }
+        String provider = detectProvider(token);
         String hash = sha256(token);
         UserDeviceEntity entity = repository.findByTokenHash(hash).orElseGet(UserDeviceEntity::new);
         entity.setUserId(userId);
-        entity.setProvider("EXPO");
+        entity.setProvider(provider);
         entity.setPlatform(platform == null || platform.isBlank() ? null : platform.toUpperCase());
         entity.setToken(token);
         entity.setTokenHash(hash);
@@ -50,9 +48,6 @@ public class UserDeviceService {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("errors.device.tokenRequired");
         }
-        if (!EXPO_TOKEN_PATTERN.matcher(token).matches()) {
-            throw new IllegalArgumentException("errors.device.invalidExpoToken");
-        }
         String hash = sha256(token);
         repository.findByTokenHash(hash).ifPresent((entity) -> {
             if (entity.getUserId() != null && entity.getUserId().equals(userId)) {
@@ -62,6 +57,10 @@ public class UserDeviceService {
                 }
             }
         });
+    }
+
+    private String detectProvider(String token) {
+        return EXPO_TOKEN_PATTERN.matcher(token).matches() ? "EXPO" : "FCM";
     }
 
     private String sha256(String value) {

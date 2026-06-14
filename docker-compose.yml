@@ -137,6 +137,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUMER_GROUP: notification-worker-v1
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
+      NOTIF_WORKER_FCM_ENABLED: ${NOTIF_WORKER_FCM_ENABLED:-false}
+    volumes:
+      - ${FIREBASE_ADMIN_JSON_HOST_PATH:-./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json}:/secrets/firebase-sa.json:ro
     depends_on:
       kafka:
         condition: service_healthy

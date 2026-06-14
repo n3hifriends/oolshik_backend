@@ -2,12 +2,14 @@ spring:
   flyway:
     locations:
       - classpath:db/migration
-      - classpath:db/dev-seed
+    ignore-migration-patterns:
+      - "*:missing"
 
 app:
   admin:
     seed:
       enabled: true
+      reset-existing-password: true
   security:
     identity-provider: local
   messaging:

@@ -1,0 +1,24 @@
+# GPU override — merge on top of docker-compose.yml:
+#   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+#
+# Requirements on the EC2 host:
+#   - NVIDIA driver installed (>= 525 recommended for CUDA 12.1)
+#   - nvidia-container-toolkit installed
+#   - Docker daemon configured with nvidia runtime
+
+services:
+  worker:
+    build:
+      args:
+        COMPUTE: gpu
+    environment:
+      # Use CUDA device; engine auto-selects float16 compute type
+      - DEVICE=cuda
+      - COMPUTE_TYPE=float16
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

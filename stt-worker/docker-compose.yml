@@ -1,30 +1,37 @@
+# Local development compose — CPU by default.
+# For GPU: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Environment variables you can override via a local .env file or export:
+#   COMPUTE          cpu | gpu          (build-time, default: cpu)
+#   DEVICE           cpu | cuda         (runtime, default: cpu)
+#   COMPUTE_TYPE     int8 | float16     (runtime, default: int8)
+#   MODEL_SIZE       medium | large-v3  (runtime, default: small locally to avoid pulling 3 GB)
+#
+# Note: EC2 uses MODEL_SIZE=large-v3 set via /etc/stt-worker/env.
+#       Locally MODEL_SIZE defaults to small to keep startup fast.
+
 services:
   worker:
     build:
       context: .
       args:
-        PRELOAD_ASR_MODEL: ${PRELOAD_ASR_MODEL:-false}
-        ASR_MODEL_ID: ${ASR_MODEL_ID:-ai4bharat/indic-conformer-600m-multilingual}
-        ASR_MODEL_REVISION: ${ASR_MODEL_REVISION:-}
-        HF_TOKEN: ${HF_TOKEN:-}
+        COMPUTE: ${COMPUTE:-cpu}
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - STT_JOBS_TOPIC=stt.jobs
       - STT_RESULTS_TOPIC=stt.results
       - STT_DLQ_TOPIC=stt.jobs.dlq
       - LOG_LEVEL=INFO
-      - STT_ENGINE=indicconformer
-      - STT_ENABLE_FALLBACK=true
-      - STT_DEFAULT_LANG=mr
-      - ASR_MODEL_ID=ai4bharat/indic-conformer-600m-multilingual
-      - ASR_DECODING=rnnt
-      - STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=true
+      - STT_ENGINE=fasterwhisper
+      - STT_DEFAULT_LANG=auto
+      - MODEL_SIZE=${MODEL_SIZE:-small}
+      - DEVICE=${DEVICE:-cpu}
+      - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
       - HF_HOME=/models/hf
-      - HF_TOKEN=${HF_TOKEN:-}
-      - ASR_MODEL_PATH=${ASR_MODEL_PATH:-ai4bharat/indic-conformer-600m-multilingual}
+      - TMP_DIR=/app/tmp
       - AUDIO_DOWNLOAD_RETRIES=2
       - AUDIO_DOWNLOAD_BACKOFF_SEC=0.5
-      - MODEL_SIZE=small
+      - WORKER_CONCURRENCY=1
     ports:
       - "9108:9108"
       - "8081:8081"
@@ -32,6 +39,7 @@ services:
       - oolshik-backend-otp_default
     volumes:
       - ../models/hf:/models/hf
+      - ../tmp:/app/tmp
 
 networks:
   oolshik-backend-otp_default:

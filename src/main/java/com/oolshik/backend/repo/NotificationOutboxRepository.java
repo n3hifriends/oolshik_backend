@@ -1,16 +1,31 @@
 package com.oolshik.backend.repo;
 
 import com.oolshik.backend.entity.NotificationOutboxEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 public interface NotificationOutboxRepository extends JpaRepository<NotificationOutboxEntity, UUID> {
+    long countByStatusIn(Collection<String> statuses);
+
+    @Query(value = """
+        select n from NotificationOutboxEntity n
+        where (:status is null or n.status = :status)
+        order by n.createdAt desc
+        """,
+        countQuery = """
+        select count(n) from NotificationOutboxEntity n
+        where (:status is null or n.status = :status)
+        """)
+    Page<NotificationOutboxEntity> findForAdmin(@Param("status") String status, Pageable pageable);
 
     @Query(value = """
         SELECT *

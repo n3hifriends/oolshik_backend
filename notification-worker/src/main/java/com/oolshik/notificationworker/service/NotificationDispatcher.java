@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -35,6 +36,7 @@ public class NotificationDispatcher {
     private final HelpRequestCandidateRepository candidateRepository;
     private final NotificationTemplateService templateService;
     private final ExpoPushClient expoPushClient;
+    private final Optional<WorkerFcmSender> fcmSender;
     private final NotificationWorkerProperties properties;
 
     public NotificationDispatcher(
@@ -44,6 +46,7 @@ public class NotificationDispatcher {
             HelpRequestCandidateRepository candidateRepository,
             NotificationTemplateService templateService,
             ExpoPushClient expoPushClient,
+            Optional<WorkerFcmSender> fcmSender,
             NotificationWorkerProperties properties
     ) {
         this.recipientResolver = recipientResolver;
@@ -52,6 +55,7 @@ public class NotificationDispatcher {
         this.candidateRepository = candidateRepository;
         this.templateService = templateService;
         this.expoPushClient = expoPushClient;
+        this.fcmSender = fcmSender;
         this.properties = properties;
     }
 
@@ -87,9 +91,9 @@ public class NotificationDispatcher {
             return;
         }
 
-        List<UserDeviceEntity> devices = userDeviceRepository.findActiveByUserIds(new ArrayList<>(logs.keySet()));
+        List<UserDeviceEntity> allDevices = userDeviceRepository.findActiveByUserIds(new ArrayList<>(logs.keySet()));
         Map<UUID, List<UserDeviceEntity>> devicesByUser = new HashMap<>();
-        for (UserDeviceEntity device : devices) {
+        for (UserDeviceEntity device : allDevices) {
             devicesByUser.computeIfAbsent(device.getUserId(), k -> new ArrayList<>()).add(device);
         }
         Map<UUID, String> localesByUser = new HashMap<>();
@@ -98,92 +102,109 @@ public class NotificationDispatcher {
             localesByUser.put(row.getUserId(), LocaleSupport.normalizeTag(row.getPreferredLanguage()));
         }
 
-        List<OutgoingMessage> outgoing = new ArrayList<>();
+        List<ExpoOutgoingMessage> expoOutgoing = new ArrayList<>();
+        List<WorkerFcmSender.FcmMessage> fcmOutgoing = new ArrayList<>();
+        Map<String, UUID> tokenToRecipient = new HashMap<>();
+        Map<UUID, DeliveryOutcome> outcomes = new HashMap<>();
+
         for (Map.Entry<UUID, NotificationDeliveryLogEntity> entry : logs.entrySet()) {
             UUID recipientId = entry.getKey();
             List<UserDeviceEntity> userDevices = devicesByUser.get(recipientId);
             if (userDevices == null || userDevices.isEmpty()) {
-                deliveryLogRepository.updateStatus(entry.getValue().getId(), "FAILED", "no active tokens", now);
+                deliveryLogRepository.updateStatusAndProvider(
+                        entry.getValue().getId(), "FAILED", "EXPO", "no active tokens", now);
                 continue;
             }
             String localeTag = localesByUser.getOrDefault(recipientId, LocaleSupport.EN_IN_TAG);
             NotificationTemplateService.NotificationTemplate template =
                     templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId), localeTag);
             String body = enrichBodyWithOffer(template.body(), payload, localeTag);
+            Map<String, Object> data = buildDataMap(payload);
+
             for (UserDeviceEntity device : userDevices) {
-                Map<String, Object> data = new HashMap<>();
-                data.put("type", payload.getEventType());
-                if (payload.getTaskId() != null) {
-                    data.put("taskId", payload.getTaskId().toString());
-                }
-                if (payload.getPaymentRequestId() != null) {
-                    data.put("paymentRequestId", payload.getPaymentRequestId().toString());
-                    data.put("route", "PaymentPay");
+                String provider = device.getProvider();
+                if ("FCM".equals(provider)) {
+                    if (!fcmSender.isPresent()) {
+                        outcomes.computeIfAbsent(recipientId, k -> new DeliveryOutcome())
+                                .recordFailure("FCM provider disabled", "FCM");
+                        continue;
+                    }
+                    tokenToRecipient.put(device.getToken(), recipientId);
+                    fcmOutgoing.add(new WorkerFcmSender.FcmMessage(
+                            device.getToken(), template.title(), body, data));
+                } else if ("EXPO".equals(provider)) {
+                    ExpoPushMessage message = new ExpoPushMessage();
+                    message.setTo(device.getToken());
+                    message.setTitle(template.title());
+                    message.setBody(body);
+                    message.setData(data);
+                    expoOutgoing.add(new ExpoOutgoingMessage(
+                            recipientId, entry.getValue().getId(), device.getToken(), message));
                 } else {
-                    data.put("route", "TaskDetail");
+                    outcomes.computeIfAbsent(recipientId, k -> new DeliveryOutcome())
+                            .recordFailure("unsupported push provider: " + provider, provider);
                 }
-                if (payload.getOfferAmount() != null) {
-                    data.put("offerAmount", payload.getOfferAmount().toPlainString());
-                    data.put("offerCurrency", payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency());
-                }
-                ExpoPushMessage message = new ExpoPushMessage();
-                message.setTo(device.getToken());
-                message.setTitle(template.title());
-                message.setBody(body);
-                message.setData(data);
-                outgoing.add(new OutgoingMessage(recipientId, entry.getValue().getId(), device.getToken(), message));
             }
         }
 
-        if (outgoing.isEmpty()) {
-            return;
+        if (!fcmOutgoing.isEmpty() && fcmSender.isPresent()) {
+            Map<String, WorkerFcmSender.SendResult> fcmResults = fcmSender.get().sendMessages(fcmOutgoing);
+            for (WorkerFcmSender.FcmMessage out : fcmOutgoing) {
+                UUID recipientId = tokenToRecipient.get(out.token());
+                WorkerFcmSender.SendResult result = fcmResults.get(out.token());
+                if (result != null && result.success()) {
+                    outcomes.computeIfAbsent(recipientId, k -> new DeliveryOutcome()).recordSuccess("FCM");
+                } else {
+                    String error = result != null ? result.error() : "fcm no response";
+                    outcomes.computeIfAbsent(recipientId, k -> new DeliveryOutcome()).recordFailure(error, "FCM");
+                }
+            }
         }
 
-        Map<UUID, DeliveryOutcome> outcomes = new HashMap<>();
-        int batchSize = Math.max(1, properties.getExpoBatchSize());
-        for (int i = 0; i < outgoing.size(); i += batchSize) {
-            int end = Math.min(outgoing.size(), i + batchSize);
-            List<OutgoingMessage> batch = outgoing.subList(i, end);
-            List<ExpoPushMessage> messages = batch.stream().map(m -> m.message).toList();
-            ExpoPushResponse response = sendWithRetries(messages);
-            if (response == null) {
-                log.warn("expo push batch failed size={}", batch.size());
-                for (OutgoingMessage out : batch) {
-                    outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome())
-                            .recordFailure("expo send failed");
+        if (!expoOutgoing.isEmpty()) {
+            int batchSize = Math.max(1, properties.getExpoBatchSize());
+            for (int i = 0; i < expoOutgoing.size(); i += batchSize) {
+                int end = Math.min(expoOutgoing.size(), i + batchSize);
+                List<ExpoOutgoingMessage> batch = expoOutgoing.subList(i, end);
+                List<ExpoPushMessage> messages = batch.stream().map(m -> m.message).toList();
+                ExpoPushResponse response = sendWithRetries(messages);
+                if (response == null || response.getData() == null) {
+                    log.warn("expo push batch failed size={}", batch.size());
+                    for (ExpoOutgoingMessage out : batch) {
+                        outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome())
+                                .recordFailure("expo send failed", "EXPO");
+                    }
+                    continue;
                 }
-                continue;
-            }
-            if (response == null || response.getData() == null) {
-                for (OutgoingMessage out : batch) {
-                    outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome())
-                            .recordFailure("expo empty response");
-                }
-                continue;
-            }
-            List<ExpoPushResponse.ExpoPushTicket> tickets = response.getData();
-            for (int j = 0; j < batch.size(); j++) {
-                OutgoingMessage out = batch.get(j);
-                ExpoPushResponse.ExpoPushTicket ticket = j < tickets.size() ? tickets.get(j) : null;
-                if (ticket != null && "ok".equals(ticket.getStatus())) {
-                    outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome()).recordSuccess();
-                } else {
-                    String error = ticket == null ? "expo no ticket" : ticket.getMessage();
-                    outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome()).recordFailure(error);
-                    maybeDeactivateToken(out, ticket);
+                List<ExpoPushResponse.ExpoPushTicket> tickets = response.getData();
+                for (int j = 0; j < batch.size(); j++) {
+                    ExpoOutgoingMessage out = batch.get(j);
+                    ExpoPushResponse.ExpoPushTicket ticket = j < tickets.size() ? tickets.get(j) : null;
+                    if (ticket != null && "ok".equals(ticket.getStatus())) {
+                        outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome()).recordSuccess("EXPO");
+                    } else {
+                        String error = ticket == null ? "expo no ticket" : ticket.getMessage();
+                        outcomes.computeIfAbsent(out.recipientId, k -> new DeliveryOutcome())
+                                .recordFailure(error, "EXPO");
+                        maybeDeactivateToken(out, ticket);
+                    }
                 }
             }
         }
 
         List<UUID> notifiedRecipients = new ArrayList<>();
         for (Map.Entry<UUID, NotificationDeliveryLogEntity> entry : logs.entrySet()) {
-            DeliveryOutcome outcome = outcomes.get(entry.getKey());
+            UUID recipientId = entry.getKey();
+            DeliveryOutcome outcome = outcomes.get(recipientId);
             if (outcome != null && outcome.hasSuccess()) {
-                deliveryLogRepository.updateStatus(entry.getValue().getId(), "SENT", null, now);
-                notifiedRecipients.add(entry.getKey());
+                deliveryLogRepository.updateStatusAndProvider(
+                        entry.getValue().getId(), "SENT", outcome.provider(), null, now);
+                notifiedRecipients.add(recipientId);
             } else {
                 String error = outcome == null ? "no delivery attempt" : outcome.firstError();
-                deliveryLogRepository.updateStatus(entry.getValue().getId(), "FAILED", error, now);
+                String provider = outcome != null ? outcome.provider() : "EXPO";
+                deliveryLogRepository.updateStatusAndProvider(
+                        entry.getValue().getId(), "FAILED", provider, error, now);
             }
         }
 
@@ -191,6 +212,25 @@ public class NotificationDispatcher {
         if (!notifiedRecipients.isEmpty() && (type == NotificationEventType.TASK_CREATED || type == NotificationEventType.TASK_RADIUS_EXPANDED)) {
             candidateRepository.updateStates(payload.getTaskId(), notifiedRecipients, "NOTIFIED");
         }
+    }
+
+    private Map<String, Object> buildDataMap(NotificationEventPayload payload) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("type", payload.getEventType());
+        if (payload.getTaskId() != null) {
+            data.put("taskId", payload.getTaskId().toString());
+        }
+        if (payload.getPaymentRequestId() != null) {
+            data.put("paymentRequestId", payload.getPaymentRequestId().toString());
+            data.put("route", "PaymentPay");
+        } else {
+            data.put("route", "TaskDetail");
+        }
+        if (payload.getOfferAmount() != null) {
+            data.put("offerAmount", payload.getOfferAmount().toPlainString());
+            data.put("offerCurrency", payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency());
+        }
+        return data;
     }
 
     private String buildIdempotencySeed(NotificationEventPayload payload, UUID recipientId) {
@@ -233,14 +273,14 @@ public class NotificationDispatcher {
         logEntry.setIdempotencyKey(key);
         logEntry.setEventId(payload.getEventId());
         logEntry.setRecipientUserId(recipientId);
-        logEntry.setProvider("EXPO");
+        logEntry.setProvider("PENDING");
         logEntry.setStatus("PROCESSING");
         logEntry.setCreatedAt(now);
         logEntry.setUpdatedAt(now);
         return logEntry;
     }
 
-    private void maybeDeactivateToken(OutgoingMessage out, ExpoPushResponse.ExpoPushTicket ticket) {
+    private void maybeDeactivateToken(ExpoOutgoingMessage out, ExpoPushResponse.ExpoPushTicket ticket) {
         if (ticket == null || ticket.getDetails() == null) {
             return;
         }
@@ -278,13 +318,13 @@ public class NotificationDispatcher {
         return NotificationTemplateService.RecipientRole.HELPER;
     }
 
-    private static class OutgoingMessage {
+    private static class ExpoOutgoingMessage {
         private final UUID recipientId;
         private final UUID logId;
         private final String token;
         private final ExpoPushMessage message;
 
-        private OutgoingMessage(UUID recipientId, UUID logId, String token, ExpoPushMessage message) {
+        private ExpoOutgoingMessage(UUID recipientId, UUID logId, String token, ExpoPushMessage message) {
             this.recipientId = recipientId;
             this.logId = logId;
             this.token = token;
@@ -295,14 +335,17 @@ public class NotificationDispatcher {
     private static class DeliveryOutcome {
         private boolean success;
         private String firstError;
+        private String provider;
 
-        void recordSuccess() {
+        void recordSuccess(String provider) {
             success = true;
+            this.provider = provider;
         }
 
-        void recordFailure(String error) {
+        void recordFailure(String error, String provider) {
             if (firstError == null) {
                 firstError = error;
+                this.provider = provider;
             }
         }
 
@@ -312,6 +355,10 @@ public class NotificationDispatcher {
 
         String firstError() {
             return firstError;
+        }
+
+        String provider() {
+            return provider != null ? provider : "EXPO";
         }
     }
 }
