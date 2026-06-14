@@ -132,7 +132,8 @@ public final class AdminDtos {
             int attemptCount,
             String error,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            String audioUrl
     ) {
     }
 

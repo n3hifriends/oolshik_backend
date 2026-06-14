@@ -14,6 +14,7 @@ import com.oolshik.backend.admin.AdminDtos.PageResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
 import com.oolshik.backend.admin.AdminDtos.TrendPoint;
 import com.oolshik.backend.admin.AdminDtos.UserRef;
+import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.entity.HelpRequestEntity;
@@ -73,6 +74,7 @@ public class AdminService {
     private final PaymentRequestRepository paymentRequestRepository;
     private final ReportEventRepository reportEventRepository;
     private final NotificationOutboxRepository notificationOutboxRepository;
+    private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
 
     @Transactional(readOnly = true)
     public StatsResponse getStats() {
@@ -343,6 +345,7 @@ public class AdminService {
     }
 
     private AdminTranscriptionRow toTranscriptionRow(TranscriptionJobEntity entity) {
+        String audioUrl = audioPlaybackUrlResolver.resolve(entity.getAudioFileId(), entity.getAudioUrl());
         return new AdminTranscriptionRow(
                 entity.getJobId(),
                 entity.getTaskId(),
@@ -355,7 +358,8 @@ public class AdminService {
                 entity.getAttemptCount() == null ? 0 : entity.getAttemptCount(),
                 entity.getLastErrorMessage(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                audioUrl
         );
     }
 
