@@ -19,7 +19,11 @@ public final class AdminNotificationDtos {
             @NotBlank @Size(max = 1000) String body,
             UUID templateId,
             boolean saveAsTemplate,
-            @Size(max = 100) String templateName
+            @Size(max = 100) String templateName,
+            /** Mobile screen to open on notification tap. Defaults to InAppInbox when null. */
+            @Size(max = 30) String routeKey,
+            /** Entity ID required by the route (e.g. taskId for TaskDetail). Null for inbox routes. */
+            @Size(max = 100) String routeTargetId
     ) {}
 
     public record SendBroadcastResponse(

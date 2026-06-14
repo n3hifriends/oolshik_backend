@@ -82,4 +82,14 @@ class AuthSecurityWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "https://www.oolshik.in"));
     }
+
+    @Test
+    void adminPatchPreflightIsAllowedForConfiguredOrigin() throws Exception {
+        mockMvc.perform(options("/api/admin/reports/00000000-0000-0000-0000-000000000000/status")
+                        .header("Origin", "https://www.oolshik.in")
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "authorization,content-type,x-correlation-id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://www.oolshik.in"));
+    }
 }

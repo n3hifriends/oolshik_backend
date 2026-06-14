@@ -157,14 +157,92 @@ public final class AdminDtos {
     ) {
     }
 
+    public record AdminPaymentDetail(
+            UUID id,
+            UUID taskId,
+            String payerRole,
+            String mode,
+            BigDecimal amountInr,
+            String currency,
+            String status,
+            String ref,
+            String payeeVpa,
+            String payeeName,
+            String note,
+            String format,
+            UserRef payerUser,
+            UserRef requesterUser,
+            UserRef helperUser,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant expiresAt
+    ) {
+    }
+
     public record AdminReportRow(
             UUID id,
             UserRef reporter,
+            UserRef targetUser,
             String targetType,
             UUID targetId,
             String reason,
             String details,
-            OffsetDateTime reportedAt
+            String status,
+            String priority,
+            UserRef assignedAdmin,
+            String targetTitle,
+            String targetStatus,
+            OffsetDateTime reportedAt,
+            OffsetDateTime updatedAt
+    ) {
+    }
+
+    public record AdminReportDetail(
+            UUID id,
+            UserRef reporter,
+            UserRef targetUser,
+            String targetType,
+            UUID targetId,
+            String targetTitle,
+            String targetStatus,
+            String reason,
+            String details,
+            String status,
+            String priority,
+            UserRef assignedAdmin,
+            String resolutionNote,
+            OffsetDateTime reportedAt,
+            OffsetDateTime updatedAt,
+            OffsetDateTime resolvedAt,
+            List<AdminReportActionRow> actions
+    ) {
+    }
+
+    public record AdminReportActionRow(
+            UUID id,
+            UserRef admin,
+            String action,
+            String fromStatus,
+            String toStatus,
+            String note,
+            OffsetDateTime createdAt
+    ) {
+    }
+
+    public record UpdateReportStatusRequest(
+            String status,
+            String note
+    ) {
+    }
+
+    public record AssignReportRequest(
+            UUID adminUserId
+    ) {
+    }
+
+    public record AddReportActionRequest(
+            String action,
+            String note
     ) {
     }
 

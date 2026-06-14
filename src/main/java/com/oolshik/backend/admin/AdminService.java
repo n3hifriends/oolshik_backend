@@ -2,7 +2,10 @@ package com.oolshik.backend.admin;
 
 import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
+import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
+import com.oolshik.backend.admin.AdminDtos.AdminReportActionRow;
+import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestSummary;
@@ -17,10 +20,14 @@ import com.oolshik.backend.admin.AdminDtos.TrendPoint;
 import com.oolshik.backend.admin.AdminDtos.UserRef;
 import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.domain.ReportPriority;
+import com.oolshik.backend.domain.ReportReason;
+import com.oolshik.backend.domain.ReportStatus;
 import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.NotificationOutboxEntity;
 import com.oolshik.backend.entity.OtpAuditLogEntity;
+import com.oolshik.backend.entity.ReportActionEntity;
 import com.oolshik.backend.entity.ReportEventEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.payment.PaymentMode;
@@ -29,6 +36,7 @@ import com.oolshik.backend.payment.PaymentRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.NotificationOutboxRepository;
 import com.oolshik.backend.repo.OtpAuditLogRepository;
+import com.oolshik.backend.repo.ReportActionRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.transcription.TranscriptionJobEntity;
@@ -43,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +72,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -77,6 +87,7 @@ public class AdminService {
     private final TranscriptionJobRepository transcriptionJobRepository;
     private final PaymentRequestRepository paymentRequestRepository;
     private final ReportEventRepository reportEventRepository;
+    private final ReportActionRepository reportActionRepository;
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
@@ -100,7 +111,7 @@ public class AdminService {
         long completed = helpRequestRepository.countByStatus(HelpRequestStatus.COMPLETED);
         long sttFailures = transcriptionJobRepository.countByStatus(TranscriptionStatus.FAILED);
         long notificationFailures = notificationOutboxRepository.countByStatusIn(List.of("FAILED", "DEAD"));
-        long openReports = reportEventRepository.count();
+        long openReports = reportEventRepository.countByStatusIn(List.of(ReportStatus.OPEN, ReportStatus.REVIEWING));
         BigDecimal captured = paymentRequestRepository.sumCapturedAmount();
 
         return new StatsResponse(
@@ -252,14 +263,98 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AdminReportRow> getReports(Pageable pageable) {
-        Page<ReportEventEntity> page = reportEventRepository.findAll(pageable);
-        Set<UUID> reporterIds = page.getContent().stream()
-                .map(ReportEventEntity::getReporterUserId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<UUID, UserRef> users = loadUserRefs(reporterIds);
-        return PageResponse.from(page.map(report -> toReportRow(report, users)));
+    public Optional<AdminPaymentDetail> getPaymentDetail(UUID id) {
+        return paymentRequestRepository.findById(id).map(pr -> {
+            List<UUID> userIds = Stream.of(pr.getPayerUser(), pr.getRequesterUser(), pr.getHelperUser())
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            Map<UUID, UserRef> refs = loadUserRefs(userIds);
+            return toPaymentDetail(pr, refs);
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<AdminReportRow> getReports(
+            ReportStatus status,
+            ReportReason reason,
+            String targetType,
+            String search,
+            Pageable pageable) {
+        Page<ReportEventEntity> page = reportEventRepository.findAll(
+                reportSpec(status, reason, targetType, search),
+                pageable
+        );
+        ReportRefs refs = loadReportRefs(page.getContent());
+        return PageResponse.from(page.map(report -> toReportRow(report, refs)));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AdminReportDetail> getReport(UUID id) {
+        return reportEventRepository.findById(id).map(report -> {
+            ReportRefs refs = loadReportRefs(List.of(report));
+            List<ReportActionEntity> actions = reportActionRepository.findTop50ByReportIdOrderByCreatedAtDesc(report.getId());
+            Set<UUID> adminIds = actions.stream()
+                    .map(ReportActionEntity::getAdminUserId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            Map<UUID, UserRef> actionAdmins = loadUserRefs(adminIds);
+            return toReportDetail(report, refs, actions, actionAdmins);
+        });
+    }
+
+    @Transactional
+    public AdminReportDetail updateReportStatus(UUID id, ReportStatus status, String note, UUID adminUserId) {
+        ReportEventEntity report = reportEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
+        ReportStatus fromStatus = report.getStatus();
+        report.setStatus(status);
+        report.setResolutionNote(cleanNote(note));
+        if (status == ReportStatus.RESOLVED || status == ReportStatus.DISMISSED) {
+            report.setResolvedAt(OffsetDateTime.now());
+        } else {
+            report.setResolvedAt(null);
+        }
+        report = reportEventRepository.save(report);
+        saveReportAction(report.getId(), adminUserId, "STATUS_CHANGED", fromStatus, status, note);
+        return getReport(report.getId()).orElseThrow();
+    }
+
+    @Transactional
+    public AdminReportDetail assignReport(UUID id, UUID assigneeId, UUID adminUserId) {
+        ReportEventEntity report = reportEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
+        if (assigneeId != null) {
+            UserEntity assignee = userRepository.findById(assigneeId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assigned admin not found"));
+            if (!assignee.getRoleSet().contains(Role.ADMIN)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Report assignee must be an admin");
+            }
+        }
+        ReportStatus fromStatus = report.getStatus();
+        report.setAssignedAdminUserId(assigneeId);
+        if (report.getStatus() == ReportStatus.OPEN && assigneeId != null) {
+            report.setStatus(ReportStatus.REVIEWING);
+        }
+        report = reportEventRepository.save(report);
+        saveReportAction(
+                report.getId(),
+                adminUserId,
+                assigneeId == null ? "UNASSIGNED" : "ASSIGNED",
+                fromStatus,
+                report.getStatus(),
+                assigneeId == null ? "Report unassigned" : "Report assigned to " + assigneeId
+        );
+        return getReport(report.getId()).orElseThrow();
+    }
+
+    @Transactional
+    public AdminReportDetail addReportAction(UUID id, String action, String note, UUID adminUserId) {
+        ReportEventEntity report = reportEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
+        String cleanAction = action == null || action.isBlank() ? "NOTE" : action.trim().toUpperCase();
+        saveReportAction(report.getId(), adminUserId, cleanAction, report.getStatus(), report.getStatus(), note);
+        return getReport(report.getId()).orElseThrow();
     }
 
     @Transactional(readOnly = true)
@@ -414,18 +509,96 @@ public class AdminService {
         );
     }
 
-    private AdminReportRow toReportRow(ReportEventEntity entity, Map<UUID, UserRef> users) {
-        UUID targetId = entity.getTargetUserId() != null ? entity.getTargetUserId() : entity.getHelpRequestId();
-        String targetType = entity.getTargetUserId() != null ? "USER" : "REQUEST";
+    private AdminPaymentDetail toPaymentDetail(PaymentRequest pr, Map<UUID, UserRef> refs) {
+        return new AdminPaymentDetail(
+                pr.getId(),
+                pr.getTaskId(),
+                pr.getPayerRole() == null ? null : pr.getPayerRole().name(),
+                pr.getPaymentMode() == null ? null : pr.getPaymentMode().name(),
+                pr.getAmountRequested(),
+                pr.getCurrency(),
+                pr.getStatus(),
+                pr.getTxnRef(),
+                pr.getPayeeVpa(),
+                pr.getPayeeName(),
+                pr.getNote(),
+                pr.getFormat(),
+                refs.get(pr.getPayerUser()),
+                refs.get(pr.getRequesterUser()),
+                refs.get(pr.getHelperUser()),
+                pr.getCreatedAt(),
+                pr.getUpdatedAt(),
+                pr.getExpiresAt()
+        );
+    }
+
+    private AdminReportRow toReportRow(ReportEventEntity entity, ReportRefs refs) {
+        UUID targetId = reportTargetId(entity);
+        String targetType = reportTargetType(entity);
+        HelpRequestEntity request = entity.getHelpRequestId() == null ? null : refs.requests().get(entity.getHelpRequestId());
         return new AdminReportRow(
                 entity.getId(),
-                users.get(entity.getReporterUserId()),
+                refs.users().get(entity.getReporterUserId()),
+                refs.users().get(entity.getTargetUserId()),
                 targetType,
                 targetId,
                 entity.getReason() == null ? null : entity.getReason().name(),
                 entity.getDetails(),
-                entity.getCreatedAt()
+                statusName(entity.getStatus()),
+                priorityName(entity.getPriority()),
+                refs.users().get(entity.getAssignedAdminUserId()),
+                request == null ? null : request.getTitle(),
+                request == null || request.getStatus() == null ? null : request.getStatus().name(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
         );
+    }
+
+    private AdminReportDetail toReportDetail(
+            ReportEventEntity entity,
+            ReportRefs refs,
+            List<ReportActionEntity> actions,
+            Map<UUID, UserRef> actionAdmins) {
+        UUID targetId = reportTargetId(entity);
+        String targetType = reportTargetType(entity);
+        HelpRequestEntity request = entity.getHelpRequestId() == null ? null : refs.requests().get(entity.getHelpRequestId());
+        return new AdminReportDetail(
+                entity.getId(),
+                refs.users().get(entity.getReporterUserId()),
+                refs.users().get(entity.getTargetUserId()),
+                targetType,
+                targetId,
+                request == null ? null : request.getTitle(),
+                request == null || request.getStatus() == null ? null : request.getStatus().name(),
+                entity.getReason() == null ? null : entity.getReason().name(),
+                entity.getDetails(),
+                statusName(entity.getStatus()),
+                priorityName(entity.getPriority()),
+                refs.users().get(entity.getAssignedAdminUserId()),
+                entity.getResolutionNote(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getResolvedAt(),
+                actions.stream()
+                        .map(action -> new AdminReportActionRow(
+                                action.getId(),
+                                actionAdmins.get(action.getAdminUserId()),
+                                action.getAction(),
+                                action.getFromStatus(),
+                                action.getToStatus(),
+                                action.getNote(),
+                                action.getCreatedAt()
+                        ))
+                        .toList()
+        );
+    }
+
+    private String reportTargetType(ReportEventEntity entity) {
+        return entity.getHelpRequestId() != null ? "REQUEST" : "USER";
+    }
+
+    private UUID reportTargetId(ReportEventEntity entity) {
+        return entity.getHelpRequestId() != null ? entity.getHelpRequestId() : entity.getTargetUserId();
     }
 
     private AdminNotificationRow toNotificationRow(NotificationOutboxEntity entity) {
@@ -443,6 +616,101 @@ public class AdminService {
 
     private GeoPoint toGeo(Point point) {
         return point == null ? null : new GeoPoint(point.getY(), point.getX());
+    }
+
+    private Specification<ReportEventEntity> reportSpec(
+            ReportStatus status,
+            ReportReason reason,
+            String targetType,
+            String search) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (reason != null) {
+                predicates.add(cb.equal(root.get("reason"), reason));
+            }
+            String cleanTargetType = blankToNull(targetType);
+            if (cleanTargetType != null) {
+                if ("USER".equalsIgnoreCase(cleanTargetType)) {
+                    predicates.add(cb.isNull(root.get("helpRequestId")));
+                    predicates.add(cb.isNotNull(root.get("targetUserId")));
+                } else if ("REQUEST".equalsIgnoreCase(cleanTargetType)) {
+                    predicates.add(cb.isNotNull(root.get("helpRequestId")));
+                }
+            }
+            String cleanSearch = blankToNull(search);
+            if (cleanSearch != null) {
+                String like = "%" + cleanSearch.toLowerCase() + "%";
+                List<jakarta.persistence.criteria.Predicate> searchPredicates = new ArrayList<>();
+                searchPredicates.add(cb.like(cb.lower(root.get("details")), like));
+                searchPredicates.add(cb.like(cb.lower(root.get("reason").as(String.class)), like));
+                try {
+                    UUID id = UUID.fromString(cleanSearch);
+                    searchPredicates.add(cb.equal(root.get("id"), id));
+                    searchPredicates.add(cb.equal(root.get("reporterUserId"), id));
+                    searchPredicates.add(cb.equal(root.get("targetUserId"), id));
+                    searchPredicates.add(cb.equal(root.get("helpRequestId"), id));
+                } catch (IllegalArgumentException ignored) {
+                    // Non-UUID search still covers reason/details.
+                }
+                predicates.add(cb.or(searchPredicates.toArray(jakarta.persistence.criteria.Predicate[]::new)));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
+    }
+
+    private ReportRefs loadReportRefs(Collection<ReportEventEntity> reports) {
+        Set<UUID> userIds = new LinkedHashSet<>();
+        Set<UUID> requestIds = new LinkedHashSet<>();
+        for (ReportEventEntity report : reports) {
+            if (report.getReporterUserId() != null) userIds.add(report.getReporterUserId());
+            if (report.getTargetUserId() != null) userIds.add(report.getTargetUserId());
+            if (report.getAssignedAdminUserId() != null) userIds.add(report.getAssignedAdminUserId());
+            if (report.getHelpRequestId() != null) requestIds.add(report.getHelpRequestId());
+        }
+        Map<UUID, HelpRequestEntity> requests = requestIds.isEmpty()
+                ? Map.of()
+                : helpRequestRepository.findAllById(requestIds).stream()
+                        .collect(Collectors.toMap(HelpRequestEntity::getId, request -> request));
+        requests.values().forEach(request -> {
+            if (request.getRequesterId() != null) userIds.add(request.getRequesterId());
+            if (request.getHelperId() != null) userIds.add(request.getHelperId());
+        });
+        return new ReportRefs(loadUserRefs(userIds), requests);
+    }
+
+    private void saveReportAction(
+            UUID reportId,
+            UUID adminUserId,
+            String action,
+            ReportStatus fromStatus,
+            ReportStatus toStatus,
+            String note) {
+        ReportActionEntity entity = new ReportActionEntity();
+        entity.setReportId(reportId);
+        entity.setAdminUserId(adminUserId);
+        entity.setAction(action);
+        entity.setFromStatus(statusName(fromStatus));
+        entity.setToStatus(statusName(toStatus));
+        entity.setNote(cleanNote(note));
+        reportActionRepository.save(entity);
+    }
+
+    private String statusName(ReportStatus status) {
+        return status == null ? null : status.name();
+    }
+
+    private String priorityName(ReportPriority priority) {
+        return priority == null ? null : priority.name();
+    }
+
+    private String cleanNote(String note) {
+        return note == null || note.isBlank() ? null : note.trim();
+    }
+
+    private record ReportRefs(Map<UUID, UserRef> users, Map<UUID, HelpRequestEntity> requests) {
     }
 
     private Map<UUID, UserRef> loadUserRefs(Collection<UUID> ids) {

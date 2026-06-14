@@ -179,7 +179,8 @@ public class AdminBroadcastScheduler {
 
         List<String> tokens = devices.stream().map(UserDeviceEntity::getToken).distinct().toList();
         Map<String, AdminPushSender.SendResult> results =
-                pushSender.sendBatch(tokens, broadcast.getTitle(), broadcast.getBody(), broadcast.getId());
+                pushSender.sendBatch(tokens, broadcast.getTitle(), broadcast.getBody(), broadcast.getId(),
+                        broadcast.getRouteKey(), broadcast.getRouteTargetId());
 
         int sent = 0, failed = 0;
         for (UUID userId : userIds) {

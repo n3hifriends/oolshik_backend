@@ -59,25 +59,31 @@ public class AdminFcmSender implements AdminPushSender {
     }
 
     @Override
-    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId) {
+    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId,
+                                             String routeKey, String routeTargetId) {
         Map<String, SendResult> results = new LinkedHashMap<>();
         for (List<String> batch : partition(tokens, FCM_BATCH_LIMIT)) {
-            processBatch(batch, title, body, broadcastId, results);
+            processBatch(batch, title, body, broadcastId, routeKey, routeTargetId, results);
         }
         return results;
     }
 
-    private void processBatch(List<String> tokens, String title, String body, UUID broadcastId, Map<String, SendResult> results) {
-        MulticastMessage message = MulticastMessage.builder()
+    private void processBatch(List<String> tokens, String title, String body, UUID broadcastId,
+                              String routeKey, String routeTargetId, Map<String, SendResult> results) {
+        String effectiveRoute = (routeKey != null && !routeKey.isBlank()) ? routeKey : "InAppInbox";
+        MulticastMessage.Builder builder = MulticastMessage.builder()
                 .addAllTokens(tokens)
                 .setNotification(Notification.builder()
                         .setTitle(title)
                         .setBody(body)
                         .build())
                 .putData("type", "ADMIN_BROADCAST")
-                .putData("route", "AdminBroadcast")
-                .putData("broadcastId", broadcastId != null ? broadcastId.toString() : "")
-                .build();
+                .putData("route", effectiveRoute)
+                .putData("broadcastId", broadcastId != null ? broadcastId.toString() : "");
+        if (routeTargetId != null && !routeTargetId.isBlank()) {
+            builder.putData("taskId", routeTargetId);
+        }
+        MulticastMessage message = builder.build();
         try {
             initializeFirebase();
             BatchResponse response = FirebaseMessaging.getInstance().sendEachForMulticast(message);

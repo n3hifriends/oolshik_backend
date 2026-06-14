@@ -2,18 +2,25 @@ package com.oolshik.backend.admin;
 
 import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
+import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
+import com.oolshik.backend.admin.AdminDtos.AddReportActionRequest;
+import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestSummary;
 import com.oolshik.backend.admin.AdminDtos.AdminTranscriptionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminUserDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminUserSummary;
+import com.oolshik.backend.admin.AdminDtos.AssignReportRequest;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
 import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
+import com.oolshik.backend.admin.AdminDtos.UpdateReportStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateRolesRequest;
 import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.domain.ReportReason;
+import com.oolshik.backend.domain.ReportStatus;
 import com.oolshik.backend.payment.PaymentMode;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.transcription.TranscriptionStatus;
@@ -145,11 +152,63 @@ public class AdminController {
         return adminService.getPayments(status, parsePaymentMode(mode), pageRequest(page, size));
     }
 
+    @GetMapping("/payments/{id}")
+    public ResponseEntity<AdminPaymentDetail> getPayment(@PathVariable UUID id) {
+        return adminService.getPaymentDetail(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/reports")
     public PageResponse<AdminReportRow> listReports(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return adminService.getReports(pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        return adminService.getReports(
+                parseReportStatus(status),
+                parseReportReason(reason),
+                targetType,
+                search,
+                pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+    }
+
+    @GetMapping("/reports/{id}")
+    public ResponseEntity<AdminReportDetail> getReport(@PathVariable UUID id) {
+        return adminService.getReport(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PatchMapping("/reports/{id}/status")
+    public AdminReportDetail updateReportStatus(
+            @PathVariable UUID id,
+            @RequestBody UpdateReportStatusRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.updateReportStatus(id, parseRequiredReportStatus(request.status()), request.note(), adminId);
+    }
+
+    @PatchMapping("/reports/{id}/assign")
+    public AdminReportDetail assignReport(
+            @PathVariable UUID id,
+            @RequestBody AssignReportRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        UUID assigneeId = request.adminUserId() == null ? adminId : request.adminUserId();
+        return adminService.assignReport(id, assigneeId, adminId);
+    }
+
+    @PostMapping("/reports/{id}/actions")
+    public AdminReportDetail addReportAction(
+            @PathVariable UUID id,
+            @RequestBody AddReportActionRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.addReportAction(id, request.action(), request.note(), adminId);
     }
 
     @GetMapping("/notifications")
@@ -184,6 +243,29 @@ public class AdminController {
 
     private TranscriptionStatus parseTranscriptionStatus(String status) {
         return parseEnum(status, TranscriptionStatus.class, "transcription status");
+    }
+
+    private ReportStatus parseReportStatus(String status) {
+        return parseEnum(status, ReportStatus.class, "report status");
+    }
+
+    private ReportStatus parseRequiredReportStatus(String status) {
+        ReportStatus parsed = parseReportStatus(status);
+        if (parsed == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Report status is required");
+        }
+        return parsed;
+    }
+
+    private ReportReason parseReportReason(String reason) {
+        return parseEnum(reason, ReportReason.class, "report reason");
+    }
+
+    private UUID requireAdmin(AuthenticatedUserPrincipal principal) {
+        if (principal == null || principal.userId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        return principal.userId();
     }
 
     private <T extends Enum<T>> T parseEnum(String value, Class<T> enumType, String label) {

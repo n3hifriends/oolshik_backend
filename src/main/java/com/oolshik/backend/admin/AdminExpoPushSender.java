@@ -47,11 +47,12 @@ public class AdminExpoPushSender implements AdminPushSender {
     }
 
     @Override
-    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId) {
+    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId,
+                                             String routeKey, String routeTargetId) {
         Map<String, SendResult> results = new LinkedHashMap<>();
         for (List<String> batch : partition(tokens, EXPO_BATCH_LIMIT)) {
             List<Map<String, Object>> messages = batch.stream()
-                    .map(token -> buildMessage(token, title, body, broadcastId))
+                    .map(token -> buildMessage(token, title, body, broadcastId, routeKey, routeTargetId))
                     .toList();
             try {
                 ResponseEntity<Map> response = restTemplate.postForEntity(
@@ -107,15 +108,20 @@ public class AdminExpoPushSender implements AdminPushSender {
         }
     }
 
-    private Map<String, Object> buildMessage(String token, String title, String body, UUID broadcastId) {
+    private Map<String, Object> buildMessage(String token, String title, String body, UUID broadcastId,
+                                             String routeKey, String routeTargetId) {
+        String effectiveRoute = (routeKey != null && !routeKey.isBlank()) ? routeKey : "InAppInbox";
         Map<String, Object> msg = new LinkedHashMap<>();
         msg.put("to", token);
         msg.put("title", title);
         msg.put("body", body);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("type", "ADMIN_BROADCAST");
-        data.put("route", "AdminBroadcast");
+        data.put("route", effectiveRoute);
         data.put("broadcastId", broadcastId != null ? broadcastId.toString() : "");
+        if (routeTargetId != null && !routeTargetId.isBlank()) {
+            data.put("taskId", routeTargetId);
+        }
         msg.put("data", data);
         return msg;
     }

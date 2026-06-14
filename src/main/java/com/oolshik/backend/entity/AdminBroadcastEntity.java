@@ -67,6 +67,12 @@ public class AdminBroadcastEntity {
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 
+    @Column(name = "route_key", length = 30)
+    private String routeKey;
+
+    @Column(name = "route_target_id", length = 100)
+    private String routeTargetId;
+
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -109,4 +115,8 @@ public class AdminBroadcastEntity {
     public void setProcessingStartedAt(OffsetDateTime processingStartedAt) { this.processingStartedAt = processingStartedAt; }
     public OffsetDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
+    public String getRouteKey() { return routeKey; }
+    public void setRouteKey(String routeKey) { this.routeKey = routeKey; }
+    public String getRouteTargetId() { return routeTargetId; }
+    public void setRouteTargetId(String routeTargetId) { this.routeTargetId = routeTargetId; }
 }

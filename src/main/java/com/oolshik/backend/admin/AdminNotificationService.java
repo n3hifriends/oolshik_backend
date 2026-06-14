@@ -74,6 +74,9 @@ public class AdminNotificationService {
             savedTemplateId = template.getId();
         }
 
+        String resolvedRouteKey = resolveRouteKey(request.routeKey());
+        String resolvedRouteTargetId = resolveRouteTargetId(resolvedRouteKey, request.routeTargetId());
+
         AdminBroadcastEntity entity = new AdminBroadcastEntity();
         entity.setTemplateId(savedTemplateId);
         entity.setTitle(request.title());
@@ -83,6 +86,8 @@ public class AdminNotificationService {
         entity.setChannels(String.join(",", channels));
         entity.setStatus("QUEUED");
         entity.setCreatedBy(createdBy);
+        entity.setRouteKey(resolvedRouteKey);
+        entity.setRouteTargetId(resolvedRouteTargetId);
         entity = broadcastRepository.save(entity);
 
         return new SendBroadcastResponse(entity.getId(), entity.getStatus(), (int) estimated);
@@ -131,6 +136,34 @@ public class AdminNotificationService {
             }
             default -> throw new IllegalArgumentException("Invalid targetType: " + targetType);
         };
+    }
+
+    private static final java.util.Set<String> ALLOWED_ROUTE_KEYS =
+            java.util.Set.of("InAppInbox", "AdminBroadcast", "TaskDetail");
+
+    private String resolveRouteKey(String routeKey) {
+        if (routeKey == null || routeKey.isBlank()) return "InAppInbox";
+        if (!ALLOWED_ROUTE_KEYS.contains(routeKey)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid routeKey: " + routeKey);
+        }
+        return routeKey;
+    }
+
+    private String resolveRouteTargetId(String routeKey, String routeTargetId) {
+        if ("TaskDetail".equals(routeKey)) {
+            if (routeTargetId == null || routeTargetId.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "routeTargetId (task UUID) is required when routeKey is TaskDetail");
+            }
+            try {
+                UUID.fromString(routeTargetId.trim());
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "routeTargetId must be a valid UUID for routeKey TaskDetail");
+            }
+            return routeTargetId.trim();
+        }
+        return null;
     }
 
     private void validateRequest(SendBroadcastRequest request) {

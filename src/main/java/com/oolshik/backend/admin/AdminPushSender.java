@@ -10,5 +10,6 @@ public interface AdminPushSender {
 
     String provider();
 
-    Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId);
+    Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId,
+                                      String routeKey, String routeTargetId);
 }
