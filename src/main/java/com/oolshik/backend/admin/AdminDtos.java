@@ -105,7 +105,9 @@ public final class AdminDtos {
             int radiusM,
             BigDecimal offerAmount,
             String offerCurrency,
-            OffsetDateTime createdAt
+            OffsetDateTime createdAt,
+            String audioUrl,
+            String transcript
     ) {
     }
 

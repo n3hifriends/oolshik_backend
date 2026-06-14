@@ -20,6 +20,9 @@
 #   IMAGE_URI              Full ECR image URI (default: latest)
 #   AWS_REGION             default: ap-south-1
 #   KAFKA_CONSUMER_GROUP   default: notification-worker-v1
+#   FIREBASE_SA_JSON_PATH  default: /etc/oolshik-backend/firebase-sa.json
+#   NOTIF_WORKER_FCM_ENABLED       default: true
+#   NOTIF_WORKER_FCM_BATCH_SIZE    default: 500
 #   EXPO_PUSH_ENDPOINT     default: https://exp.host/--/api/v2/push/send
 #   NOTIF_WORKER_MAX_SEND_ATTEMPTS  default: 3
 #   NOTIF_COALESCE_WINDOW_SECONDS   default: 10
@@ -46,6 +49,9 @@ SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-}"
 KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-}"
 KAFKA_CONSUMER_GROUP="${KAFKA_CONSUMER_GROUP:-notification-worker-v1}"
 KAFKA_TOPIC_NOTIFICATION_EVENTS="${KAFKA_TOPIC_NOTIFICATION_EVENTS:-notification.events}"
+FIREBASE_SA_JSON_PATH="${FIREBASE_SA_JSON_PATH:-/etc/oolshik-backend/firebase-sa.json}"
+NOTIF_WORKER_FCM_ENABLED="${NOTIF_WORKER_FCM_ENABLED:-true}"
+NOTIF_WORKER_FCM_BATCH_SIZE="${NOTIF_WORKER_FCM_BATCH_SIZE:-500}"
 EXPO_PUSH_ENDPOINT="${EXPO_PUSH_ENDPOINT:-https://exp.host/--/api/v2/push/send}"
 NOTIF_WORKER_MAX_SEND_ATTEMPTS="${NOTIF_WORKER_MAX_SEND_ATTEMPTS:-3}"
 NOTIF_COALESCE_WINDOW_SECONDS="${NOTIF_COALESCE_WINDOW_SECONDS:-10}"
@@ -112,6 +118,24 @@ do_start() {
 
   log "Starting container: ${CONTAINER_NAME}${MEMORY_LIMIT:+ (memory=${MEMORY_LIMIT})}"
 
+  firebase_mount_flag=""
+  firebase_credentials_env=""
+  if [[ "${NOTIF_WORKER_FCM_ENABLED}" == "true" ]]; then
+    if [[ ! -f "${FIREBASE_SA_JSON_PATH}" ]]; then
+      echo "ERROR: NOTIF_WORKER_FCM_ENABLED=true requires Firebase service account JSON." >&2
+      echo "       Expected file on EC2 host: ${FIREBASE_SA_JSON_PATH}" >&2
+      echo "       Copy the Firebase Admin SDK JSON there or set FIREBASE_SA_JSON_PATH." >&2
+      exit 1
+    fi
+    if [[ ! -r "${FIREBASE_SA_JSON_PATH}" ]]; then
+      echo "ERROR: Firebase service account JSON exists but is not readable." >&2
+      echo "       Host file: ${FIREBASE_SA_JSON_PATH}" >&2
+      exit 1
+    fi
+    firebase_mount_flag="-v ${FIREBASE_SA_JSON_PATH}:/secrets/firebase-sa.json:ro"
+    firebase_credentials_env="-e GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase-sa.json"
+  fi
+
   # shellcheck disable=SC2086
   docker run -d \
     --name "${CONTAINER_NAME}" \
@@ -120,6 +144,7 @@ do_start() {
     -p "${HOST_PORT}:8081" \
     --log-opt max-size=50m \
     --log-opt max-file=3 \
+    ${firebase_mount_flag} \
     -e APP_DB_MODE=rds \
     -e SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL}" \
     -e SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME}" \
@@ -127,6 +152,9 @@ do_start() {
     -e KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS}" \
     -e KAFKA_CONSUMER_GROUP="${KAFKA_CONSUMER_GROUP}" \
     -e KAFKA_TOPIC_NOTIFICATION_EVENTS="${KAFKA_TOPIC_NOTIFICATION_EVENTS}" \
+    ${firebase_credentials_env} \
+    -e NOTIF_WORKER_FCM_ENABLED="${NOTIF_WORKER_FCM_ENABLED}" \
+    -e NOTIF_WORKER_FCM_BATCH_SIZE="${NOTIF_WORKER_FCM_BATCH_SIZE}" \
     -e EXPO_PUSH_ENDPOINT="${EXPO_PUSH_ENDPOINT}" \
     -e NOTIF_WORKER_MAX_SEND_ATTEMPTS="${NOTIF_WORKER_MAX_SEND_ATTEMPTS}" \
     -e NOTIF_COALESCE_WINDOW_SECONDS="${NOTIF_COALESCE_WINDOW_SECONDS}" \

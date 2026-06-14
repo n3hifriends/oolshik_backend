@@ -24,6 +24,17 @@ public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UU
         """)
     List<UserDeviceEntity> findActiveByUserIds(@Param("userIds") List<UUID> userIds);
 
+    @Query("""
+        select d
+          from UserDeviceEntity d
+         where d.userId in :userIds
+           and d.isActive = true
+           and d.provider = :provider
+        """)
+    List<UserDeviceEntity> findActiveByUserIdsAndProvider(
+            @Param("userIds") List<UUID> userIds,
+            @Param("provider") String provider);
+
     @Query(value = """
         SELECT u.id AS userId,
                COALESCE(u.preferred_language, 'en-IN') AS preferredLanguage

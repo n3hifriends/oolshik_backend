@@ -2,6 +2,7 @@ package com.oolshik.backend.admin;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public interface AdminPushSender {
 
@@ -9,5 +10,5 @@ public interface AdminPushSender {
 
     String provider();
 
-    Map<String, SendResult> sendBatch(List<String> tokens, String title, String body);
+    Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId);
 }

@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 @ConditionalOnProperty(
@@ -58,21 +59,24 @@ public class AdminFcmSender implements AdminPushSender {
     }
 
     @Override
-    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body) {
+    public Map<String, SendResult> sendBatch(List<String> tokens, String title, String body, UUID broadcastId) {
         Map<String, SendResult> results = new LinkedHashMap<>();
         for (List<String> batch : partition(tokens, FCM_BATCH_LIMIT)) {
-            processBatch(batch, title, body, results);
+            processBatch(batch, title, body, broadcastId, results);
         }
         return results;
     }
 
-    private void processBatch(List<String> tokens, String title, String body, Map<String, SendResult> results) {
+    private void processBatch(List<String> tokens, String title, String body, UUID broadcastId, Map<String, SendResult> results) {
         MulticastMessage message = MulticastMessage.builder()
                 .addAllTokens(tokens)
                 .setNotification(Notification.builder()
                         .setTitle(title)
                         .setBody(body)
                         .build())
+                .putData("type", "ADMIN_BROADCAST")
+                .putData("route", "AdminBroadcast")
+                .putData("broadcastId", broadcastId != null ? broadcastId.toString() : "")
                 .build();
         try {
             initializeFirebase();

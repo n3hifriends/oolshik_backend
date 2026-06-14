@@ -30,3 +30,5 @@ notification:
   maxSendAttempts: ${NOTIF_WORKER_MAX_SEND_ATTEMPTS:3}
   coalesceWindowSeconds: ${NOTIF_COALESCE_WINDOW_SECONDS:10}
   expoBatchSize: ${NOTIF_EXPO_BATCH_SIZE:100}
+  fcmEnabled: ${NOTIF_WORKER_FCM_ENABLED:false}
+  fcmBatchSize: ${NOTIF_WORKER_FCM_BATCH_SIZE:500}

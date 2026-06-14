@@ -349,6 +349,10 @@ public class AdminService {
 
     private AdminRequestDetail toRequestDetail(HelpRequestEntity request) {
         Map<UUID, UserRef> refs = loadUserRefs(userIds(request.getRequesterId(), request.getHelperId()));
+        TranscriptionJobEntity transcription = transcriptionJobRepository.findByTaskId(request.getId()).orElse(null);
+        String audioUrl = transcription == null
+                ? null
+                : audioPlaybackUrlResolver.resolve(transcription.getAudioFileId(), transcription.getAudioUrl());
         return new AdminRequestDetail(
                 request.getId(),
                 request.getTitle(),
@@ -360,7 +364,9 @@ public class AdminService {
                 request.getRadiusMeters(),
                 request.getOfferAmount(),
                 request.getOfferCurrency(),
-                request.getCreatedAt()
+                request.getCreatedAt(),
+                audioUrl,
+                transcription == null ? null : transcription.getTranscriptText()
         );
     }
 
