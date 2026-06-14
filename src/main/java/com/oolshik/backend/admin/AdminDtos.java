@@ -137,6 +137,12 @@ public final class AdminDtos {
     ) {
     }
 
+    public record RetryTranscriptionResponse(
+            int retried,
+            int totalFailed
+    ) {
+    }
+
     public record AdminPaymentRow(
             UUID id,
             UUID requestId,

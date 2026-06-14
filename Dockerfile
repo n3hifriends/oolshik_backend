@@ -5,7 +5,7 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 COPY src/ src/
 
-RUN chmod +x mvnw && ./mvnw -q -DskipTests package
+RUN chmod +x mvnw && ./mvnw -q -Dmaven.test.skip=true package
 
 FROM eclipse-temurin:21-jre
 RUN useradd --system --uid 10001 spring \

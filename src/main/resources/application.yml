@@ -82,6 +82,17 @@ app:
   admin:
     seed:
       enabled: ${ADMIN_SEED_ENABLED:false}
+    notification:
+      schedulerIntervalMs: ${ADMIN_NOTIF_SCHEDULER_INTERVAL_MS:5000}
+      batchSize: ${ADMIN_NOTIF_BATCH_SIZE:100}
+      maxRecipients: ${ADMIN_NOTIF_MAX_RECIPIENTS:50000}
+      staleProcessingTimeoutMinutes: ${ADMIN_NOTIF_STALE_TIMEOUT_MINUTES:10}
+      pushProvider: ${ADMIN_NOTIF_PUSH_PROVIDER:FCM}
+      sms:
+        enabled: ${ADMIN_NOTIF_SMS_ENABLED:false}
+        msg91ApiKey: ${ADMIN_NOTIF_SMS_MSG91_API_KEY:}
+        msg91SenderId: ${ADMIN_NOTIF_SMS_MSG91_SENDER_ID:}
+        msg91BaseUrl: ${ADMIN_NOTIF_SMS_MSG91_BASE_URL:https://api.msg91.com/api/sendhttp.php}
   security:
     identity-provider: ${APP_SECURITY_IDENTITY_PROVIDER:${APP_SECURITY_FIREBASE_ENABLED:false}}
   docs:

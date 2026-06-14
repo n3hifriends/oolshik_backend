@@ -11,6 +11,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminUserDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminUserSummary;
 import com.oolshik.backend.admin.AdminDtos.GeoPoint;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
+import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
 import com.oolshik.backend.admin.AdminDtos.TrendPoint;
 import com.oolshik.backend.admin.AdminDtos.UserRef;
@@ -31,6 +32,7 @@ import com.oolshik.backend.repo.OtpAuditLogRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.transcription.TranscriptionJobEntity;
+import com.oolshik.backend.transcription.TranscriptionJobPublisher;
 import com.oolshik.backend.transcription.TranscriptionJobRepository;
 import com.oolshik.backend.transcription.TranscriptionStatus;
 import com.oolshik.backend.util.PhoneHashUtil;
@@ -39,6 +41,7 @@ import org.locationtech.jts.geom.Point;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -66,6 +69,7 @@ import java.util.stream.Collectors;
 public class AdminService {
     private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private static final Set<String> ALLOWED_ROLES = Set.of("NETA", "KARYAKARTA", "ADMIN");
+    private static final int MAX_TRANSCRIPTION_RETRY_BATCH = 100;
 
     private final UserRepository userRepository;
     private final HelpRequestRepository helpRequestRepository;
@@ -75,6 +79,7 @@ public class AdminService {
     private final ReportEventRepository reportEventRepository;
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
+    private final TranscriptionJobPublisher transcriptionJobPublisher;
 
     @Transactional(readOnly = true)
     public StatsResponse getStats() {
@@ -212,6 +217,33 @@ public class AdminService {
     @Transactional(readOnly = true)
     public PageResponse<AdminTranscriptionRow> getTranscriptions(TranscriptionStatus status, Pageable pageable) {
         return PageResponse.from(transcriptionJobRepository.findForAdmin(status, pageable).map(this::toTranscriptionRow));
+    }
+
+    @Transactional
+    public RetryTranscriptionResponse retryFailedTranscriptions() {
+        long totalFailed = transcriptionJobRepository.countByStatus(TranscriptionStatus.FAILED);
+        if (totalFailed == 0) {
+            return new RetryTranscriptionResponse(0, 0);
+        }
+        List<TranscriptionJobEntity> failed = transcriptionJobRepository
+                .findByStatusOrderByUpdatedAtAsc(
+                        TranscriptionStatus.FAILED,
+                        PageRequest.of(0, MAX_TRANSCRIPTION_RETRY_BATCH)
+                );
+        if (failed.isEmpty()) {
+            return new RetryTranscriptionResponse(0, (int) Math.min(totalFailed, Integer.MAX_VALUE));
+        }
+
+        for (TranscriptionJobEntity job : failed) {
+            job.setStatus(TranscriptionStatus.PENDING);
+            job.setLastErrorCode(null);
+            job.setLastErrorMessage(null);
+            job.setAttemptCount((job.getAttemptCount() == null ? 0 : job.getAttemptCount()) + 1);
+        }
+        List<TranscriptionJobEntity> saved = transcriptionJobRepository.saveAllAndFlush(failed);
+        saved.forEach(transcriptionJobPublisher::publishJob);
+        log.info("Admin retried {} of {} failed transcription jobs", saved.size(), totalFailed);
+        return new RetryTranscriptionResponse(saved.size(), (int) Math.min(totalFailed, Integer.MAX_VALUE));
     }
 
     @Transactional(readOnly = true)

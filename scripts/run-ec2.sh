@@ -52,6 +52,7 @@ APP_OTP_MSG91_TEMPLATE_ID="${APP_OTP_MSG91_TEMPLATE_ID:-}"
 APP_OTP_MSG91_SENDER_ID="${APP_OTP_MSG91_SENDER_ID:-}"
 APP_OTP_MSG91_ENTITY_ID="${APP_OTP_MSG91_ENTITY_ID:-}"
 APP_CORS_ALLOWED_ORIGINS="${APP_CORS_ALLOWED_ORIGINS:-https://www.oolshik.in,https://oolshik.in}"
+ADMIN_NOTIF_PUSH_PROVIDER="${ADMIN_NOTIF_PUSH_PROVIDER:-FCM}"
 APP_SECRETS_AWS_ENABLED="${APP_SECRETS_AWS_ENABLED:-false}"
 APP_SECRETS_AWS_DB_SECRET_NAME="${APP_SECRETS_AWS_DB_SECRET_NAME:-oolshik/dev/db}"
 APP_SECRETS_AWS_APP_SECRET_NAME="${APP_SECRETS_AWS_APP_SECRET_NAME:-oolshik/dev/app}"
@@ -135,8 +136,21 @@ do_start() {
   firebase_mount_flag=""
   firebase_credentials_env="-e FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID} -e FIREBASE_CHECK_REVOKED=${FIREBASE_CHECK_REVOKED}"
   if [[ -f "${FIREBASE_SA_JSON_PATH}" ]]; then
+    if ! "${DOCKER_CMD[@]}" run --rm -v "${FIREBASE_SA_JSON_PATH}:/secrets/firebase-sa.json:ro" --entrypoint sh "${IMAGE_URI}" -c 'test -r /secrets/firebase-sa.json'; then
+      echo "ERROR: Firebase service account JSON exists but is not readable by the API container user." >&2
+      echo "       Host file: ${FIREBASE_SA_JSON_PATH}" >&2
+      echo "       The API image runs as UID 10001. Fix on EC2 with:" >&2
+      echo "         sudo chown 10001:10001 ${FIREBASE_SA_JSON_PATH}" >&2
+      echo "         sudo chmod 0400 ${FIREBASE_SA_JSON_PATH}" >&2
+      exit 1
+    fi
     firebase_mount_flag="-v ${FIREBASE_SA_JSON_PATH}:/secrets/firebase-sa.json:ro"
     firebase_credentials_env="${firebase_credentials_env} -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase-sa.json"
+  elif [[ "${ADMIN_NOTIF_PUSH_PROVIDER}" == "FCM" ]]; then
+    echo "ERROR: ADMIN_NOTIF_PUSH_PROVIDER=FCM requires Firebase service account JSON." >&2
+    echo "       Expected file on EC2 host: ${FIREBASE_SA_JSON_PATH}" >&2
+    echo "       Copy the Firebase Admin SDK JSON there or set FIREBASE_SA_JSON_PATH." >&2
+    exit 1
   fi
 
   # shellcheck disable=SC2086
@@ -174,6 +188,7 @@ do_start() {
     -e APP_OTP_MSG91_SENDER_ID="${APP_OTP_MSG91_SENDER_ID}" \
     -e APP_OTP_MSG91_ENTITY_ID="${APP_OTP_MSG91_ENTITY_ID}" \
     -e APP_CORS_ALLOWED_ORIGINS="${APP_CORS_ALLOWED_ORIGINS}" \
+    -e ADMIN_NOTIF_PUSH_PROVIDER="${ADMIN_NOTIF_PUSH_PROVIDER}" \
     -e APP_SECRETS_AWS_ENABLED="${APP_SECRETS_AWS_ENABLED}" \
     -e APP_SECRETS_AWS_DB_SECRET_NAME="${APP_SECRETS_AWS_DB_SECRET_NAME}" \
     -e APP_SECRETS_AWS_APP_SECRET_NAME="${APP_SECRETS_AWS_APP_SECRET_NAME}" \

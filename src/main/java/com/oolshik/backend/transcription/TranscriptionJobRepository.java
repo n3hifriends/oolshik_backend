@@ -15,6 +15,8 @@ public interface TranscriptionJobRepository extends JpaRepository<TranscriptionJ
 
     List<TranscriptionJobEntity> findTop50ByStatusOrderByUpdatedAtAsc(TranscriptionStatus status);
 
+    List<TranscriptionJobEntity> findByStatusOrderByUpdatedAtAsc(TranscriptionStatus status, Pageable pageable);
+
     long countByStatus(TranscriptionStatus status);
 
     @Query(value = """

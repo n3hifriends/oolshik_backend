@@ -10,6 +10,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminTranscriptionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminUserDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminUserSummary;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
+import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
 import com.oolshik.backend.admin.AdminDtos.UpdateRolesRequest;
 import com.oolshik.backend.domain.HelpRequestStatus;
@@ -25,6 +26,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -123,6 +125,15 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return adminService.getTranscriptions(parseTranscriptionStatus(status), pageRequest(page, size));
+    }
+
+    @PostMapping("/transcription-jobs/retry-failed")
+    public RetryTranscriptionResponse retryFailedTranscriptions(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        if (principal == null || principal.userId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        return adminService.retryFailedTranscriptions();
     }
 
     @GetMapping("/payments")
