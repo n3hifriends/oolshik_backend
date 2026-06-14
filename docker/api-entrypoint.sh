@@ -12,14 +12,14 @@ case "$db_mode" in
     export DB_USER="${DB_USER:-oolshik}"
     export DB_PASSWORD="${DB_PASSWORD:-oolshik}"
     ;;
-  external|rds)
+  external|rds|neon)
     : "${SPRING_DATASOURCE_URL:?Set SPRING_DATASOURCE_URL when APP_DB_MODE is external or rds}"
     : "${SPRING_DATASOURCE_USERNAME:?Set SPRING_DATASOURCE_USERNAME when APP_DB_MODE is external or rds}"
     : "${SPRING_DATASOURCE_PASSWORD:?Set SPRING_DATASOURCE_PASSWORD when APP_DB_MODE is external or rds}"
 
     ;;
   *)
-    echo "Unsupported APP_DB_MODE: $db_mode. Use 'local', 'external', or 'rds'." >&2
+    echo "Unsupported APP_DB_MODE: $db_mode. Use 'local', 'external', 'rds', or 'neon'." >&2
     exit 1
     ;;
 esac

@@ -3,7 +3,10 @@ package com.oolshik.backend.payment;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -22,6 +25,26 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     );
 
     List<PaymentRequest> findByTaskIdAndStatusInOrderByCreatedAtDesc(UUID taskId, Collection<String> statuses);
+
+    long countByStatus(String status);
+
+    @Query("select coalesce(sum(p.amountRequested), 0) from PaymentRequest p where p.status = 'PAID_MARKED'")
+    BigDecimal sumCapturedAmount();
+
+    @Query(value = """
+            select p from PaymentRequest p
+            where (:status is null or p.status = :status)
+              and (:mode is null or p.paymentMode = :mode)
+            order by p.createdAt desc
+            """,
+            countQuery = """
+            select count(p) from PaymentRequest p
+            where (:status is null or p.status = :status)
+              and (:mode is null or p.paymentMode = :mode)
+            """)
+    Page<PaymentRequest> findForAdmin(@Param("status") String status,
+                                      @Param("mode") PaymentMode mode,
+                                      Pageable pageable);
 
     @Query(value = """
         SELECT *

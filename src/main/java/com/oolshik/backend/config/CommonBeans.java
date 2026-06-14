@@ -29,7 +29,8 @@ public class CommonBeans {
         CorsConfiguration cfg = new CorsConfiguration();
         cfg.setAllowedOriginPatterns(corsProperties.getAllowedOrigins());
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
-        cfg.setAllowedHeaders(List.of("Authorization","Content-Type"));
+        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setExposedHeaders(List.of("X-Correlation-Id"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
         return source;

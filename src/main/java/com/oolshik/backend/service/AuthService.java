@@ -38,20 +38,28 @@ public class AuthService implements UserDetailsService {
     private String adminPassword;
     @Value("${app.admin.seed.enabled:false}")
     private boolean adminSeedEnabled;
+    @Value("${app.admin.seed.reset-existing-password:false}")
+    private boolean adminSeedResetExistingPassword;
 
     @PostConstruct
     public void seedAdmin() {
         if (adminSeedEnabled
                 && adminEmail != null && !adminEmail.isBlank()
                 && adminPassword != null && !adminPassword.isBlank()) {
-            userRepository.findByEmailIgnoreCase(adminEmail).orElseGet(() -> {
+            userRepository.findByEmailIgnoreCase(adminEmail).ifPresentOrElse(existing -> {
+                if (!adminSeedResetExistingPassword) {
+                    return;
+                }
+                existing.setPasswordHash(encoder.encode(adminPassword));
+                existing.setRoleSet(new HashSet<>(Arrays.asList(Role.ADMIN, Role.NETA, Role.KARYAKARTA)));
+                userRepository.save(existing);
+            }, () -> {
                 UserEntity e = new UserEntity();
                 e.setEmail(adminEmail);
-                e.setPhoneNumber("+910000000000");
                 e.setPasswordHash(encoder.encode(adminPassword));
                 e.setDisplayName("Admin");
                 e.setRoleSet(new HashSet<>(Arrays.asList(Role.ADMIN, Role.NETA, Role.KARYAKARTA)));
-                return userRepository.save(e);
+                userRepository.save(e);
             });
         }
     }

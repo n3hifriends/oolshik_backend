@@ -14,7 +14,13 @@ set -euo pipefail
 
 # ── Load env file if present ──────────────────────────────────────────────────
 ENV_FILE="${ENV_FILE:-/etc/oolshik-backend/env}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FALLBACK_ENV_FILE="${SCRIPT_DIR}/oolshik-backend.env"
 if [[ -f "$ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  set -a; source "$ENV_FILE"; set +a
+elif [[ -f "$FALLBACK_ENV_FILE" ]]; then
+  ENV_FILE="$FALLBACK_ENV_FILE"
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
 fi
@@ -56,6 +62,7 @@ CONTAINER_NAME="${CONTAINER_NAME:-oolshik-api}"
 HOST_PORT="${HOST_PORT:-8080}"
 
 ECR_REGISTRY="${ECR_REGISTRY:-$(echo "$IMAGE_URI" | cut -d/ -f1)}"
+DOCKER_CMD=()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
@@ -75,15 +82,33 @@ require_cmd() {
   fi
 }
 
+init_docker_cmd() {
+  require_cmd docker
+
+  if docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(docker)
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(sudo docker)
+    return
+  fi
+
+  echo "ERROR: current user cannot access the Docker daemon." >&2
+  echo "       Run with sudo, or add the user to the docker group and start a new login session." >&2
+  exit 1
+}
+
 ecr_login() {
   log "Logging in to ECR (${ECR_REGISTRY})..."
   aws ecr get-login-password --region "$AWS_REGION" \
-    | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    | "${DOCKER_CMD[@]}" login --username AWS --password-stdin "$ECR_REGISTRY"
 }
 
 pull_image() {
   log "Pulling image: ${IMAGE_URI}"
-  docker pull "${IMAGE_URI}"
+  "${DOCKER_CMD[@]}" pull "${IMAGE_URI}"
 }
 
 do_start() {
@@ -91,14 +116,14 @@ do_start() {
   require_var SPRING_DATASOURCE_USERNAME
   require_var SPRING_DATASOURCE_PASSWORD
   require_var JWT_SECRET
-  require_cmd docker
   require_cmd aws
+  init_docker_cmd
 
   # Stop any existing container with the same name
-  if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  if "${DOCKER_CMD[@]}" ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     log "Stopping existing container: ${CONTAINER_NAME}"
-    docker stop "${CONTAINER_NAME}" 2>/dev/null || true
-    docker rm   "${CONTAINER_NAME}" 2>/dev/null || true
+    "${DOCKER_CMD[@]}" stop "${CONTAINER_NAME}" 2>/dev/null || true
+    "${DOCKER_CMD[@]}" rm   "${CONTAINER_NAME}" 2>/dev/null || true
   fi
 
   ecr_login
@@ -115,7 +140,7 @@ do_start() {
   fi
 
   # shellcheck disable=SC2086
-  docker run -d \
+  "${DOCKER_CMD[@]}" run -d \
     --name "${CONTAINER_NAME}" \
     --restart unless-stopped \
     -p "${HOST_PORT}:8080" \
@@ -163,7 +188,7 @@ do_start() {
     i=$((i+1))
     if [[ $i -ge $retries ]]; then
       echo "ERROR: health check did not pass after ${retries} attempts." >&2
-      echo "       Check logs: docker logs ${CONTAINER_NAME}" >&2
+      echo "       Check logs: ${DOCKER_CMD[*]} logs ${CONTAINER_NAME}" >&2
       exit 1
     fi
     echo -n "."
@@ -172,18 +197,20 @@ do_start() {
   echo ""
   log "Backend is healthy."
   log "  Health : http://localhost:${HOST_PORT}/actuator/health"
-  log "  Logs   : docker logs -f ${CONTAINER_NAME}"
+  log "  Logs   : ${DOCKER_CMD[*]} logs -f ${CONTAINER_NAME}"
 }
 
 do_stop() {
+  init_docker_cmd
   log "Stopping container: ${CONTAINER_NAME}"
-  docker stop "${CONTAINER_NAME}" 2>/dev/null && docker rm "${CONTAINER_NAME}" 2>/dev/null || true
+  "${DOCKER_CMD[@]}" stop "${CONTAINER_NAME}" 2>/dev/null && "${DOCKER_CMD[@]}" rm "${CONTAINER_NAME}" 2>/dev/null || true
   log "Stopped."
 }
 
 do_status() {
-  if docker ps --format '{{.Names}}\t{{.Status}}' | grep -q "^${CONTAINER_NAME}"; then
-    docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' \
+  init_docker_cmd
+  if "${DOCKER_CMD[@]}" ps --format '{{.Names}}\t{{.Status}}' | grep -q "^${CONTAINER_NAME}"; then
+    "${DOCKER_CMD[@]}" ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' \
       | grep -E "^NAMES|^${CONTAINER_NAME}"
     echo ""
     curl -fsS "http://localhost:${HOST_PORT}/actuator/health" 2>/dev/null && echo " (health OK)" \
@@ -194,7 +221,8 @@ do_status() {
 }
 
 do_logs() {
-  docker logs -f "${CONTAINER_NAME}"
+  init_docker_cmd
+  "${DOCKER_CMD[@]}" logs -f "${CONTAINER_NAME}"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────

@@ -57,6 +57,7 @@ final class BootstrapPropertySupport {
             String value = normalizeDotenvValue(line.substring(separator + 1).trim());
             putWithAliases(properties, key, value);
         }
+        addDerivedDotenvMappings(properties);
         return properties;
     }
 
@@ -230,6 +231,47 @@ final class BootstrapPropertySupport {
     private static void addDerivedSecretMappings(JsonNode root, Map<String, Object> properties) {
         mapRdsSecret(root, properties);
         mapAppSecretAliases(root, properties);
+    }
+
+    private static void addDerivedDotenvMappings(Map<String, Object> properties) {
+        String dbMode = firstNonBlank(
+                propertyValue(properties, "APP_DB_MODE"),
+                propertyValue(properties, "app.db.mode")
+        );
+        if (!"neon".equalsIgnoreCase(dbMode)) {
+            return;
+        }
+
+        mapIfAbsent(properties,
+                "SPRING_DATASOURCE_URL",
+                firstNonBlank(
+                        propertyValue(properties, "NEON_DATASOURCE_URL"),
+                        propertyValue(properties, "neon.datasource.url")
+                ));
+        mapIfAbsent(properties,
+                "SPRING_DATASOURCE_USERNAME",
+                firstNonBlank(
+                        propertyValue(properties, "NEON_DATASOURCE_USERNAME"),
+                        propertyValue(properties, "neon.datasource.username")
+                ));
+        mapIfAbsent(properties,
+                "SPRING_DATASOURCE_PASSWORD",
+                firstNonBlank(
+                        propertyValue(properties, "NEON_DATASOURCE_PASSWORD"),
+                        propertyValue(properties, "neon.datasource.password")
+                ));
+    }
+
+    private static void mapIfAbsent(Map<String, Object> properties, String key, String value) {
+        if (!StringUtils.hasText(value) || hasAnyKey(properties, key, toDottedKey(key))) {
+            return;
+        }
+        putWithAliases(properties, key, value);
+    }
+
+    private static String propertyValue(Map<String, Object> properties, String key) {
+        Object value = properties.get(key);
+        return value == null ? null : value.toString();
     }
 
     private static void mapRdsSecret(JsonNode root, Map<String, Object> properties) {

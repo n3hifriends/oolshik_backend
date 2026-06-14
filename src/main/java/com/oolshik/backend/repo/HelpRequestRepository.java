@@ -135,6 +135,34 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
 
   long countByRequesterIdAndStatusIn(UUID requesterId, Collection<HelpRequestStatus> statuses);
 
+  long countByStatus(HelpRequestStatus status);
+
+  long countByStatusIn(Collection<HelpRequestStatus> statuses);
+
+  long countByRequesterId(UUID requesterId);
+
+  long countByHelperIdAndStatus(UUID helperId, HelpRequestStatus status);
+
+  Page<HelpRequestEntity> findByStatusIn(Collection<HelpRequestStatus> statuses, Pageable pageable);
+
+  List<HelpRequestEntity> findTop10ByRequesterIdOrderByLastStateChangeAtDesc(UUID requesterId);
+
+  List<HelpRequestEntity> findTop10ByRequesterIdOrHelperIdOrderByLastStateChangeAtDesc(
+          UUID requesterId,
+          UUID helperId
+  );
+
+  @Query(value = """
+      SELECT date_trunc('day', last_state_change_at)::date AS day,
+             COUNT(*) FILTER (WHERE status <> 'DRAFT') AS created,
+             COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed
+        FROM help_request
+       WHERE last_state_change_at >= NOW() - INTERVAL '1 day' * :days
+       GROUP BY 1
+       ORDER BY 1
+      """, nativeQuery = true)
+  List<Object[]> findDailyTrend(@Param("days") int days);
+
   List<HelpRequestEntity> findTop10ByRequesterIdAndStatusInOrderByCreatedAtDescIdDesc(
           UUID requesterId,
           Collection<HelpRequestStatus> statuses
