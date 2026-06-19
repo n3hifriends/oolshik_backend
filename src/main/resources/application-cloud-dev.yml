@@ -1,3 +1,8 @@
+# cloud-dev profile: Neon DB + msg91 OTP + S3 storage. Used for cloud staging.
+# .env: SPRING_PROFILES_ACTIVE=cloud-dev  APP_DB_MODE=neon
+#        NEON_DATASOURCE_URL=...  NEON_DATASOURCE_USERNAME=...  NEON_DATASOURCE_PASSWORD=...
+#        APP_OTP_MSG91_API_KEY=...  MEDIA_S3_BUCKET=...  JWT_SECRET=...
+
 server:
   forward-headers-strategy: framework
 
@@ -14,20 +19,26 @@ spring:
         format_sql: false
 
 app:
-  messaging:
-    kafka:
-      enabled: true
   docs:
     enabled: false
   admin:
     seed:
       enabled: false
+    notification:
+      pushProvider: ${ADMIN_NOTIF_PUSH_PROVIDER:DISABLED}
   security:
-    identity-provider: firebase
+    identity-provider: local
+  messaging:
+    kafka:
+      enabled: false
   otp:
     provider: msg91
     dev:
       enabled: false
+  cors:
+    allowedOrigins:
+      - "https://admin.oolshik.in"
+      - "https://www.oolshik.in"
   transcription:
     audioSourceMode: S3_ONLY
 
@@ -37,6 +48,7 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: WARN
 
 media:
+  storage: s3
   local:
     publicStreamEnabled: false
   s3:

@@ -238,10 +238,18 @@ final class BootstrapPropertySupport {
                 propertyValue(properties, "APP_DB_MODE"),
                 propertyValue(properties, "app.db.mode")
         );
-        if (!"neon".equalsIgnoreCase(dbMode)) {
+        if (!StringUtils.hasText(dbMode)) {
             return;
         }
+        switch (dbMode.trim().toLowerCase(Locale.ROOT)) {
+            case "neon" -> mapNeonDatasource(properties);
+            case "local", "docker" -> mapLocalDatasource(properties);
+            case "rds" -> mapRdsDatasource(properties);
+            default -> { /* unknown mode — rely on raw SPRING_DATASOURCE_* */ }
+        }
+    }
 
+    private static void mapNeonDatasource(Map<String, Object> properties) {
         mapIfAbsent(properties,
                 "SPRING_DATASOURCE_URL",
                 firstNonBlank(
@@ -260,6 +268,36 @@ final class BootstrapPropertySupport {
                         propertyValue(properties, "NEON_DATASOURCE_PASSWORD"),
                         propertyValue(properties, "neon.datasource.password")
                 ));
+    }
+
+    private static void mapLocalDatasource(Map<String, Object> properties) {
+        String host = firstNonBlank(propertyValue(properties, "DB_HOST"), "localhost");
+        String port = firstNonBlank(propertyValue(properties, "DB_PORT"), "5432");
+        String name = firstNonBlank(propertyValue(properties, "DB_NAME"), "oolshik");
+        String sslMode = firstNonBlank(propertyValue(properties, "DB_SSLMODE"), "prefer");
+        String url = "jdbc:postgresql://" + host + ":" + port + "/" + name + "?sslmode=" + sslMode;
+        mapIfAbsent(properties, "SPRING_DATASOURCE_URL", url);
+        mapIfAbsent(properties, "SPRING_DATASOURCE_USERNAME",
+                firstNonBlank(propertyValue(properties, "DB_USER"), "oolshik"));
+        mapIfAbsent(properties, "SPRING_DATASOURCE_PASSWORD",
+                firstNonBlank(propertyValue(properties, "DB_PASSWORD"), "oolshik"));
+    }
+
+    // Maps AWS ECS / RDS Proxy env vars (injected automatically by ECS task definitions
+    // or set manually): RDS_HOSTNAME, RDS_PORT, RDS_DB_NAME, RDS_USERNAME, RDS_PASSWORD.
+    private static void mapRdsDatasource(Map<String, Object> properties) {
+        String host = propertyValue(properties, "RDS_HOSTNAME");
+        String port = firstNonBlank(propertyValue(properties, "RDS_PORT"), "5432");
+        String name = propertyValue(properties, "RDS_DB_NAME");
+        String username = propertyValue(properties, "RDS_USERNAME");
+        String password = propertyValue(properties, "RDS_PASSWORD");
+        if (!StringUtils.hasText(host) || !StringUtils.hasText(name)) {
+            return;
+        }
+        String url = "jdbc:postgresql://" + host + ":" + port + "/" + name + "?sslmode=require";
+        mapIfAbsent(properties, "SPRING_DATASOURCE_URL", url);
+        if (StringUtils.hasText(username)) mapIfAbsent(properties, "SPRING_DATASOURCE_USERNAME", username);
+        if (StringUtils.hasText(password)) mapIfAbsent(properties, "SPRING_DATASOURCE_PASSWORD", password);
     }
 
     private static void mapIfAbsent(Map<String, Object> properties, String key, String value) {

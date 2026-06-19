@@ -1,0 +1,37 @@
+# local profile: IDE / no-Docker. Uses Postgres running directly on the host.
+# .env: SPRING_PROFILES_ACTIVE=local  APP_DB_MODE=local
+#        DB_HOST=localhost  DB_PORT=5432  DB_NAME=oolshik  DB_USER=oolshik  DB_PASSWORD=oolshik
+
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+    ignore-migration-patterns:
+      - "*:missing"
+
+app:
+  docs:
+    enabled: true
+  admin:
+    seed:
+      enabled: true
+      reset-existing-password: true
+    notification:
+      pushProvider: ${ADMIN_NOTIF_PUSH_PROVIDER:DISABLED}
+  security:
+    identity-provider: local
+  messaging:
+    kafka:
+      enabled: false
+  otp:
+    provider: dev
+    dev:
+      enabled: true
+  cors:
+    allowedOrigins:
+      - "*"
+
+media:
+  storage: local
+  local:
+    publicStreamEnabled: true

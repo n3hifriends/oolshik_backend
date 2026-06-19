@@ -4,6 +4,9 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 .DS_Store
 .env
+.env.local
+.env.docker
+.env.cloud-dev
 /secrets/*.json
 /data/audio/
 __pycache__/

@@ -2,6 +2,78 @@
 
 A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP login** as primary auth flow and **optional email** capture. Structured for easy extension into next phases.
 
+---
+
+## Environments
+
+Four profiles cover every development and deployment scenario. Set `SPRING_PROFILES_ACTIVE` and `APP_DB_MODE` in your `.env` (copy `.env.example` to get started).
+
+| Profile | Use case | DB mode | OTP | Kafka | Media |
+|---------|----------|---------|-----|-------|-------|
+| `local` | IDE / no Docker | `local` (localhost:5432) | dev (code in log) | off | local disk |
+| `docker` | `docker compose up` | `local` (db service) | dev | optional (see below) | local disk |
+| `cloud-dev` | Cloud staging (Neon + S3) | `neon` | msg91 (real SMS) | off | S3 |
+| `prod` | AWS production | `rds` | msg91 | on | S3 |
+
+### Local (IDE — no Docker)
+
+```bash
+cp .env.example .env
+# Set SPRING_PROFILES_ACTIVE=local  APP_DB_MODE=local
+# Ensure Postgres is running locally (createdb oolshik)
+./mvnw spring-boot:run
+```
+
+### Docker Compose — api + db only (fast, no Kafka)
+
+```bash
+cp .env.example .env
+# SPRING_PROFILES_ACTIVE=docker (default in docker-compose.yml)
+docker compose up --build
+```
+
+### Docker Compose — full stack (api + db + Kafka + STT worker + notification worker)
+
+```bash
+APP_MESSAGING_KAFKA_ENABLED=true docker compose --profile full up --build
+```
+
+### Cloud-dev / staging
+
+```bash
+# Set in your deployment env (Railway / Render / EC2):
+SPRING_PROFILES_ACTIVE=cloud-dev
+APP_DB_MODE=neon
+NEON_DATASOURCE_URL=jdbc:postgresql://...neon.tech/oolshik?sslmode=require
+NEON_DATASOURCE_USERNAME=...
+NEON_DATASOURCE_PASSWORD=...
+JWT_SECRET=<32+ char secret>
+APP_OTP_MSG91_API_KEY=...
+```
+
+### DB mode reference
+
+`APP_DB_MODE` is processed by `BootstrapPropertySupport` at startup — no JDBC URL boilerplate needed:
+
+| `APP_DB_MODE` | Env vars read |
+|---|---|
+| `local` / `docker` | `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` |
+| `neon` | `NEON_DATASOURCE_URL` `NEON_DATASOURCE_USERNAME` `NEON_DATASOURCE_PASSWORD` |
+| `rds` | `RDS_HOSTNAME` `RDS_PORT` `RDS_DB_NAME` `RDS_USERNAME` `RDS_PASSWORD` |
+
+### Startup safety guard
+
+`EnvironmentStartupLogger` runs after all beans are wired and **crashes startup** if `cloud-dev` or `prod` profile has any of:
+- `app.otp.provider=dev`
+- `app.admin.seed.enabled=true`
+- CORS wildcard `*`
+- `JWT_SECRET` missing or using a dev placeholder
+- `ADMIN_NOTIF_PUSH_PROVIDER=FCM` without a valid `GOOGLE_APPLICATION_CREDENTIALS` file
+
+It also prints a startup summary (profile, dbMode, dbHost, otpProvider, kafkaEnabled, etc.) to the log on every boot.
+
+---
+
 ## Highlights
 
 - **OTP-first auth** (SMS). Email is optional during OTP verify or later via profile update

@@ -21,8 +21,8 @@ public class AdminNotificationProperties {
     @Min(1)
     private int staleProcessingTimeoutMinutes = 10;
 
-    /** Controls which push provider is active: FCM (default) or EXPO. */
-    @Pattern(regexp = "FCM|EXPO", message = "pushProvider must be FCM or EXPO")
+    /** Controls which push provider is active: FCM, EXPO, or DISABLED. */
+    @Pattern(regexp = "FCM|EXPO|DISABLED", message = "pushProvider must be FCM, EXPO, or DISABLED")
     private String pushProvider = "FCM";
 
     private Sms sms = new Sms();

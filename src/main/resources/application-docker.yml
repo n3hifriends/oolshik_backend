@@ -1,0 +1,40 @@
+# docker profile: Spring inside docker-compose alongside db + kafka.
+# docker-compose.yml sets SPRING_PROFILES_ACTIVE=docker by default.
+# For full stack (kafka + workers) use: docker compose --profile full up
+
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+    ignore-migration-patterns:
+      - "*:missing"
+  kafka:
+    consumer:
+      group-id: oolshik-stt-backend
+
+app:
+  docs:
+    enabled: true
+  admin:
+    seed:
+      enabled: true
+      reset-existing-password: true
+    notification:
+      pushProvider: ${ADMIN_NOTIF_PUSH_PROVIDER:DISABLED}
+  security:
+    identity-provider: local
+  messaging:
+    kafka:
+      enabled: ${APP_MESSAGING_KAFKA_ENABLED:false}
+  otp:
+    provider: dev
+    dev:
+      enabled: true
+  cors:
+    allowedOrigins:
+      - "*"
+
+media:
+  storage: local
+  local:
+    publicStreamEnabled: true
