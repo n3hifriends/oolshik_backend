@@ -64,7 +64,7 @@ services:
       SPRING_FLYWAY_BASELINE_VERSION: 1
       # hibernate: validate schema only
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      APP_MESSAGING_KAFKA_ENABLED: ${APP_MESSAGING_KAFKA_ENABLED:-false}
+      APP_MESSAGING_KAFKA_ENABLED: ${APP_MESSAGING_KAFKA_ENABLED:-true}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-oolshik}
@@ -140,7 +140,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_CONSUMER_GROUP: notification-worker-v1
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/firebase-sa.json
-      NOTIF_WORKER_FCM_ENABLED: ${NOTIF_WORKER_FCM_ENABLED:-false}
+      NOTIF_WORKER_FCM_ENABLED: ${NOTIF_WORKER_FCM_ENABLED:-true}
     volumes:
       - ${FIREBASE_ADMIN_JSON_HOST_PATH:-./secrets/oolshik-firebase-adminsdk-fbsvc-3f9053e5f1.json}:/secrets/firebase-sa.json:ro
     depends_on:
