@@ -47,9 +47,9 @@ public class PaymentRequestService {
 
     @Transactional
     public PaymentRequest create(UUID scannerUserId, String clientIp, CreatePaymentRequest in) throws NoSuchAlgorithmException {
-        PaymentRequest existing = repo.findFirstByTaskIdAndPaymentModeAndStatusInOrderByCreatedAtDesc(
+        PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
+        PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(
                         in.taskId(),
-                        PaymentMode.MERCHANT_QR,
                         ACTIVE_STATUSES)
                 .orElse(null);
         if (existing != null) {
@@ -59,8 +59,29 @@ public class PaymentRequestService {
         HelpRequestEntity task = helpRequestRepository.findById(in.taskId())
                 .orElseThrow(() -> new IllegalArgumentException("task not found"));
         var id = UUID.randomUUID();
-        PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
         UUID payerUser = resolvePayerUser(task, scannerUserId, payerRole);
+
+        // When the requester pays, the payee is the helper — use their payment profile as the UPI
+        // destination rather than the scanned QR's payeeVpa (which is the QR owner's UPI, not the helper's).
+        String resolvedPayeeVpa = in.payeeVpa();
+        String resolvedPayeeName = in.payeeName();
+        UUID paymentProfileUser = null;
+        String resolvedNote = in.note();
+        String currency = Optional.ofNullable(in.currency()).orElse("INR");
+
+        if (payerRole == PaymentPayerRole.REQUESTER && task.getHelperId() != null) {
+            PaymentProfileEntity helperProfile = paymentProfileService.requireActiveProfile(task.getHelperId());
+            resolvedPayeeVpa = helperProfile.getUpiId();
+            resolvedPayeeName = paymentProfileService.resolvePayeeLabel(task.getHelperId(), helperProfile);
+            paymentProfileUser = task.getHelperId();
+            if (resolvedNote == null || resolvedNote.isBlank()) {
+                resolvedNote = "Oolshik help reimbursement " + task.getId();
+            }
+        }
+
+        String upiIntent = (payerRole == PaymentPayerRole.REQUESTER)
+                ? buildUpiIntent(resolvedPayeeVpa, resolvedPayeeName, in.amount(), currency, resolvedNote)
+                : in.rawPayload().startsWith("upi://") ? in.rawPayload() : null;
 
         var pr = PaymentRequest.builder()
                 .id(id)
@@ -71,18 +92,18 @@ public class PaymentRequestService {
                 .payerUser(payerUser)
                 .payerRole(payerRole)
                 .paymentMode(PaymentMode.MERCHANT_QR)
-                .paymentProfileUser(null)
-                .rawPayload(in.rawPayload())
-                .rawSha256(sha256(in.rawPayload()))
+                .paymentProfileUser(paymentProfileUser)
+                .rawPayload(upiIntent != null ? upiIntent : in.rawPayload())
+                .rawSha256(sha256(upiIntent != null ? upiIntent : in.rawPayload()))
                 .format(in.format())
-                .payeeVpa(in.payeeVpa())
-                .payeeName(in.payeeName())
+                .payeeVpa(resolvedPayeeVpa)
+                .payeeName(resolvedPayeeName)
                 .mcc(in.mcc())
                 .merchantId(in.merchantId())
                 .txnRef(in.txnRef())
                 .amountRequested(in.amount())
-                .currency(Optional.ofNullable(in.currency()).orElse("INR"))
-                .note(in.note())
+                .currency(currency)
+                .note(resolvedNote)
                 .status(STATUS_PENDING)
                 .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS))
                 .appVersion(in.appVersion())
@@ -123,6 +144,14 @@ public class PaymentRequestService {
                 .orElseThrow(() -> new IllegalArgumentException("task not found"));
         ensureTaskParticipant(task, actorUserId);
 
+        PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(
+                        in.taskId(),
+                        ACTIVE_STATUSES)
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+
         PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
         UUID payerUser = resolvePayerUser(task, actorUserId, payerRole);
         UUID payeeUser = resolvePayeeUser(task, payerRole);
@@ -131,14 +160,6 @@ public class PaymentRequestService {
                 payerRole == PaymentPayerRole.REQUESTER
                         ? PaymentMode.PAY_HELPER_DIRECT
                         : PaymentMode.PAY_REQUESTER_DIRECT;
-        PaymentRequest existing = repo.findFirstByTaskIdAndPaymentModeAndStatusInOrderByCreatedAtDesc(
-                        in.taskId(),
-                        paymentMode,
-                        ACTIVE_STATUSES)
-                .orElse(null);
-        if (existing != null) {
-            return existing;
-        }
         String currency = Optional.ofNullable(in.currency()).filter(PaymentRequestService::notBlank).orElse("INR");
         String payeeName = paymentProfileService.resolvePayeeLabel(payeeUser, payeeProfile);
         String note = Optional.ofNullable(in.note())

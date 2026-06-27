@@ -13,6 +13,7 @@ public interface HelpRequestRow {
     UUID getRequesterId();
     String getCreatedByName();
     String getCreatedByPhoneNumber();
+    String getHelperName();
     String getHelperPhoneNumber();
     UUID getHelperId();
     UUID getPendingHelperId();

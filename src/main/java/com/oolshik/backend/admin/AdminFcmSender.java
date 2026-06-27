@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -52,10 +54,32 @@ public class AdminFcmSender implements AdminPushSender {
             return;
         }
 
+        String credentialsPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
+        if (credentialsPath == null || credentialsPath.isBlank()) {
+            credentialsPath = System.getenv("FIREBASE_SA_JSON_PATH");
+        }
+
+        GoogleCredentials credentials;
+        String credentialsSource;
+        if (credentialsPath != null && !credentialsPath.isBlank()) {
+            File credentialsFile = new File(credentialsPath);
+            if (!credentialsFile.exists()) {
+                throw new IOException("Firebase service account file not found at " + credentialsFile.getAbsolutePath());
+            }
+            try (FileInputStream in = new FileInputStream(credentialsFile)) {
+                credentials = GoogleCredentials.fromStream(in);
+            }
+            credentialsSource = credentialsFile.getAbsolutePath();
+        } else {
+            credentials = GoogleCredentials.getApplicationDefault();
+            credentialsSource = "Application Default Credentials";
+        }
+
         FirebaseOptions options = FirebaseOptions.builder()
-                .setCredentials(GoogleCredentials.getApplicationDefault())
+                .setCredentials(credentials)
                 .build();
         FirebaseApp.initializeApp(options);
+        log.info("Initialized Firebase Admin for FCM using {}", credentialsSource);
     }
 
     @Override
@@ -108,8 +132,8 @@ public class AdminFcmSender implements AdminPushSender {
             log.warn("FCM multicast batch failed: {}", ex.getMessage());
             tokens.forEach(t -> results.put(t, new SendResult(false, ex.getMessage())));
         } catch (IOException ex) {
-            log.warn("FCM initialization failed: {}", ex.getMessage());
-            tokens.forEach(t -> results.put(t, new SendResult(false, "FCM initialization failed: " + ex.getMessage())));
+            log.error("FCM initialization failed: {}", ex.getMessage());
+            tokens.forEach(t -> results.put(t, new SendResult(false, "FCM initialization failed")));
         }
     }
 

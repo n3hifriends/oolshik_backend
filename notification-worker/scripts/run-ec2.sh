@@ -30,6 +30,7 @@
 #   MEMORY_LIMIT           Docker memory limit (default: no limit — set e.g. 1g)
 #   JAVA_OPTS              default: -Xmx384m
 #   LOG_LEVEL              default: INFO
+#   SERVER_PORT            default: 8081
 #   CONTAINER_NAME         default: notification-worker
 set -euo pipefail
 
@@ -59,6 +60,7 @@ NOTIF_EXPO_BATCH_SIZE="${NOTIF_EXPO_BATCH_SIZE:-100}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-}"
 JAVA_OPTS="${JAVA_OPTS:--Xmx384m}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
+SERVER_PORT="${SERVER_PORT:-8081}"
 CONTAINER_NAME="${CONTAINER_NAME:-notification-worker}"
 HOST_PORT="${HOST_PORT:-8081}"
 
@@ -153,6 +155,7 @@ do_start() {
     -e KAFKA_CONSUMER_GROUP="${KAFKA_CONSUMER_GROUP}" \
     -e KAFKA_TOPIC_NOTIFICATION_EVENTS="${KAFKA_TOPIC_NOTIFICATION_EVENTS}" \
     ${firebase_credentials_env} \
+    -e SERVER_PORT="${SERVER_PORT}" \
     -e NOTIF_WORKER_FCM_ENABLED="${NOTIF_WORKER_FCM_ENABLED}" \
     -e NOTIF_WORKER_FCM_BATCH_SIZE="${NOTIF_WORKER_FCM_BATCH_SIZE}" \
     -e EXPO_PUSH_ENDPOINT="${EXPO_PUSH_ENDPOINT}" \

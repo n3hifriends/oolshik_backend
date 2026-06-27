@@ -1,13 +1,16 @@
 package com.oolshik.backend.payment;
 
+import com.oolshik.backend.entity.PaymentProfileEntity;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.payment.dto.PaymentDtos.CreateDirectPaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.InitiatePaymentRequest;
 import com.oolshik.backend.payment.dto.PaymentDtos.MarkPaidRequest;
 import com.oolshik.backend.payment.dto.PaymentResponse;
+import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.service.CurrentUserService;
+import com.oolshik.backend.service.PaymentProfileService;
 import com.oolshik.backend.util.MaskingUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -34,10 +37,18 @@ import org.springframework.web.server.ResponseStatusException;
 public class PaymentRequestController {
     private final PaymentRequestService service;
     private final CurrentUserService currentUserService;
+    private final UserRepository userRepository;
+    private final PaymentProfileService paymentProfileService;
 
-    public PaymentRequestController(PaymentRequestService service, CurrentUserService currentUserService) {
+    public PaymentRequestController(
+            PaymentRequestService service,
+            CurrentUserService currentUserService,
+            UserRepository userRepository,
+            PaymentProfileService paymentProfileService) {
         this.service = service;
         this.currentUserService = currentUserService;
+        this.userRepository = userRepository;
+        this.paymentProfileService = paymentProfileService;
     }
 
     @PostMapping("/qr-scan")
@@ -179,6 +190,17 @@ public class PaymentRequestController {
         out.paymentProfileUserId = pr.getPaymentProfileUser();
         out.canPay = service.canPay(pr, callerUserId);
 
+        // Determine payee: whoever is not the payer among requester/helper.
+        UUID payeeUserId = pr.getPayerRole() == PaymentPayerRole.REQUESTER
+                ? pr.getHelperUser()
+                : pr.getRequesterUser();
+        out.payeeUserId = payeeUserId;
+
+        out.payerName = resolveDisplayName(pr.getPayerUser(), pr.getPayerRole() == PaymentPayerRole.REQUESTER ? "Requester" : "Helper");
+        out.payeeName = resolvePayeeName(payeeUserId, pr.getPaymentProfileUser(), pr.getPayeeName(), pr.getPayerRole() == PaymentPayerRole.REQUESTER ? "Helper" : "Requester");
+        out.validationStatus = null;
+        out.validationWarnings = List.of();
+
         out.snapshot = new PaymentResponse.Snapshot();
         out.snapshot.taskId = pr.getTaskId();
         out.snapshot.payeeVpa = pr.getPayeeVpa();
@@ -194,6 +216,32 @@ public class PaymentRequestController {
         out.snapshot.expiresAt = pr.getExpiresAt();
         out.snapshot.status = pr.getStatus();
         return out;
+    }
+
+    private String resolveDisplayName(UUID userId, String fallback) {
+        if (userId == null) return fallback;
+        return userRepository.findById(userId)
+                .map(u -> {
+                    if (u.getDisplayName() != null && !u.getDisplayName().isBlank()) return u.getDisplayName();
+                    if (u.getPhoneNumber() != null && !u.getPhoneNumber().isBlank()) return u.getPhoneNumber();
+                    return null;
+                })
+                .orElse(fallback);
+    }
+
+    private String resolvePayeeName(UUID payeeUserId, UUID profileUserId, String storedPayeeName, String fallback) {
+        // Prefer the stored payeeName on the payment request (set from profile at creation time).
+        if (storedPayeeName != null && !storedPayeeName.isBlank()) return storedPayeeName;
+        // Then try the payment profile label for the payee.
+        if (profileUserId != null) {
+            PaymentProfileEntity profile = paymentProfileService.getActiveProfile(profileUserId).orElse(null);
+            if (profile != null) {
+                String label = paymentProfileService.resolvePayeeLabel(profileUserId, profile);
+                if (label != null && !label.isBlank() && !"Oolshik".equals(label)) return label;
+            }
+        }
+        // Then look up user display name or phone.
+        return resolveDisplayName(payeeUserId, fallback);
     }
 
     private void requirePayer(PaymentRequest pr, UUID userId) {

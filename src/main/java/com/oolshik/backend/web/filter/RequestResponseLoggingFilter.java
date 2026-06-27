@@ -25,10 +25,15 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        String uri = request.getRequestURI();
+        if (!uri.startsWith("/api/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         long start = System.currentTimeMillis();
         String cid = MDC.get("cid"); // set by CorrelationIdFilter
         String method = request.getMethod();
-        String uri = request.getRequestURI();
         String qs = request.getQueryString();
         String full = (qs == null) ? uri : (uri + "?" + qs);
         String auth = request.getHeader("Authorization");

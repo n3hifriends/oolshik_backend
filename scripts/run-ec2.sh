@@ -5,25 +5,27 @@
 # Prerequisites on the EC2 host:
 #   - Docker installed
 #   - IAM role attached with: ecr:*, s3:GetObject, s3:PutObject, secretsmanager:GetSecretValue
-#   - /etc/oolshik-backend/env populated (copy scripts/oolshik-backend.env and fill secrets)
+#   - /etc/oolshik-backend/env populated from Secrets Manager or another EC2-local secret source
 #   - Firebase SA JSON at /etc/oolshik-backend/firebase-sa.json
-#
+#sudo mkdir -p /etc/oolshik-backend
+#sudo vi /etc/oolshik-backend/firebase-sa.json
+#sudo chown 10001:10001 /etc/oolshik-backend/firebase-sa.json
+#sudo chmod 0400 /etc/oolshik-backend/firebase-sa.json
 # Usage:
 #   ./run-ec2.sh [start|stop|restart|status|logs]
 set -euo pipefail
 
 # ── Load env file if present ──────────────────────────────────────────────────
 ENV_FILE="${ENV_FILE:-/etc/oolshik-backend/env}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FALLBACK_ENV_FILE="${SCRIPT_DIR}/oolshik-backend.env"
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a; source "$ENV_FILE"; set +a
-elif [[ -f "$FALLBACK_ENV_FILE" ]]; then
-  ENV_FILE="$FALLBACK_ENV_FILE"
-  # shellcheck disable=SC1090
-  set -a; source "$ENV_FILE"; set +a
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: required EC2 env file not found: ${ENV_FILE}" >&2
+  echo "       This command is intended to run on the EC2 host, not on your local Mac." >&2
+  echo "       Populate ${ENV_FILE} from Secrets Manager on EC2, or set ENV_FILE to another EC2-local env file." >&2
+  echo "       For local API startup, use: ./scripts/run-all.sh local up api" >&2
+  exit 1
 fi
+# shellcheck disable=SC1090
+set -a; source "$ENV_FILE"; set +a
 
 # ── Config with defaults ──────────────────────────────────────────────────────
 IMAGE_URI="${IMAGE_URI:-653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest}"
@@ -61,6 +63,7 @@ JAVA_OPTS="${JAVA_OPTS:--Xmx512m}"
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 CONTAINER_NAME="${CONTAINER_NAME:-oolshik-api}"
 HOST_PORT="${HOST_PORT:-8080}"
+SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-prod}"
 
 ECR_REGISTRY="${ECR_REGISTRY:-$(echo "$IMAGE_URI" | cut -d/ -f1)}"
 DOCKER_CMD=()
@@ -159,7 +162,7 @@ do_start() {
     --restart unless-stopped \
     -p "${HOST_PORT}:8080" \
     ${firebase_mount_flag} \
-    -e SPRING_PROFILES_ACTIVE=prod \
+    -e SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE}" \
     -e APP_DB_MODE=rds \
     -e AWS_REGION="${AWS_REGION}" \
     -e SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL}" \

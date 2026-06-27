@@ -71,6 +71,9 @@ public class EnvironmentStartupLogger implements SmartInitializingSingleton {
         if ("*".equals(corsOrigin0.trim())) {
             violations.add("CORS wildcard '*' is not permitted in profile '" + profiles + "'");
         }
+        if ("DISABLED".equalsIgnoreCase(pushProvider)) {
+            violations.add("ADMIN_NOTIF_PUSH_PROVIDER=DISABLED is not permitted in profile '" + profiles + "'");
+        }
         String jwtSecret = env.getProperty("JWT_SECRET", env.getProperty("app.jwt.secret", ""));
         if (!StringUtils.hasText(jwtSecret)
                 || jwtSecret.startsWith("CHANGEME")

@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public interface UserDeviceRepository extends JpaRepository<UserDeviceEntity, UUID> {
     Optional<UserDeviceEntity> findByTokenHash(String tokenHash);
+    List<UserDeviceEntity> findByUserIdIn(Collection<UUID> userIds);
     List<UserDeviceEntity> findByUserIdAndIsActiveTrue(UUID userId);
     List<UserDeviceEntity> findByUserIdInAndIsActiveTrue(Collection<UUID> userIds);
     List<UserDeviceEntity> findByUserIdInAndIsActiveTrueAndProvider(Collection<UUID> userIds, String provider);

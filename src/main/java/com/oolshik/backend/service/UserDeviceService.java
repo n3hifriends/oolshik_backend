@@ -2,6 +2,8 @@ package com.oolshik.backend.service;
 
 import com.oolshik.backend.entity.UserDeviceEntity;
 import com.oolshik.backend.repo.UserDeviceRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +17,8 @@ import java.util.regex.Pattern;
 
 @Service
 public class UserDeviceService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserDeviceService.class);
 
     private static final Pattern EXPO_TOKEN_PATTERN =
             Pattern.compile("^(ExponentPushToken|ExpoPushToken)\\[[^\\]]+\\]$");
@@ -41,6 +45,8 @@ public class UserDeviceService {
         entity.setActive(true);
         entity.setLastSeenAt(OffsetDateTime.now());
         repository.save(entity);
+        log.info("Registered push device userId={} provider={} platform={} tokenHashPrefix={}",
+                userId, provider, entity.getPlatform(), hash.substring(0, Math.min(12, hash.length())));
     }
 
     @Transactional
@@ -54,6 +60,8 @@ public class UserDeviceService {
                 if (entity.isActive()) {
                     entity.setActive(false);
                     repository.save(entity);
+                    log.info("Unregistered push device userId={} provider={} tokenHashPrefix={}",
+                            userId, entity.getProvider(), hash.substring(0, Math.min(12, hash.length())));
                 }
             }
         });

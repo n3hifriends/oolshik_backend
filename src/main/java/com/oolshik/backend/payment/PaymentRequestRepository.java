@@ -24,6 +24,13 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
             Collection<String> statuses
     );
 
+    Optional<PaymentRequest> findFirstByTaskIdAndPaymentModeAndPayerRoleAndStatusInOrderByCreatedAtDesc(
+            UUID taskId,
+            PaymentMode paymentMode,
+            PaymentPayerRole payerRole,
+            Collection<String> statuses
+    );
+
     List<PaymentRequest> findByTaskIdAndStatusInOrderByCreatedAtDesc(UUID taskId, Collection<String> statuses);
 
     long countByStatus(String status);

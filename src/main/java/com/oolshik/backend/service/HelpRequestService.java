@@ -30,6 +30,8 @@ import com.oolshik.backend.web.error.ConflictOperationException;
 import io.micrometer.core.instrument.Metrics;
 import org.apache.coyote.BadRequestException;
 import org.locationtech.jts.geom.Point;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
@@ -46,6 +48,8 @@ import java.util.UUID;
 
 @Service
 public class HelpRequestService {
+
+    private static final Logger log = LoggerFactory.getLogger(HelpRequestService.class);
 
     private final HelpRequestRepository repo;
     private final UserRepository userRepo;
@@ -144,6 +148,7 @@ public class HelpRequestService {
         }
 
         HelpRequestEntity saved = repo.save(e);
+        log.info("task created taskId={} requesterId={} status={}", saved.getId(), requesterId, saved.getStatus());
         if (saved.getStatus() == HelpRequestStatus.OPEN) {
             candidateService.seedCandidatesForNewRequest(saved, now);
             NotificationEventContext context = buildContext(
@@ -207,6 +212,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Request not open"); // 409
         }
+        log.info("task auth requested taskId={} helperId={}", requestId, helperId);
         eventService.record(
                 requestId,
                 HelpRequestEventType.AUTH_REQUESTED,
@@ -228,8 +234,9 @@ public class HelpRequestService {
                 null,
                 now
         );
-        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_REQUESTED, e, context);
-        return repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        HelpRequestEntity refreshed = repo.findById(requestId).orElseThrow(() -> new IllegalArgumentException("Request not found"));
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_AUTH_REQUESTED, refreshed, context);
+        return refreshed;
     }
 
     @Transactional
@@ -254,6 +261,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Authorization not allowed");
         }
+        log.info("task authorized taskId={} requesterId={} helperId={}", requestId, requesterId, existing.getPendingHelperId());
         eventService.record(
                 requestId,
                 HelpRequestEventType.AUTH_APPROVED,
@@ -316,6 +324,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Request not pending authorization");
         }
+        log.info("task auth rejected taskId={} requesterId={} reason={}", requestId, requesterId, reason);
         eventService.record(
                 requestId,
                 HelpRequestEventType.AUTH_REJECTED,
@@ -367,7 +376,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Task cannot be marked done");
         }
-
+        log.info("task work done taskId={} helperId={}", requestId, helperId);
         eventService.record(
                 requestId,
                 HelpRequestEventType.WORK_MARKED_DONE,
@@ -414,7 +423,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Completion confirmation not available");
         }
-
+        log.info("task completed taskId={} requesterId={} helperId={}", requestId, requesterId, existing.getHelperId());
         eventService.record(
                 requestId,
                 HelpRequestEventType.COMPLETION_CONFIRMED,
@@ -470,7 +479,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Issue reporting not available");
         }
-
+        log.info("task issue reported taskId={} requesterId={} reason={}", requestId, requesterId, reasonCode);
         eventService.record(
                 requestId,
                 HelpRequestEventType.COMPLETION_ISSUE_REPORTED,
@@ -569,7 +578,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Request cannot be cancelled");
         }
-
+        log.info("task cancelled taskId={} requesterId={} reason={}", requestId, requesterId, reason);
         eventService.record(
                 requestId,
                 HelpRequestEventType.CANCELLED,

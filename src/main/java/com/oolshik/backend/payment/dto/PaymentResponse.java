@@ -5,6 +5,7 @@ import com.oolshik.backend.payment.PaymentMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public class PaymentResponse {
@@ -31,7 +32,12 @@ public class PaymentResponse {
     public Snapshot snapshot;
     public String upiIntent;
     public UUID payerUserId;
+    public UUID payeeUserId;
     public PaymentPayerRole payerRole;
+    public String payerName;
+    public String payeeName;
+    public String validationStatus;
+    public List<String> validationWarnings;
     public UUID requesterUserId;
     public UUID helperUserId;
     public UUID paymentProfileUserId;

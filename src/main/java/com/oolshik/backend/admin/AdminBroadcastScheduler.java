@@ -167,13 +167,27 @@ public class AdminBroadcastScheduler {
     }
 
     private int[] processPush(AdminBroadcastEntity broadcast, List<UUID> userIds) {
+        String provider = pushSender.provider();
+        if ("DISABLED".equalsIgnoreCase(provider)) {
+            userIds.forEach(userId -> deliveryRepository.save(delivery(
+                    broadcast.getId(), userId, "PUSH", "SKIPPED", "push provider disabled")));
+            return new int[]{0, 0};
+        }
+
+        List<UserDeviceEntity> allDevices = deviceRepository.findByUserIdIn(userIds);
+        Map<UUID, List<UserDeviceEntity>> allDevicesByUserId = allDevices.stream()
+                .collect(Collectors.groupingBy(UserDeviceEntity::getUserId));
+        Map<UUID, List<UserDeviceEntity>> activeDevicesByUserId = allDevices.stream()
+                .filter(UserDeviceEntity::isActive)
+                .collect(Collectors.groupingBy(UserDeviceEntity::getUserId));
         List<UserDeviceEntity> devices =
-                deviceRepository.findByUserIdInAndIsActiveTrueAndProvider(userIds, pushSender.provider());
+                deviceRepository.findByUserIdInAndIsActiveTrueAndProvider(userIds, provider);
         Map<UUID, List<UserDeviceEntity>> devicesByUserId = devices.stream()
                 .collect(Collectors.groupingBy(UserDeviceEntity::getUserId));
         if (devices.isEmpty()) {
             userIds.forEach(userId -> deliveryRepository.save(delivery(
-                    broadcast.getId(), userId, "PUSH", "SKIPPED", "no active push device")));
+                    broadcast.getId(), userId, "PUSH", "SKIPPED",
+                    noPushDeviceReason(userId, provider, allDevicesByUserId, activeDevicesByUserId))));
             return new int[]{0, 0};
         }
 
@@ -186,7 +200,8 @@ public class AdminBroadcastScheduler {
         for (UUID userId : userIds) {
             List<UserDeviceEntity> userDevices = devicesByUserId.getOrDefault(userId, List.of());
             if (userDevices.isEmpty()) {
-                deliveryRepository.save(delivery(broadcast.getId(), userId, "PUSH", "SKIPPED", "no active push device"));
+                deliveryRepository.save(delivery(broadcast.getId(), userId, "PUSH", "SKIPPED",
+                        noPushDeviceReason(userId, provider, allDevicesByUserId, activeDevicesByUserId)));
                 continue;
             }
 
@@ -208,6 +223,31 @@ public class AdminBroadcastScheduler {
             if (anySent) sent++; else failed++;
         }
         return new int[]{sent, failed};
+    }
+
+    private String noPushDeviceReason(UUID userId,
+                                      String expectedProvider,
+                                      Map<UUID, List<UserDeviceEntity>> allDevicesByUserId,
+                                      Map<UUID, List<UserDeviceEntity>> activeDevicesByUserId) {
+        List<UserDeviceEntity> allDevices = allDevicesByUserId.getOrDefault(userId, List.of());
+        if (allDevices.isEmpty()) {
+            return "no registered push device";
+        }
+
+        List<UserDeviceEntity> activeDevices = activeDevicesByUserId.getOrDefault(userId, List.of());
+        if (activeDevices.isEmpty()) {
+            String providers = allDevices.stream()
+                    .map(UserDeviceEntity::getProvider)
+                    .distinct()
+                    .collect(Collectors.joining(","));
+            return "no active " + expectedProvider + " push device; inactive providers=" + providers;
+        }
+
+        String providers = activeDevices.stream()
+                .map(UserDeviceEntity::getProvider)
+                .distinct()
+                .collect(Collectors.joining(","));
+        return "no active " + expectedProvider + " push device; active providers=" + providers;
     }
 
     private int[] processSms(AdminBroadcastEntity broadcast, List<UUID> userIds) {

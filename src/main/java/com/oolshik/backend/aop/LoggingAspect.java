@@ -40,17 +40,22 @@ public class LoggingAspect {
 
     @Around("applicationPackagePointcut() && publicMethodPointcut()")
     public Object logAround(ProceedingJoinPoint joinPoint) throws Throwable {
+        boolean debug = log.isDebugEnabled();
         Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
         String sig = joinPoint.getSignature().toShortString();
-        String args = sanitizeArguments(method, joinPoint.getArgs());
         String cid = MDC.get("cid");
         long startNanos = System.nanoTime();
-        log.info("[{}] ▶ {} args={}", cid, sig, args);
+        if (debug) {
+            String args = sanitizeArguments(method, joinPoint.getArgs());
+            log.debug("[{}] ▶ {} args={}", cid, sig, args);
+        }
         try {
             Object result = joinPoint.proceed();
-            long durMs = (System.nanoTime() - startNanos) / 1_000_000;
-            String resStr = (result == null) ? "null" : result.getClass().getSimpleName();
-            log.info("[{}] ◀ {} ok in {}ms -> {}", cid, sig, durMs, resStr);
+            if (debug) {
+                long durMs = (System.nanoTime() - startNanos) / 1_000_000;
+                String resStr = (result == null) ? "null" : result.getClass().getSimpleName();
+                log.debug("[{}] ◀ {} ok in {}ms -> {}", cid, sig, durMs, resStr);
+            }
             return result;
         } catch (Throwable ex) {
             long durMs = (System.nanoTime() - startNanos) / 1_000_000;

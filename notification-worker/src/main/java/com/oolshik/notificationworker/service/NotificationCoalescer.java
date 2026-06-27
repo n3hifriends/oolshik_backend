@@ -29,6 +29,10 @@ public class NotificationCoalescer {
             dispatcher.dispatch(payload);
             return;
         }
+        if (isAuthLifecycleEvent(eventType)) {
+            dispatcher.dispatch(payload);
+            return;
+        }
         pending.compute(payload.getTaskId(), (taskId, existing) -> {
             if (existing == null) {
                 return new PendingEvent(payload, OffsetDateTime.now());
@@ -51,6 +55,12 @@ public class NotificationCoalescer {
                 }
             }
         }
+    }
+
+    private boolean isAuthLifecycleEvent(String eventType) {
+        return "TASK_AUTH_REQUESTED".equals(eventType)
+                || "TASK_AUTH_APPROVED".equals(eventType)
+                || "TASK_AUTH_REJECTED".equals(eventType);
     }
 
     private int priority(NotificationEventPayload payload) {

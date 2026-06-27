@@ -40,7 +40,7 @@ services:
   api:
     build: .
     environment:
-      APP_DB_MODE: ${APP_DB_MODE:-local}
+      APP_DB_MODE: local
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-oolshik}
@@ -52,7 +52,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-devsecret_change_me_at_least_32_chars_long_123456}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@oolshik.app}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
+      SPRING_PROFILES_ACTIVE: docker
       APP_AUTH_PHONE_OTP_ENABLED: ${APP_AUTH_PHONE_OTP_ENABLED:-false}
       APP_AUTH_GOOGLE_ENABLED: ${APP_AUTH_GOOGLE_ENABLED:-true}
       APP_AUTH_GOOGLE_REQUIRE_PHONE: ${APP_AUTH_GOOGLE_REQUIRE_PHONE:-true}
@@ -128,7 +128,7 @@ services:
     profiles: [full]
     build: ./notification-worker
     environment:
-      APP_DB_MODE: ${APP_DB_MODE:-local}
+      APP_DB_MODE: local
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-oolshik}

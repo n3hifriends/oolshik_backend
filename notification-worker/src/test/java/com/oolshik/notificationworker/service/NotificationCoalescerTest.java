@@ -4,6 +4,7 @@ import com.oolshik.notificationworker.config.NotificationWorkerProperties;
 import com.oolshik.notificationworker.model.NotificationEventPayload;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,7 +38,7 @@ class NotificationCoalescerTest {
         private String lastEventType;
 
         CapturingDispatcher() {
-            super(null, null, null, null, null, null, new NotificationWorkerProperties());
+            super(null, null, null, null, null, null, Optional.empty(), new NotificationWorkerProperties());
         }
 
         @Override

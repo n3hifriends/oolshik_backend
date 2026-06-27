@@ -62,6 +62,7 @@ class NotificationDispatcherTest {
                 candidateRepository,
                 templateService,
                 expoPushClient,
+                Optional.empty(),
                 properties
         );
     }

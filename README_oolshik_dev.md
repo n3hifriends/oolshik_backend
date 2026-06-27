@@ -3,7 +3,7 @@ sudo docker rm -f oolshik-api || true
 
 aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin 653895707563.dkr.ecr.ap-south-1.amazonaws.com
 
-sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v2
+sudo docker pull 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
 
 sudo docker run -d \
  --name oolshik-api \
@@ -27,7 +27,7 @@ sudo docker run -d \
  -e KAFKA_TOPIC_STT_RESULTS='stt.results' \
  -e KAFKA_TOPIC_STT_DLQ='stt.jobs.dlq' \
  -e KAFKA_TOPIC_NOTIFICATION_EVENTS='notification.events' \
- 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:v2
+ 653895707563.dkr.ecr.ap-south-1.amazonaws.com/oolshik-api:latest
 
 sudo docker logs oolshik-api --tail 100
 curl -i http://localhost:8080/health

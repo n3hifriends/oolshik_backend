@@ -1,27 +1,71 @@
 #!/usr/bin/env bash
-# Connect to the AWS RDS (ap-south-1) via SSM port forwarding — no bastion needed.
-# Requires: aws cli v2, session-manager-plugin, psql
+# Connect to the DB — local Docker Postgres or AWS RDS via SSM tunnel.
+# Requires: psql
+# RDS mode also requires: aws cli v2, session-manager-plugin, nc
 
 set -euo pipefail
 
-# ── RDS / tunnel config ───────────────────────────────────────────────────────
-DB_HOST="127.0.0.1"
-DB_PORT="5433"
-DB_NAME="oolshik"
-DB_USER="oolshik_admin"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Target selection ───────────────────────────────────────────────────────────
+# Via env:     DB_TARGET=local ./db-rds.sh users
+# Via first arg: ./db-rds.sh local users  |  ./db-rds.sh rds users
+DB_TARGET="${DB_TARGET:-rds}"
+case "${1:-}" in
+  local|docker) DB_TARGET=local; shift ;;
+  rds)          DB_TARGET=rds;   shift ;;
+esac
+
+# ── Common ────────────────────────────────────────────────────────────────────
+DB_NAME="${DB_NAME:-oolshik}"
+
+# ── RDS / SSM tunnel config ───────────────────────────────────────────────────
+RDS_LOCAL_HOST="127.0.0.1"
+RDS_LOCAL_PORT="5433"
+RDS_DB_USER="oolshik_admin"
 export PGPASSWORD="${PGPASSWORD:-Ndroid11!}"
 
 AWS_REGION="ap-south-1"
-SSM_TARGET="${SSM_TARGET:-i-0fa45b589d5e37630}" # STT worker EC2 (has RDS network access)
+SSM_TARGET="${SSM_TARGET:-i-0fa45b589d5e37630}"
 SSM_TARGET_NAME_PATTERN="${SSM_TARGET_NAME_PATTERN:-*stt-worker*}"
 RDS_HOST="oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com"
 RDS_PORT="5432"
 
 TUNNEL_PID_FILE="/tmp/db-rds-tunnel.pid"
 
-# ── tunnel lifecycle ──────────────────────────────────────────────────────────
+# ── Local Docker config ───────────────────────────────────────────────────────
+LOCAL_DB_HOST="127.0.0.1"
+LOCAL_DB_PORT="${LOCAL_DB_PORT:-5432}"
+LOCAL_DB_USER="${LOCAL_DB_USER:-${DB_USER:-oolshik}}"
+LOCAL_DB_PASSWORD="${LOCAL_DB_PASSWORD:-${DB_PASSWORD:-oolshik}}"
+
+# ── Prerequisite checks ───────────────────────────────────────────────────────
+check_prereqs() {
+  if [[ "$DB_TARGET" == "local" ]]; then
+    if command -v docker >/dev/null 2>&1; then
+      return
+    fi
+    if ! command -v psql >/dev/null 2>&1; then
+      echo "ERROR: neither 'docker' nor 'psql' found. Install one before running local mode." >&2
+      exit 1
+    fi
+  else
+    if ! command -v psql >/dev/null 2>&1; then
+      echo "ERROR: 'psql' not found. Install it before running this script." >&2
+      exit 1
+    fi
+    for cmd in aws nc; do
+      if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERROR: '${cmd}' not found. Required for RDS mode." >&2
+        exit 1
+      fi
+    done
+  fi
+}
+
+# ── Tunnel lifecycle (RDS only) ───────────────────────────────────────────────
 port_in_use() {
-  nc -z 127.0.0.1 "$DB_PORT" 2>/dev/null
+  nc -z 127.0.0.1 "$RDS_LOCAL_PORT" 2>/dev/null
 }
 
 ssm_target_online() {
@@ -81,13 +125,13 @@ start_ssm_session() {
     --region "$AWS_REGION" \
     --target "$target" \
     --document-name AWS-StartPortForwardingSessionToRemoteHost \
-    --parameters "{\"host\":[\"${RDS_HOST}\"],\"portNumber\":[\"${RDS_PORT}\"],\"localPortNumber\":[\"${DB_PORT}\"]}" \
+    --parameters "{\"host\":[\"${RDS_HOST}\"],\"portNumber\":[\"${RDS_PORT}\"],\"localPortNumber\":[\"${RDS_LOCAL_PORT}\"]}" \
     >/dev/null &
 }
 
 tunnel_start() {
   if port_in_use; then
-    echo "[db-rds] Tunnel already running on port ${DB_PORT}."
+    echo "[db-rds] Tunnel already running on port ${RDS_LOCAL_PORT}."
     return
   fi
 
@@ -98,13 +142,13 @@ tunnel_start() {
   local retries=20
   while ! port_in_use; do
     if (( retries-- == 0 )); then
-      echo "[db-rds] ERROR: tunnel did not open on port ${DB_PORT} within 10 s." >&2
+      echo "[db-rds] ERROR: tunnel did not open on port ${RDS_LOCAL_PORT} within 10 s." >&2
       tunnel_stop
       exit 1
     fi
     sleep 0.5
   done
-  echo "[db-rds] Tunnel ready on 127.0.0.1:${DB_PORT} (PID $(cat "$TUNNEL_PID_FILE")). Run './db-rds.sh tunnel-stop' when done."
+  echo "[db-rds] Tunnel ready on 127.0.0.1:${RDS_LOCAL_PORT} (PID $(cat "$TUNNEL_PID_FILE")). Run './db-rds.sh tunnel-stop' when done."
 }
 
 tunnel_stop() {
@@ -120,9 +164,9 @@ tunnel_stop() {
 
 ensure_tunnel() {
   if port_in_use; then
-    return  # reuse whatever is holding the port (persistent or manual)
+    return
   fi
-  echo "[db-rds] No tunnel on port ${DB_PORT}. Starting one-shot tunnel for this query..."
+  echo "[db-rds] No tunnel on port ${RDS_LOCAL_PORT}. Starting one-shot tunnel for this query..."
   start_ssm_session
   local ssm_pid=$!
   trap "kill $ssm_pid 2>/dev/null; exit" EXIT
@@ -130,7 +174,7 @@ ensure_tunnel() {
   local retries=20
   while ! port_in_use; do
     if (( retries-- == 0 )); then
-      echo "[db-rds] ERROR: tunnel did not open on port ${DB_PORT} within 10 s." >&2
+      echo "[db-rds] ERROR: tunnel did not open on port ${RDS_LOCAL_PORT} within 10 s." >&2
       kill "$ssm_pid" 2>/dev/null || true
       exit 1
     fi
@@ -139,23 +183,42 @@ ensure_tunnel() {
   echo "[db-rds] Tip: run './db-rds.sh tunnel-start' once to avoid per-query tunnel overhead."
 }
 
+ensure_connection() {
+  if [[ "$DB_TARGET" == "rds" ]]; then
+    ensure_tunnel
+  fi
+}
+
 # ── psql wrapper ──────────────────────────────────────────────────────────────
 psql_cmd() {
-  psql "host=${DB_HOST} port=${DB_PORT} dbname=${DB_NAME} user=${DB_USER} sslmode=require" "$@"
+  if [[ "$DB_TARGET" == "local" ]]; then
+    if command -v docker >/dev/null 2>&1 \
+      && (cd "$SCRIPT_DIR" && docker compose ps db >/dev/null 2>&1); then
+      (cd "$SCRIPT_DIR" && docker compose exec -T \
+        -e PGPASSWORD="${LOCAL_DB_PASSWORD}" \
+        db psql "dbname=${DB_NAME} user=${LOCAL_DB_USER}" "$@")
+    else
+      PGPASSWORD="${LOCAL_DB_PASSWORD}" \
+        psql "host=${LOCAL_DB_HOST} port=${LOCAL_DB_PORT} dbname=${DB_NAME} user=${LOCAL_DB_USER} sslmode=disable" "$@"
+    fi
+  else
+    psql "host=${RDS_LOCAL_HOST} port=${RDS_LOCAL_PORT} dbname=${DB_NAME} user=${RDS_DB_USER} sslmode=require" "$@"
+  fi
 }
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./db-rds.sh <command>
+  ./db-rds.sh [local|rds] <command>
+  DB_TARGET=local ./db-rds.sh <command>
 
-The script opens an SSM tunnel automatically — no separate terminal needed.
+Default target is rds.
 
-Tunnel commands (run once — shared across all queries):
+Tunnel commands (RDS only — run once, shared across all queries):
   tunnel-start          Start a persistent background SSM tunnel
   tunnel-stop           Stop the persistent tunnel
 
-Query commands (auto-start a one-shot tunnel if none is running):
+Query commands:
   connect               Open an interactive psql shell
   users                 List all app users
   user <uuid|phone>     Look up a single user by UUID or phone number
@@ -169,27 +232,27 @@ Query commands (auto-start a one-shot tunnel if none is running):
   run <sql>             Run an arbitrary SQL statement
   <sql>                 Run an arbitrary SQL statement directly
 
-Recommended workflow:
-  ./db-rds.sh tunnel-start   # once
+RDS workflow (SSM tunnel — no bastion needed):
+  ./db-rds.sh tunnel-start
   ./db-rds.sh users
   ./db-rds.sh help-requests
-  ./db-rds.sh tunnel-stop    # when done
+  ./db-rds.sh tunnel-stop
 
-Override password at runtime:
+Local Docker workflow (no tunnel needed):
+  ./db-rds.sh local users
+  ./db-rds.sh local help-requests
+  ./db-rds.sh local run 'select count(*) from app_user'
+  DB_TARGET=local ./db-rds.sh users
+
+Overrides:
   PGPASSWORD=secret ./db-rds.sh users
-
-Override SSM target at runtime:
+  LOCAL_DB_PASSWORD=mypass ./db-rds.sh local users
+  LOCAL_DB_PORT=5433 ./db-rds.sh local users
   SSM_TARGET=i-0123456789abcdef0 ./db-rds.sh users
 EOF
 }
 
-for cmd in psql aws nc; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "ERROR: '${cmd}' not found. Install it before running this script." >&2
-    exit 1
-  fi
-done
-
+# ── Main ──────────────────────────────────────────────────────────────────────
 CMD="${1:-}"
 
 if [[ -z "$CMD" || "$CMD" == "help" || "$CMD" == "--help" || "$CMD" == "-h" ]]; then
@@ -197,19 +260,26 @@ if [[ -z "$CMD" || "$CMD" == "help" || "$CMD" == "--help" || "$CMD" == "-h" ]]; 
   exit 0
 fi
 
+check_prereqs
+
 case "$CMD" in
   tunnel-start)
+    if [[ "$DB_TARGET" == "local" ]]; then
+      echo "ERROR: tunnel-start is only available for DB_TARGET=rds." >&2; exit 1
+    fi
     tunnel_start
     exit 0
     ;;
   tunnel-stop)
+    if [[ "$DB_TARGET" == "local" ]]; then
+      echo "ERROR: tunnel-stop is only available for DB_TARGET=rds." >&2; exit 1
+    fi
     tunnel_stop
     exit 0
     ;;
 esac
 
-# All query commands go through ensure_tunnel (reuses persistent tunnel if up)
-ensure_tunnel
+ensure_connection
 
 run_sql() {
   local sql="$1"
@@ -218,7 +288,7 @@ run_sql() {
 
 case "$CMD" in
   connect)
-    echo "Connecting to ${DB_HOST}/${DB_NAME} as ${DB_USER} ..."
+    echo "Connecting to ${DB_NAME} (target=${DB_TARGET}) ..."
     psql_cmd
     ;;
 
