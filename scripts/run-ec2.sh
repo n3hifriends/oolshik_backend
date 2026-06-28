@@ -120,6 +120,7 @@ do_start() {
   require_var SPRING_DATASOURCE_USERNAME
   require_var SPRING_DATASOURCE_PASSWORD
   require_var JWT_SECRET
+  require_var KAFKA_BOOTSTRAP_SERVERS
   require_cmd aws
   init_docker_cmd
 
