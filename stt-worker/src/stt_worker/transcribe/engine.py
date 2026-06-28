@@ -124,7 +124,12 @@ class FasterWhisperEngine(BaseEngine):
         def _run() -> Dict[str, Any]:
             audio_np = wav_tensor.squeeze(0).detach().cpu().numpy()
             segments_out: List[Segment] = []
-            transcribe_kwargs: Dict[str, Any] = {"vad_filter": True}
+            transcribe_kwargs: Dict[str, Any] = {
+                "vad_filter": True,
+                "condition_on_previous_text": False,
+                "compression_ratio_threshold": 2.4,
+                "temperature": 0,
+            }
             if language:
                 transcribe_kwargs["language"] = language
             segments, info = self.model.transcribe(audio_np, **transcribe_kwargs)

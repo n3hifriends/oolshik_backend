@@ -63,7 +63,7 @@ public class EnvironmentStartupLogger implements SmartInitializingSingleton {
         List<String> violations = new ArrayList<>();
 
         if ("dev".equalsIgnoreCase(otpProvider)) {
-            violations.add("app.otp.provider=dev is not permitted in profile '" + profiles + "'");
+            violations.add("app.otp.provider=dev is not permitted in profile '" + profiles + "'. Use 'none' to disable OTP or 'msg91' for production SMS.");
         }
         if (adminSeedEnabled) {
             violations.add("app.admin.seed.enabled=true is not permitted in profile '" + profiles + "'");
