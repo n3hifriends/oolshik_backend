@@ -14,6 +14,7 @@ public class PaymentResponse {
         public String payeeVpa;
         public String payeeMaskedVpa;
         public String payeeName;
+        public String payeePhoneNumber;
         public String mcc;
         public String merchantId;
         public String txnRef;

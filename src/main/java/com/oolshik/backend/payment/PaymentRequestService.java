@@ -144,15 +144,15 @@ public class PaymentRequestService {
                 .orElseThrow(() -> new IllegalArgumentException("task not found"));
         ensureTaskParticipant(task, actorUserId);
 
+        PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
+
         PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(
                         in.taskId(),
                         ACTIVE_STATUSES)
                 .orElse(null);
-        if (existing != null) {
+        if (existing != null && existing.getPayerRole() == payerRole) {
             return existing;
         }
-
-        PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
         UUID payerUser = resolvePayerUser(task, actorUserId, payerRole);
         UUID payeeUser = resolvePayeeUser(task, payerRole);
         PaymentProfileEntity payeeProfile = paymentProfileService.requireActiveProfile(payeeUser);

@@ -206,6 +206,11 @@ public class PaymentRequestController {
         out.snapshot.payeeVpa = pr.getPayeeVpa();
         out.snapshot.payeeMaskedVpa = MaskingUtils.maskUpiId(pr.getPayeeVpa());
         out.snapshot.payeeName = pr.getPayeeName();
+        if (Boolean.TRUE.equals(out.canPay) && payeeUserId != null) {
+            out.snapshot.payeePhoneNumber = userRepository.findById(payeeUserId)
+                    .map(u -> (u.getPhoneNumber() != null && !u.getPhoneNumber().isBlank()) ? u.getPhoneNumber() : null)
+                    .orElse(null);
+        }
         out.snapshot.mcc = pr.getMcc();
         out.snapshot.merchantId = pr.getMerchantId();
         out.snapshot.txnRef = pr.getTxnRef();
