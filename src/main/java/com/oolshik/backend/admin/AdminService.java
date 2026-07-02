@@ -77,6 +77,8 @@ import java.util.stream.Stream;
 @Service
 @RequiredArgsConstructor
 public class AdminService {
+    private static final int MAX_BLOCK_REASON_LENGTH = 512;
+
     private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private static final Set<String> ALLOWED_ROLES = Set.of("NETA", "KARYAKARTA", "ADMIN");
     private static final int MAX_TRANSCRIPTION_RETRY_BATCH = 100;
@@ -132,8 +134,8 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AdminUserSummary> getUsers(String role, String search, Pageable pageable) {
-        Page<AdminUserSummary> page = userRepository.findForAdmin(blankToNull(role), blankToNull(search), pageable)
+    public PageResponse<AdminUserSummary> getUsers(String role, String search, Boolean blocked, Pageable pageable) {
+        Page<AdminUserSummary> page = userRepository.findForAdmin(blankToNull(role), blankToNull(search), blocked, pageable)
                 .map(this::toUserSummary);
         return PageResponse.from(page);
     }
@@ -141,6 +143,45 @@ public class AdminService {
     @Transactional(readOnly = true)
     public Optional<AdminUserDetail> getUser(UUID id) {
         return userRepository.findById(id).map(this::toUserDetail);
+    }
+
+    @Transactional
+    public AdminUserDetail blockUser(UUID targetId, String reason, UUID actingAdminId) {
+        if (targetId.equals(actingAdminId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot block your own account.");
+        }
+        String cleanReason = cleanBlockReason(reason);
+        UserEntity target = userRepository.findByIdForUpdate(targetId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (target.getRoleSet().contains(Role.ADMIN)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Demote to non-ADMIN before blocking.");
+        }
+        if (target.isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already blocked.");
+        }
+        target.setBlocked(true);
+        target.setBlockedAt(OffsetDateTime.now());
+        target.setBlockReason(cleanReason);
+        target.setBlockedBy(actingAdminId);
+        UserEntity saved = userRepository.save(target);
+        log.info("ADMIN_AUDIT: user blocked target={} by admin={} reason={}", targetId, actingAdminId, cleanReason);
+        return toUserDetail(saved);
+    }
+
+    @Transactional
+    public AdminUserDetail unblockUser(UUID targetId, UUID actingAdminId) {
+        UserEntity target = userRepository.findByIdForUpdate(targetId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!target.isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is not blocked.");
+        }
+        target.setBlocked(false);
+        target.setBlockedAt(null);
+        target.setBlockReason(null);
+        target.setBlockedBy(null);
+        UserEntity saved = userRepository.save(target);
+        log.info("ADMIN_AUDIT: user unblocked target={} by admin={}", targetId, actingAdminId);
+        return toUserDetail(saved);
     }
 
     @Transactional
@@ -395,11 +436,18 @@ public class AdminService {
                 user.getPhoneNumber(),
                 user.getEmail(),
                 parseRoles(user.getRoles()),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.isBlocked()
         );
     }
 
     private AdminUserDetail toUserDetail(UserEntity user) {
+        UserRef blockedByRef = null;
+        if (user.getBlockedBy() != null) {
+            blockedByRef = userRepository.findById(user.getBlockedBy())
+                    .map(u -> new UserRef(u.getId(), u.getDisplayName(), u.getPhoneNumber()))
+                    .orElse(null);
+        }
         return new AdminUserDetail(
                 user.getId(),
                 user.getDisplayName(),
@@ -412,7 +460,11 @@ public class AdminService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 helpRequestRepository.countByRequesterId(user.getId()),
-                helpRequestRepository.countByHelperIdAndStatus(user.getId(), HelpRequestStatus.COMPLETED)
+                helpRequestRepository.countByHelperIdAndStatus(user.getId(), HelpRequestStatus.COMPLETED),
+                user.isBlocked(),
+                user.getBlockedAt(),
+                user.getBlockReason(),
+                blockedByRef
         );
     }
 
@@ -765,5 +817,16 @@ public class AdminService {
         }
         String trimmed = value.trim();
         return "ALL".equalsIgnoreCase(trimmed) ? null : trimmed;
+    }
+
+    private String cleanBlockReason(String reason) {
+        String cleaned = blankToNull(reason);
+        if (cleaned == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Block reason is required.");
+        }
+        if (cleaned.length() > MAX_BLOCK_REASON_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Block reason must be 512 characters or fewer.");
+        }
+        return cleaned;
     }
 }

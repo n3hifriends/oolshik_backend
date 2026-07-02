@@ -3,6 +3,8 @@ package com.oolshik.backend.web;
 import com.oolshik.backend.config.AuthProperties;
 import com.oolshik.backend.config.CommonBeans;
 import com.oolshik.backend.config.LocalizationConfig;
+import com.oolshik.backend.domain.Role;
+import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtAuthFilter;
 import com.oolshik.backend.security.JwtService;
@@ -21,10 +23,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
+
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
@@ -74,6 +87,60 @@ class AuthSecurityWebMvcTest {
     }
 
     @Test
+    void blockedUserJwtIsRejectedBeforeController() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setPhoneNumber("+919876543210");
+        user.setRoleSet(Set.of(Role.NETA));
+        user.setBlocked(true);
+        stubAccessToken("blocked-token", userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer blocked-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType("application/json"))
+                .andExpect(jsonPath("$.error").value("ACCOUNT_BLOCKED"));
+    }
+
+    @Test
+    void nonAdminCannotCallBlockEndpoint() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setPhoneNumber("+919876543210");
+        user.setRoleSet(Set.of(Role.NETA));
+        stubAccessToken("neta-token", userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(patch("/api/admin/users/" + targetId + "/block")
+                        .header("Authorization", "Bearer neta-token")
+                        .contentType("application/json")
+                        .content("{\"reason\":\"policy\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void nonAdminCannotCallUnblockEndpoint() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setPhoneNumber("+919876543210");
+        user.setRoleSet(Set.of(Role.NETA));
+        stubAccessToken("neta-unblock-token", userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(patch("/api/admin/users/" + targetId + "/unblock")
+                        .header("Authorization", "Bearer neta-unblock-token")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void loginPreflightIsAllowedForConfiguredOrigin() throws Exception {
         mockMvc.perform(options("/api/auth/login")
                         .header("Origin", "https://www.oolshik.in")
@@ -91,5 +158,14 @@ class AuthSecurityWebMvcTest {
                         .header("Access-Control-Request-Headers", "authorization,content-type,x-correlation-id"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "https://www.oolshik.in"));
+    }
+
+    private void stubAccessToken(String token, UUID userId) {
+        Claims claims = mock(Claims.class);
+        Jws<Claims> jws = mock(Jws.class);
+        when(jwtService.parse(token)).thenReturn(jws);
+        when(jws.getBody()).thenReturn(claims);
+        when(claims.get("typ", String.class)).thenReturn("access");
+        when(claims.getSubject()).thenReturn(userId.toString());
     }
 }

@@ -37,6 +37,18 @@ public class UserEntity {
     private String preferredLanguage;
 
     @Column(nullable = false)
+    private boolean blocked;
+
+    @Column(name = "blocked_at")
+    private OffsetDateTime blockedAt;
+
+    @Column(name = "blocked_reason", length = 512)
+    private String blockReason;
+
+    @Column(name = "blocked_by")
+    private UUID blockedBy;
+
+    @Column(nullable = false)
     private OffsetDateTime createdAt;
 
     @Column(nullable = false)
@@ -88,6 +100,14 @@ public class UserEntity {
     public void setRoles(String roles) { this.roles = roles; }
     public void setLanguages(String languages) { this.languages = languages; }
     public void setPreferredLanguage(String preferredLanguage) { this.preferredLanguage = preferredLanguage; }
+    public boolean isBlocked() { return blocked; }
+    public OffsetDateTime getBlockedAt() { return blockedAt; }
+    public String getBlockReason() { return blockReason; }
+    public UUID getBlockedBy() { return blockedBy; }
+    public void setBlocked(boolean blocked) { this.blocked = blocked; }
+    public void setBlockedAt(OffsetDateTime blockedAt) { this.blockedAt = blockedAt; }
+    public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
+    public void setBlockedBy(UUID blockedBy) { this.blockedBy = blockedBy; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 

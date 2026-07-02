@@ -2,18 +2,22 @@ package com.oolshik.backend.repo;
 
 import com.oolshik.backend.entity.UserEntity;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import java.util.Optional;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-public interface UserRepository extends JpaRepository<UserEntity, UUID> {
+public interface UserRepository extends JpaRepository<UserEntity, UUID>, JpaSpecificationExecutor<UserEntity> {
     Optional<UserEntity> findByFirebaseUid(String firebaseUid);
     Optional<UserEntity> findByPhoneNumber(String phoneNumber);
     Optional<UserEntity> findByEmail(String email);
@@ -28,55 +32,35 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     @Query("select u from UserEntity u where u.id = :id")
     Optional<UserEntity> findByIdForUpdate(@Param("id") UUID id);
 
-    default Page<UserEntity> findForAdmin(String role, String search, Pageable pageable) {
-        boolean hasRole = role != null && !role.isBlank();
-        boolean hasSearch = search != null && !search.isBlank();
-        if (hasRole && hasSearch) {
-            return findForAdminByRoleAndSearch(role, search, pageable);
-        }
-        if (hasRole) {
-            return findForAdminByRole(role, pageable);
-        }
-        if (hasSearch) {
-            return findForAdminBySearch(search, pageable);
-        }
-        return findAll(pageable);
+    default Page<UserEntity> findForAdmin(String role, String search, Boolean blocked, Pageable pageable) {
+        return findAll(adminSpec(role, search, blocked), pageable);
     }
 
-    @Query(value = """
-            select u from UserEntity u
-            where lower(u.roles) like lower(concat('%', :role, '%'))
-              and ((u.displayName is not null and lower(u.displayName) like lower(concat('%', :search, '%')))
-                   or (u.phoneNumber is not null and u.phoneNumber like concat('%', :search, '%'))
-                   or (u.email is not null and lower(u.email) like lower(concat('%', :search, '%'))))
-            """,
-            countQuery = """
-            select count(u) from UserEntity u
-            where lower(u.roles) like lower(concat('%', :role, '%'))
-              and ((u.displayName is not null and lower(u.displayName) like lower(concat('%', :search, '%')))
-                   or (u.phoneNumber is not null and u.phoneNumber like concat('%', :search, '%'))
-                   or (u.email is not null and lower(u.email) like lower(concat('%', :search, '%'))))
-            """)
-    Page<UserEntity> findForAdminByRoleAndSearch(@Param("role") String role,
-                                                 @Param("search") String search,
-                                                 Pageable pageable);
+    default Page<UserEntity> findForAdminByRole(String role, Pageable pageable) {
+        return findForAdmin(role, null, null, pageable);
+    }
 
-    @Query("select u from UserEntity u where lower(u.roles) like lower(concat('%', :role, '%'))")
-    Page<UserEntity> findForAdminByRole(@Param("role") String role, Pageable pageable);
-
-    @Query(value = """
-            select u from UserEntity u
-            where (u.displayName is not null and lower(u.displayName) like lower(concat('%', :search, '%')))
-               or (u.phoneNumber is not null and u.phoneNumber like concat('%', :search, '%'))
-               or (u.email is not null and lower(u.email) like lower(concat('%', :search, '%')))
-            """,
-            countQuery = """
-            select count(u) from UserEntity u
-            where (u.displayName is not null and lower(u.displayName) like lower(concat('%', :search, '%')))
-               or (u.phoneNumber is not null and u.phoneNumber like concat('%', :search, '%'))
-               or (u.email is not null and lower(u.email) like lower(concat('%', :search, '%')))
-            """)
-    Page<UserEntity> findForAdminBySearch(@Param("search") String search, Pageable pageable);
+    static Specification<UserEntity> adminSpec(String role, String search, Boolean blocked) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (role != null && !role.isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("roles")), "%" + role.toLowerCase() + "%"));
+            }
+            if (search != null && !search.isBlank()) {
+                String nameLike = "%" + search.toLowerCase() + "%";
+                String phoneLike = "%" + search + "%";
+                predicates.add(cb.or(
+                    cb.and(cb.isNotNull(root.get("displayName")), cb.like(cb.lower(root.get("displayName")), nameLike)),
+                    cb.and(cb.isNotNull(root.get("phoneNumber")), cb.like(root.get("phoneNumber"), phoneLike)),
+                    cb.and(cb.isNotNull(root.get("email")), cb.like(cb.lower(root.get("email")), nameLike))
+                ));
+            }
+            if (blocked != null) {
+                predicates.add(cb.equal(root.get("blocked"), blocked));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
 
     @Query("select count(u) from UserEntity u where lower(u.roles) like lower(concat('%', :role, '%'))")
     long countByRolesContaining(@Param("role") String role);

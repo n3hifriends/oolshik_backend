@@ -2,6 +2,7 @@ package com.oolshik.backend.web;
 
 import com.oolshik.backend.config.LocaleSupport;
 import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestCapReachedResponse;
+import com.oolshik.backend.web.error.AccountBlockedException;
 import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
@@ -108,6 +109,16 @@ public class GlobalExceptionHandler {
         log.warn("[{}] 400 invalid_argument: {}", cid(), msg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(cid(), "invalid_argument", msg));
+    }
+
+    /* ---------------------------
+     *  403 – Account blocked
+     * --------------------------- */
+    @ExceptionHandler(AccountBlockedException.class)
+    public ResponseEntity<ApiError> handleAccountBlocked(AccountBlockedException ex) {
+        log.warn("[{}] 403 account_blocked", cid());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(cid(), "ACCOUNT_BLOCKED", ex.getMessage()));
     }
 
     /* ---------------------------

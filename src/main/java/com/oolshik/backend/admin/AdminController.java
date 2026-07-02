@@ -13,6 +13,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminTranscriptionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminUserDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminUserSummary;
 import com.oolshik.backend.admin.AdminDtos.AssignReportRequest;
+import com.oolshik.backend.admin.AdminDtos.BlockUserRequest;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
 import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
@@ -60,11 +61,13 @@ public class AdminController {
     public PageResponse<AdminUserSummary> listUsers(
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return adminService.getUsers(
                 role,
                 search,
+                parseUserStatus(status),
                 pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
     }
@@ -74,6 +77,23 @@ public class AdminController {
         return adminService.getUser(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PatchMapping("/users/{id}/block")
+    public AdminUserDetail blockUser(
+            @PathVariable UUID id,
+            @RequestBody BlockUserRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.blockUser(id, request.reason(), adminId);
+    }
+
+    @PatchMapping("/users/{id}/unblock")
+    public AdminUserDetail unblockUser(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.unblockUser(id, adminId);
     }
 
     @PatchMapping("/users/{id}/roles")
@@ -231,6 +251,13 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "size must be between 1 and " + MAX_PAGE_SIZE);
         }
         return PageRequest.of(page, size, sort);
+    }
+
+    private Boolean parseUserStatus(String status) {
+        if (status == null || status.isBlank() || "ALL".equalsIgnoreCase(status.trim())) return null;
+        if ("BLOCKED".equalsIgnoreCase(status.trim())) return Boolean.TRUE;
+        if ("ACTIVE".equalsIgnoreCase(status.trim())) return Boolean.FALSE;
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + status + ". Must be ACTIVE or BLOCKED.");
     }
 
     private HelpRequestStatus parseHelpRequestStatus(String status) {

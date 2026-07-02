@@ -10,7 +10,9 @@
       "Skill(code-review:*)",
       "Bash(grep -n '$root\\\\|backgroundColor.*background\\\\|background.*color\\\\|preset.*dark' /Users/nitinkalokhe/Ni3/Oolshik/app/screens/PaymentPayScreen.tsx)",
       "Bash(grep -n '$root\\\\|const $\\\\|const themed' /Users/nitinkalokhe/Ni3/Oolshik/app/screens/PaymentPayScreen.tsx)",
-      "Bash(grep -n 'const $root\\\\|$root\\\\s*=' /Users/nitinkalokhe/Ni3/Oolshik/app/screens/PaymentPayScreen.tsx)"
+      "Bash(grep -n 'const $root\\\\|$root\\\\s*=' /Users/nitinkalokhe/Ni3/Oolshik/app/screens/PaymentPayScreen.tsx)",
+      "Bash(grep -v 'theme\\\\|spacing\\\\|$size')",
+      "Bash(grep -A5 'themed\\($progressPill\\\\|themed\\($stepBadge' /Users/nitinkalokhe/Ni3/Oolshik/app/screens/login/PhoneOtpFlow.tsx)"
     ]
   }
 }

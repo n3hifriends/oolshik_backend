@@ -11,6 +11,7 @@ import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
 import com.oolshik.backend.service.UserService;
+import com.oolshik.backend.util.PhoneUtil;
 import com.oolshik.backend.web.dto.AuthDtos.*;
 import jakarta.validation.Valid;
 import org.springframework.context.MessageSource;
@@ -23,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import com.oolshik.backend.web.error.AccountBlockedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 
 @RestController
@@ -87,7 +89,16 @@ public class AuthController {
                     )
             ));
         }
+        String phone = PhoneUtil.normalize(req.phone());
+        userRepository.findByPhoneNumber(phone)
+                .filter(UserEntity::isBlocked)
+                .ifPresent(blockedUser -> {
+                    throw new AccountBlockedException();
+                });
         var user = userService.getOrCreateByPhone(req.phone(), req.displayName(), req.email());
+        if (user.isBlocked()) {
+            throw new AccountBlockedException();
+        }
         String access = jwt.generateAccessToken(user.getId(), user.getPhoneNumber());
         String refresh = jwt.generateRefreshToken(user.getId());
         return ResponseEntity.ok(new TokenResponse(access, refresh));

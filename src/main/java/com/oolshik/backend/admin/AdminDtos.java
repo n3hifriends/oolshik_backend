@@ -54,7 +54,8 @@ public final class AdminDtos {
             String phoneNumber,
             String email,
             List<String> roles,
-            OffsetDateTime joinedAt
+            OffsetDateTime joinedAt,
+            boolean blocked
     ) {
     }
 
@@ -70,8 +71,15 @@ public final class AdminDtos {
             OffsetDateTime joinedAt,
             OffsetDateTime updatedAt,
             long requestsMade,
-            long jobsDone
+            long jobsDone,
+            boolean blocked,
+            OffsetDateTime blockedAt,
+            String blockReason,
+            UserRef blockedBy
     ) {
+    }
+
+    public record BlockUserRequest(String reason) {
     }
 
     public record UpdateRolesRequest(List<String> roles) {

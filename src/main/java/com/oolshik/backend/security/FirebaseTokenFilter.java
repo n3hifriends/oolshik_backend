@@ -3,6 +3,9 @@ package com.oolshik.backend.security;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
+import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.util.PhoneUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +21,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class FirebaseTokenFilter extends OncePerRequestFilter {
@@ -25,11 +29,13 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
     private final FirebaseAuth firebaseAuth;
     private final String projectId;
     private final boolean checkRevoked;
+    private final UserRepository userRepository;
 
-    public FirebaseTokenFilter(FirebaseAuth firebaseAuth, String projectId, boolean checkRevoked) {
+    public FirebaseTokenFilter(FirebaseAuth firebaseAuth, String projectId, boolean checkRevoked, UserRepository userRepository) {
         this.firebaseAuth = Objects.requireNonNull(firebaseAuth);
         this.projectId = Objects.requireNonNull(projectId);
         this.checkRevoked = checkRevoked;
+        this.userRepository = Objects.requireNonNull(userRepository);
     }
 
     @Override
@@ -67,6 +73,12 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
             String uid = decoded.getUid();
             String phone = (String) decoded.getClaims().get("phone_number");
             String email = decoded.getEmail();
+            Optional<UserEntity> existingUser = resolveUser(uid, phone, email);
+            if (existingUser.map(UserEntity::isBlocked).orElse(false)) {
+                SecurityContextHolder.clearContext();
+                forbiddenAccountBlocked(res);
+                return;
+            }
 
             Collection<SimpleGrantedAuthority> authorities = extractAuthorities(decoded);
 
@@ -103,6 +115,28 @@ public class FirebaseTokenFilter extends OncePerRequestFilter {
         res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         res.setContentType("application/json");
         res.getWriter().write("{\"ok\":false,\"error\":\"" + code + "\"}");
+    }
+
+    private void forbiddenAccountBlocked(HttpServletResponse res) throws IOException {
+        res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        res.setContentType("application/json");
+        res.getWriter().write("{\"error\":\"ACCOUNT_BLOCKED\",\"message\":\"Your account has been blocked. Contact support.\"}");
+    }
+
+    private Optional<UserEntity> resolveUser(String uid, String phone, String email) {
+        if (uid != null && !uid.isBlank()) {
+            Optional<UserEntity> byUid = userRepository.findByFirebaseUid(uid);
+            if (byUid.isPresent()) return byUid;
+        }
+        String normalizedPhone = PhoneUtil.normalize(phone);
+        if (normalizedPhone != null && !normalizedPhone.isBlank()) {
+            Optional<UserEntity> byPhone = userRepository.findByPhoneNumber(normalizedPhone);
+            if (byPhone.isPresent()) return byPhone;
+        }
+        if (email != null && !email.isBlank()) {
+            return userRepository.findByEmailIgnoreCase(email);
+        }
+        return Optional.empty();
     }
 
     @SuppressWarnings("unchecked")

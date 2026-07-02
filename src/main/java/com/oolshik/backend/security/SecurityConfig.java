@@ -4,6 +4,7 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
+import com.oolshik.backend.repo.UserRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -45,8 +46,8 @@ public class SecurityConfig {
 
     @Bean
     @Conditional(FirebaseIdentityCondition.class)
-    public FirebaseTokenFilter firebaseTokenFilter(FirebaseAuth firebaseAuth) {
-        return new FirebaseTokenFilter(firebaseAuth, firebaseProjectId, checkRevoked);
+    public FirebaseTokenFilter firebaseTokenFilter(FirebaseAuth firebaseAuth, UserRepository userRepository) {
+        return new FirebaseTokenFilter(firebaseAuth, firebaseProjectId, checkRevoked, userRepository);
     }
 
     @Bean

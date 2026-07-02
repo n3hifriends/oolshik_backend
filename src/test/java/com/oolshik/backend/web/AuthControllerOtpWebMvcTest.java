@@ -1,6 +1,7 @@
 package com.oolshik.backend.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oolshik.backend.config.AuthProperties;
 import com.oolshik.backend.config.LocalizationConfig;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
@@ -10,6 +11,7 @@ import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
 import com.oolshik.backend.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -59,6 +61,16 @@ class AuthControllerOtpWebMvcTest {
     @MockBean
     private CurrentUserService currentUserService;
 
+    @MockBean
+    private AuthProperties authProperties;
+
+    @BeforeEach
+    void setUpAuthProperties() {
+        AuthProperties properties = new AuthProperties();
+        when(authProperties.getPhone()).thenReturn(properties.getPhone());
+        when(authProperties.getGoogle()).thenReturn(properties.getGoogle());
+    }
+
     @Test
     void otpRequestPreservesContract() throws Exception {
         when(otpService.requestLoginOtp("+919876543210"))
@@ -95,6 +107,28 @@ class AuthControllerOtpWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access-token"))
                 .andExpect(jsonPath("$.refreshToken").value("refresh-token"));
+    }
+
+    @Test
+    void otpVerifyRejectsBlockedUserBeforeIssuingTokens() throws Exception {
+        UserEntity user = new UserEntity();
+        user.setId(UUID.randomUUID());
+        user.setPhoneNumber("+919876543210");
+        user.setBlocked(true);
+
+        when(otpService.verifyLoginOtp("+919876543210", "123456")).thenReturn(true);
+        when(userService.getOrCreateByPhone("+919876543210", "Nitin", "n@example.com")).thenReturn(user);
+
+        mockMvc.perform(post("/api/auth/otp/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "phone", "+919876543210",
+                                "code", "123456",
+                                "displayName", "Nitin",
+                                "email", "n@example.com"
+                        ))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("ACCOUNT_BLOCKED"));
     }
 
     @Test

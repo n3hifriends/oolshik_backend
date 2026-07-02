@@ -7,6 +7,7 @@ import com.oolshik.backend.repo.FederatedIdentityRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.web.dto.AuthDtos.TokenResponse;
+import com.oolshik.backend.web.error.AccountBlockedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,5 +106,34 @@ class GoogleAuthServiceTest {
         assertEquals("+919876543210", user.getPhoneNumber());
         assertEquals("access-token", tokens.accessToken());
         assertEquals("refresh-token", tokens.refreshToken());
+    }
+
+    @Test
+    void blockedUserCannotAuthenticateWithGoogle() {
+        UUID userId = UUID.randomUUID();
+        GoogleIdTokenVerifierService.GoogleIdentityClaims claims =
+                new GoogleIdTokenVerifierService.GoogleIdentityClaims(
+                        "google-subject",
+                        "user@example.com",
+                        true,
+                        "User"
+                );
+        FederatedIdentityEntity identity = new FederatedIdentityEntity();
+        identity.setUserId(userId);
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setEmail("user@example.com");
+        user.setPhoneNumber("+919876543210");
+        user.setBlocked(true);
+
+        when(googleIdTokenVerifierService.verify("google-id-token")).thenReturn(claims);
+        when(federatedIdentityRepository.findByProviderAndProviderSubject("google", "google-subject"))
+                .thenReturn(Optional.of(identity));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        assertThrows(
+                AccountBlockedException.class,
+                () -> service.authenticate("google-id-token", "+919876543210")
+        );
     }
 }

@@ -37,7 +37,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 String tokenType = c.get("typ", String.class);
                 if ("access".equals(tokenType) && SecurityContextHolder.getContext().getAuthentication() == null) {
                     var userId = java.util.UUID.fromString(c.getSubject());
-                    userRepository.findById(userId).ifPresent(user -> {
+                    var userOpt = userRepository.findById(userId);
+                    if (userOpt.isPresent()) {
+                        var user = userOpt.get();
+                        if (user.isBlocked()) {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"error\":\"ACCOUNT_BLOCKED\",\"message\":\"Your account has been blocked. Contact support.\"}");
+                            return;
+                        }
                         var authorities = user.getRoleSet().stream()
                                 .map(role -> new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.name()))
                                 .collect(Collectors.toList());
@@ -51,7 +59,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(auth);
-                    });
+                    }
                 }
             } catch (Exception ignored) {
                 SecurityContextHolder.clearContext();
