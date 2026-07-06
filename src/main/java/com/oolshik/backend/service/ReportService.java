@@ -1,6 +1,7 @@
 // src/main/java/com/oolshik/backend/service/ReportService.java
 package com.oolshik.backend.service;
 
+import com.oolshik.backend.domain.ReportPriority;
 import com.oolshik.backend.domain.ReportReason;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.ReportEventEntity;
@@ -53,10 +54,14 @@ public class ReportService {
                     "errors.report.onlyOneTarget");
         }
 
-        // If OTHER, details are required
+        // OTHER and CHILD_SAFETY both require non-blank details
         if (req.reason() == ReportReason.OTHER && (req.text() == null || req.text().isBlank())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "errors.report.detailsRequiredForOther");
+        }
+        if (req.reason() == ReportReason.CHILD_SAFETY && (req.text() == null || req.text().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "errors.report.detailsRequiredForChildSafety");
         }
 
         // Resolve target user
@@ -92,6 +97,9 @@ public class ReportService {
         ev.setHelpRequestId(helpRequestId); // may be null in user-report flow
         ev.setReason(req.reason());
         ev.setDetails((req.text() != null && !req.text().isBlank()) ? req.text().trim() : null);
+        if (req.reason() == ReportReason.CHILD_SAFETY) {
+            ev.setPriority(ReportPriority.CRITICAL);
+        }
 
         reportRepo.save(ev);
         return new CreateResponse(ev.getId());
