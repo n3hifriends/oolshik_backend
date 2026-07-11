@@ -630,7 +630,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
              h.updatedAt = :issueReportedAt
        where h.id = :id
          and h.requesterId = :requesterId
-         and h.status = :expectedStatus
+         and h.status in :allowedStatuses
       """)
   int updateReportIssueIfPending(
           @Param("id") UUID id,
@@ -638,7 +638,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("issueReportedAt") OffsetDateTime issueReportedAt,
           @Param("reasonCode") com.oolshik.backend.domain.HelpRequestIssueReason reasonCode,
           @Param("reasonText") String reasonText,
-          @Param("expectedStatus") HelpRequestStatus expectedStatus,
+          @Param("allowedStatuses") List<HelpRequestStatus> allowedStatuses,
           @Param("newStatus") HelpRequestStatus newStatus,
           @Param("stateReason") String stateReason
   );

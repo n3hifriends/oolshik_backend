@@ -1,6 +1,7 @@
 package com.oolshik.backend.service;
 
 import com.oolshik.backend.config.TaskRecoveryProperties;
+import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
@@ -62,6 +63,7 @@ public class HelpRequestService {
     private final HelpRequestCandidateService candidateService;
     private final HelpRequestOfferEventRepository offerEventRepository;
     private final ActiveRequestCapConfigService activeRequestCapConfigService;
+    private final UserService userService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -74,7 +76,8 @@ public class HelpRequestService {
             HelpRequestRatingService ratingService,
             HelpRequestCandidateService candidateService,
             HelpRequestOfferEventRepository offerEventRepository,
-            ActiveRequestCapConfigService activeRequestCapConfigService
+            ActiveRequestCapConfigService activeRequestCapConfigService,
+            UserService userService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -87,6 +90,7 @@ public class HelpRequestService {
         this.candidateService = candidateService;
         this.offerEventRepository = offerEventRepository;
         this.activeRequestCapConfigService = activeRequestCapConfigService;
+        this.userService = userService;
     }
 
     @Transactional
@@ -149,6 +153,11 @@ public class HelpRequestService {
 
         HelpRequestEntity saved = repo.save(e);
         log.info("task created taskId={} requesterId={} status={}", saved.getId(), requesterId, saved.getStatus());
+        try {
+            userService.advanceOnboardingPhase(requesterId, OnboardingPhase.FIRST_ACTION);
+        } catch (Exception ex) {
+            log.warn("onboarding phase advance failed userId={}: {}", requesterId, ex.getMessage());
+        }
         if (saved.getStatus() == HelpRequestStatus.OPEN) {
             candidateService.seedCandidatesForNewRequest(saved, now);
             NotificationEventContext context = buildContext(
@@ -213,6 +222,11 @@ public class HelpRequestService {
             throw new ConflictOperationException("Request not open"); // 409
         }
         log.info("task auth requested taskId={} helperId={}", requestId, helperId);
+        try {
+            userService.advanceOnboardingPhase(helperId, OnboardingPhase.FIRST_ACTION);
+        } catch (Exception ex) {
+            log.warn("onboarding phase advance failed userId={}: {}", helperId, ex.getMessage());
+        }
         eventService.record(
                 requestId,
                 HelpRequestEventType.AUTH_REQUESTED,
@@ -423,7 +437,20 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Completion confirmation not available");
         }
-        log.info("task completed taskId={} requesterId={} helperId={}", requestId, requesterId, existing.getHelperId());
+        UUID completionHelperId = existing.getHelperId();
+        log.info("task completed taskId={} requesterId={} helperId={}", requestId, requesterId, completionHelperId);
+        try {
+            userService.advanceOnboardingPhase(requesterId, OnboardingPhase.GRADUATED);
+        } catch (Exception ex) {
+            log.warn("onboarding phase advance failed userId={}: {}", requesterId, ex.getMessage());
+        }
+        if (completionHelperId != null) {
+            try {
+                userService.advanceOnboardingPhase(completionHelperId, OnboardingPhase.GRADUATED);
+            } catch (Exception ex) {
+                log.warn("onboarding phase advance failed userId={}: {}", completionHelperId, ex.getMessage());
+            }
+        }
         eventService.record(
                 requestId,
                 HelpRequestEventType.COMPLETION_CONFIRMED,
@@ -472,7 +499,7 @@ public class HelpRequestService {
                 now,
                 reasonCode,
                 reasonText,
-                HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION,
+                List.of(HelpRequestStatus.ASSIGNED, HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
                 HelpRequestStatus.REVIEW_REQUIRED,
                 HelpRequestEventType.COMPLETION_ISSUE_REPORTED.name()
         );

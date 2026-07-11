@@ -21,7 +21,8 @@
       "Bash(convert --version)",
       "Bash(sips --version)",
       "Bash(sips --help)",
-      "Bash(sips -z 288 288 /Users/nitinkalokhe/Ni3/Oolshik/assets/images/app-icon-android-adaptive-foreground.png --out /private/tmp/claude-501/-Users-nitinkalokhe-Ni3-spring-boot-proj-oolshik-backend-otp/1b42b3c3-f6f5-4f8f-a287-1a4560fe6ea3/scratchpad/test_288.png)"
+      "Bash(sips -z 288 288 /Users/nitinkalokhe/Ni3/Oolshik/assets/images/app-icon-android-adaptive-foreground.png --out /private/tmp/claude-501/-Users-nitinkalokhe-Ni3-spring-boot-proj-oolshik-backend-otp/1b42b3c3-f6f5-4f8f-a287-1a4560fe6ea3/scratchpad/test_288.png)",
+      "Bash(npx jest *)"
     ]
   }
 }

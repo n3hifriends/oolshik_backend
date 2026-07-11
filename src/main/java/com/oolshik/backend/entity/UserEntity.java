@@ -3,6 +3,7 @@ package com.oolshik.backend.entity;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.*;
+import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.domain.Role;
 
 @Entity
@@ -48,6 +49,10 @@ public class UserEntity {
     @Column(name = "blocked_by")
     private UUID blockedBy;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "onboarding_phase", length = 32)
+    private OnboardingPhase onboardingPhase;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -61,6 +66,7 @@ public class UserEntity {
         if (updatedAt == null) updatedAt = createdAt;
         if (roles == null || roles.isBlank()) roles = "NETA";
         if (preferredLanguage == null || preferredLanguage.isBlank()) preferredLanguage = "en-IN";
+        if (onboardingPhase == null) onboardingPhase = OnboardingPhase.FRESH;
     }
 
     @PreUpdate
@@ -118,6 +124,14 @@ public class UserEntity {
 
     public void setFirebaseUid(String firebaseUid) {
         this.firebaseUid = firebaseUid;
+    }
+
+    public OnboardingPhase getOnboardingPhase() {
+        return onboardingPhase;
+    }
+
+    public void setOnboardingPhase(OnboardingPhase onboardingPhase) {
+        this.onboardingPhase = onboardingPhase;
     }
 
 }

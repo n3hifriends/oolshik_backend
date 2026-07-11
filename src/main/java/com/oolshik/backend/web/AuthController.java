@@ -2,6 +2,7 @@ package com.oolshik.backend.web;
 
 import com.oolshik.backend.config.AuthProperties;
 import com.oolshik.backend.config.LocaleSupport;
+import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
@@ -26,10 +27,14 @@ import java.util.Objects;
 
 import com.oolshik.backend.web.error.AccountBlockedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final OtpService otp;
     private final UserService userService;
@@ -152,6 +157,7 @@ public class AuthController {
         out.put("languages", u.getLanguages());
         out.put("preferredLanguage", preferredLanguage);
         out.put("locale", preferredLanguage);
+        out.put("onboardingPhase", u.getOnboardingPhase() != null ? u.getOnboardingPhase().name() : OnboardingPhase.FRESH.name());
         return ResponseEntity.ok(out);
     }
 
@@ -180,6 +186,18 @@ public class AuthController {
                         });
                 u.setEmail(nextEmail);
                 u.setEmailVerified(false);
+            }
+        }
+        if (patch.containsKey("onboardingPhase")) {
+            try {
+                OnboardingPhase requested = OnboardingPhase.valueOf(String.valueOf(patch.get("onboardingPhase")));
+                OnboardingPhase current = u.getOnboardingPhase() != null ? u.getOnboardingPhase() : OnboardingPhase.FRESH;
+                if (current.isBefore(requested)) {
+                    u.setOnboardingPhase(requested);
+                }
+                // Silently ignore backwards transitions — idempotent by design.
+            } catch (IllegalArgumentException ignored) {
+                log.warn("PATCH /auth/me: unrecognised onboardingPhase value '{}'", patch.get("onboardingPhase"));
             }
         }
         if (u.getPreferredLanguage() == null || u.getPreferredLanguage().isBlank()) {

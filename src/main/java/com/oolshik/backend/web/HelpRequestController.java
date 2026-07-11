@@ -341,7 +341,7 @@ public class HelpRequestController {
                 : ratingSummary.ratingByHelper();
         Boolean canMarkDone = viewerCanMarkDone(e.getStatus(), e.getHelperId(), viewerId);
         Boolean canConfirm = viewerCanConfirm(e.getStatus(), e.getRequesterId(), viewerId);
-        Boolean canReportIssue = viewerCanConfirm(e.getStatus(), e.getRequesterId(), viewerId);
+        Boolean canReportIssue = viewerCanReportIssue(e.getStatus(), e.getRequesterId(), viewerId);
         Boolean canRate = viewerCanRate(e.getStatus(), e.getRequesterId(), e.getHelperId(), viewerId);
         return new HelpRequestView(
                 e.getId(), e.getTitle(), e.getDescription(),
@@ -382,7 +382,7 @@ public class HelpRequestController {
         UUID pendingHelperId = maskPendingHelperId(row.getPendingHelperId(), row.getRequesterId(), viewerId);
         Boolean canMarkDone = viewerCanMarkDone(row.getStatus(), row.getHelperId(), viewerId);
         Boolean canConfirm = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
-        Boolean canReportIssue = viewerCanConfirm(row.getStatus(), row.getRequesterId(), viewerId);
+        Boolean canReportIssue = viewerCanReportIssue(row.getStatus(), row.getRequesterId(), viewerId);
         Boolean canRate = viewerCanRate(row.getStatus(), row.getRequesterId(), row.getHelperId(), viewerId);
         String resolvedVoiceUrl = audioPlaybackUrlResolver.resolve(row.getAudioFileId(), row.getVoiceUrl());
         return new HelpRequestRowView(
@@ -441,6 +441,14 @@ public class HelpRequestController {
                 && requesterId != null
                 && viewerId.equals(requesterId)
                 && "WORK_DONE_PENDING_CONFIRMATION".equals(String.valueOf(status));
+    }
+
+    private Boolean viewerCanReportIssue(Object status, UUID requesterId, UUID viewerId) {
+        String s = String.valueOf(status);
+        return viewerId != null
+                && requesterId != null
+                && viewerId.equals(requesterId)
+                && ("ASSIGNED".equals(s) || "WORK_DONE_PENDING_CONFIRMATION".equals(s));
     }
 
     private Boolean viewerCanRate(Object status, UUID requesterId, UUID helperId, UUID viewerId) {
