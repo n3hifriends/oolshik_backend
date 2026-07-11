@@ -18,8 +18,16 @@ import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
 import com.oolshik.backend.admin.AdminDtos.TrendPoint;
 import com.oolshik.backend.admin.AdminDtos.UserRef;
+import com.oolshik.backend.domain.HelpRequestActorRole;
+import com.oolshik.backend.domain.HelpRequestCompletionMode;
+import com.oolshik.backend.domain.HelpRequestEventType;
 import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.domain.HelpRequestStatus;
+import com.oolshik.backend.notification.AssignmentChange;
+import com.oolshik.backend.notification.NotificationEventContext;
+import com.oolshik.backend.notification.NotificationEventType;
+import com.oolshik.backend.service.HelpRequestEventService;
+import com.oolshik.backend.service.HelpRequestNotificationService;
 import com.oolshik.backend.domain.ReportPriority;
 import com.oolshik.backend.domain.ReportReason;
 import com.oolshik.backend.domain.ReportStatus;
@@ -93,6 +101,8 @@ public class AdminService {
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
+    private final HelpRequestEventService helpRequestEventService;
+    private final HelpRequestNotificationService helpRequestNotificationService;
 
     @Transactional(readOnly = true)
     public StatsResponse getStats() {
@@ -259,6 +269,139 @@ public class AdminService {
     @Transactional(readOnly = true)
     public Optional<AdminRequestDetail> getRequest(UUID id) {
         return helpRequestRepository.findById(id).map(this::toRequestDetail);
+    }
+
+    @Transactional
+    public AdminRequestDetail adminUpdateHelpRequestStatus(
+            UUID requestId, String rawStatus, String note, UUID adminUserId) {
+        if (note == null || note.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin note is required");
+        }
+        HelpRequestStatus newStatus;
+        try {
+            newStatus = HelpRequestStatus.valueOf(rawStatus == null ? "" : rawStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + rawStatus);
+        }
+        if (!Set.of(HelpRequestStatus.OPEN, HelpRequestStatus.REVIEW_REQUIRED,
+                HelpRequestStatus.COMPLETED, HelpRequestStatus.CANCELLED).contains(newStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Status override not supported in v1: " + newStatus);
+        }
+        HelpRequestEntity entity = helpRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
+        HelpRequestStatus fromStatus = entity.getStatus();
+        if (newStatus == fromStatus) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status is already " + newStatus);
+        }
+        String cleanedNote = cleanNote(note);
+        OffsetDateTime now = OffsetDateTime.now();
+        switch (newStatus) {
+            case OPEN -> {
+                entity.setHelperId(null);
+                entity.setPendingHelperId(null);
+                entity.setPendingAuthExpiresAt(null);
+                entity.setAssignmentExpiresAt(null);
+                entity.setWorkDoneAt(null);
+                entity.setCompletionConfirmationExpiresAt(null);
+                entity.setNextEscalationAt(null);
+                entity.setCancelledAt(null);
+                entity.setCancelledBy(null);
+                entity.setCancelReasonCode(null);
+                entity.setCancelReasonText(null);
+                entity.setCompletedAt(null);
+                entity.setCompletionMode(null);
+                entity.setCompletedBy(null);
+                entity.setIssueReportedAt(null);
+                entity.setIssueReasonCode(null);
+                entity.setIssueReasonText(null);
+                entity.setAcceptedAt(null);
+                entity.setAuthorizedAt(null);
+                entity.setAuthorizedBy(null);
+                entity.setHelperAcceptedAt(null);
+                entity.setHelperAcceptLocation(null);
+            }
+            case REVIEW_REQUIRED -> {
+                if (entity.getIssueReportedAt() == null) entity.setIssueReportedAt(now);
+                entity.setCompletedAt(null);
+                entity.setCompletionMode(null);
+                entity.setCompletedBy(null);
+                entity.setWorkDoneAt(null);
+                entity.setCompletionConfirmationExpiresAt(null);
+                entity.setCancelledAt(null);
+                entity.setCancelledBy(null);
+                entity.setCancelReasonCode(null);
+                entity.setCancelReasonText(null);
+                entity.setAssignmentExpiresAt(null);
+                entity.setNextEscalationAt(null);
+            }
+            case COMPLETED -> {
+                if (entity.getCompletedAt() == null) entity.setCompletedAt(now);
+                entity.setCompletionMode(HelpRequestCompletionMode.ADMIN_OVERRIDE);
+                entity.setCompletedBy(adminUserId);
+                entity.setCompletionConfirmationExpiresAt(null);
+                entity.setNextEscalationAt(null);
+                entity.setAssignmentExpiresAt(null);
+                entity.setCancelledAt(null);
+                entity.setCancelledBy(null);
+                entity.setCancelReasonCode(null);
+                entity.setCancelReasonText(null);
+            }
+            case CANCELLED -> {
+                if (entity.getCancelledAt() == null) entity.setCancelledAt(now);
+                entity.setCancelledBy(adminUserId);
+                entity.setCancelReasonCode("ADMIN_OVERRIDE");
+                entity.setCancelReasonText(cleanedNote);
+                entity.setHelperId(null);
+                entity.setPendingHelperId(null);
+                entity.setPendingAuthExpiresAt(null);
+                entity.setAssignmentExpiresAt(null);
+                entity.setCompletionConfirmationExpiresAt(null);
+                entity.setNextEscalationAt(null);
+                entity.setCompletedAt(null);
+                entity.setCompletionMode(null);
+                entity.setCompletedBy(null);
+                entity.setWorkDoneAt(null);
+            }
+        }
+        entity.setStatus(newStatus);
+        entity.setLastStateChangeAt(now);
+        entity.setLastStateChangeReason("ADMIN_OVERRIDE");
+        entity.setAdminOverrideReason(cleanedNote);
+        helpRequestRepository.save(entity);
+        helpRequestEventService.record(
+                requestId,
+                HelpRequestEventType.ADMIN_STATUS_OVERRIDE,
+                HelpRequestActorRole.ADMIN,
+                adminUserId,
+                "ADMIN_OVERRIDE",
+                cleanedNote,
+                null
+        );
+        if (newStatus == HelpRequestStatus.COMPLETED || newStatus == HelpRequestStatus.CANCELLED) {
+            List<com.oolshik.backend.payment.PaymentRequest> activePayments =
+                    paymentRequestRepository.findByTaskIdAndStatusInOrderByCreatedAtDesc(
+                            requestId, List.of("PENDING", "INITIATED"));
+            for (com.oolshik.backend.payment.PaymentRequest payment : activePayments) {
+                payment.setStatus("CANCELLED");
+                paymentRequestRepository.save(payment);
+            }
+            if (!activePayments.isEmpty()) {
+                log.info("ADMIN_AUDIT: cancelled {} active payment(s) for override id={} status={}",
+                        activePayments.size(), requestId, newStatus);
+            }
+        }
+        NotificationEventContext ctx = new NotificationEventContext();
+        ctx.setActorUserId(adminUserId);
+        ctx.setOccurredAt(now);
+        ctx.setPreviousStatus(fromStatus.name());
+        ctx.setNewStatus(newStatus.name());
+        ctx.setAssignmentChange(AssignmentChange.NONE);
+        helpRequestNotificationService.enqueueTaskEvent(
+                NotificationEventType.ADMIN_STATUS_OVERRIDE, entity, ctx);
+        log.info("ADMIN_AUDIT: help_request status overridden id={} from={} to={} by={}",
+                requestId, fromStatus, newStatus, adminUserId);
+        return toRequestDetail(entity);
     }
 
     @Transactional(readOnly = true)
@@ -513,7 +656,8 @@ public class AdminService {
                 request.getOfferCurrency(),
                 request.getCreatedAt(),
                 audioUrl,
-                transcription == null ? null : transcription.getTranscriptText()
+                transcription == null ? null : transcription.getTranscriptText(),
+                request.getAdminOverrideReason()
         );
     }
 

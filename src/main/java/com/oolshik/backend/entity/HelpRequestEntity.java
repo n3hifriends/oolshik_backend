@@ -175,6 +175,9 @@ public class HelpRequestEntity {
     @Column(name = "reminder_80_sent", nullable = false)
     private Boolean reminder80Sent;
 
+    @Column(name = "admin_override_reason", columnDefinition = "TEXT")
+    private String adminOverrideReason;
+
     public Point getHelperAcceptLocation() {
         return helperAcceptLocation;
     }
@@ -321,6 +324,8 @@ public class HelpRequestEntity {
     public void setReminder50Sent(Boolean reminder50Sent) { this.reminder50Sent = reminder50Sent; }
     public Boolean getReminder80Sent() { return reminder80Sent; }
     public void setReminder80Sent(Boolean reminder80Sent) { this.reminder80Sent = reminder80Sent; }
+    public String getAdminOverrideReason() { return adminOverrideReason; }
+    public void setAdminOverrideReason(String adminOverrideReason) { this.adminOverrideReason = adminOverrideReason; }
     public String getLastStateChangeReason() { return lastStateChangeReason; }
     public void setLastStateChangeReason(String lastStateChangeReason) { this.lastStateChangeReason = lastStateChangeReason; }
     public Integer getRadiusStage() { return radiusStage; }

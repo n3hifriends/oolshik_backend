@@ -28,7 +28,10 @@
       "Bash(./mvnw -Dtest=AuthControllerOtpWebMvcTest,GoogleAuthServiceTest test)",
       "Bash(xargs ls -1)",
       "Bash(git -C /Users/nitinkalokhe/Ni3/Oolshik diff main -- app/screens/task-detail/hooks/useTaskDetailController.tsx)",
-      "Bash(git -C /Users/nitinkalokhe/Ni3/Oolshik diff main -- app/screens/home-feed/hooks/useHomeFeedController.tsx)"
+      "Bash(git -C /Users/nitinkalokhe/Ni3/Oolshik diff main -- app/screens/home-feed/hooks/useHomeFeedController.tsx)",
+      "Bash(sort -t'_' -k1 -V)",
+      "Bash(./mvnw test *)",
+      "Bash(./mvnw -Dtest=\"AdminServiceBlockUserTest,AdminServiceHelpRequestStatusOverrideTest,AdminRequestStatusControllerWebMvcTest\" test)"
     ]
   }
 }

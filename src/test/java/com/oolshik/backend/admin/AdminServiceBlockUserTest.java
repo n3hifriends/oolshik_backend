@@ -5,6 +5,8 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.payment.PaymentRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
+import com.oolshik.backend.service.HelpRequestEventService;
+import com.oolshik.backend.service.HelpRequestNotificationService;
 import com.oolshik.backend.repo.NotificationOutboxRepository;
 import com.oolshik.backend.repo.OtpAuditLogRepository;
 import com.oolshik.backend.repo.ReportActionRepository;
@@ -61,6 +63,10 @@ class AdminServiceBlockUserTest {
     private AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     @Mock
     private TranscriptionJobPublisher transcriptionJobPublisher;
+    @Mock
+    private HelpRequestEventService helpRequestEventService;
+    @Mock
+    private HelpRequestNotificationService helpRequestNotificationService;
 
     private AdminService service;
 
@@ -76,7 +82,9 @@ class AdminServiceBlockUserTest {
                 reportActionRepository,
                 notificationOutboxRepository,
                 audioPlaybackUrlResolver,
-                transcriptionJobPublisher
+                transcriptionJobPublisher,
+                helpRequestEventService,
+                helpRequestNotificationService
         );
     }
 

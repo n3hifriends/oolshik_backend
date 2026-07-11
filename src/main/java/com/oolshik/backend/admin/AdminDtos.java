@@ -115,7 +115,8 @@ public final class AdminDtos {
             String offerCurrency,
             OffsetDateTime createdAt,
             String audioUrl,
-            String transcript
+            String transcript,
+            String adminOverrideReason
     ) {
     }
 
@@ -252,6 +253,9 @@ public final class AdminDtos {
             String action,
             String note
     ) {
+    }
+
+    public record UpdateHelpRequestStatusRequest(String status, String note) {
     }
 
     public record AdminNotificationRow(

@@ -17,6 +17,7 @@ import com.oolshik.backend.admin.AdminDtos.BlockUserRequest;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
 import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
+import com.oolshik.backend.admin.AdminDtos.UpdateHelpRequestStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateReportStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateRolesRequest;
 import com.oolshik.backend.domain.HelpRequestStatus;
@@ -136,6 +137,15 @@ public class AdminController {
         return adminService.getRequest(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PatchMapping("/requests/{id}/status")
+    public AdminRequestDetail updateRequestStatus(
+            @PathVariable UUID id,
+            @RequestBody UpdateHelpRequestStatusRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.adminUpdateHelpRequestStatus(id, request.status(), request.note(), adminId);
     }
 
     @GetMapping("/otp-audit")
