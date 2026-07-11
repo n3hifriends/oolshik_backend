@@ -127,7 +127,8 @@ class FasterWhisperEngine(BaseEngine):
             transcribe_kwargs: Dict[str, Any] = {
                 "vad_filter": True,
                 "condition_on_previous_text": False,
-                "compression_ratio_threshold": 2.4,
+                "compression_ratio_threshold": 1.8,
+                "repetition_penalty": 1.1,
                 "temperature": 0,
             }
             if language:

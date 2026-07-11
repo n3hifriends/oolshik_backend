@@ -10,6 +10,7 @@ import com.oolshik.backend.service.AuthService;
 import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
+import com.oolshik.backend.service.SystemConfigService;
 import com.oolshik.backend.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,9 @@ class AuthControllerOtpWebMvcTest {
 
     @MockBean
     private AuthProperties authProperties;
+
+    @MockBean
+    private SystemConfigService systemConfigService;
 
     @BeforeEach
     void setUpAuthProperties() {

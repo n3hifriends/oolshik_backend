@@ -68,6 +68,8 @@ class HelpRequestServiceTest {
     private com.oolshik.backend.repo.HelpRequestOfferEventRepository offerEventRepository;
     @Mock
     private ActiveRequestCapConfigService activeRequestCapConfigService;
+    @Mock
+    private UserService userService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -88,7 +90,8 @@ class HelpRequestServiceTest {
                 ratingService,
                 candidateService,
                 offerEventRepository,
-                activeRequestCapConfigService
+                activeRequestCapConfigService,
+                userService
         );
     }
 
@@ -563,7 +566,7 @@ class HelpRequestServiceTest {
                 any(),
                 eq(HelpRequestIssueReason.QUALITY_ISSUE),
                 eq("Need cleanup"),
-                eq(HelpRequestStatus.WORK_DONE_PENDING_CONFIRMATION),
+                org.mockito.ArgumentMatchers.anyList(),
                 eq(HelpRequestStatus.REVIEW_REQUIRED),
                 eq(HelpRequestEventType.COMPLETION_ISSUE_REPORTED.name())
         )).thenReturn(1);

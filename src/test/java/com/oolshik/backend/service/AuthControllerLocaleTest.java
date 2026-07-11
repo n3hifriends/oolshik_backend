@@ -5,6 +5,7 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.security.JwtService;
+import com.oolshik.backend.service.SystemConfigService;
 import com.oolshik.backend.web.AuthController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,8 @@ class AuthControllerLocaleTest {
     private CurrentUserService currentUserService;
     @Mock
     private MessageSource messageSource;
+    @Mock
+    private SystemConfigService systemConfigService;
 
     private AuthController controller;
     private AuthProperties authProperties;
@@ -61,7 +64,8 @@ class AuthControllerLocaleTest {
                 googleAuthService,
                 currentUserService,
                 messageSource,
-                authProperties
+                authProperties,
+                systemConfigService
         );
     }
 

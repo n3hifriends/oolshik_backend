@@ -155,6 +155,8 @@ app:
     outboxMaxAttempts: ${NOTIF_OUTBOX_MAX_ATTEMPTS:8}
   payment:
     expirySweepIntervalMs: ${PAYMENT_EXPIRY_SWEEP_INTERVAL_MS:60000}
+  zone:
+    bypass-when-no-zones-active: true
   feedback:
     maxPerDay: ${FEEDBACK_MAX_PER_DAY:10}
     rateLimitWindowHours: ${FEEDBACK_RATE_LIMIT_WINDOW_HOURS:24}

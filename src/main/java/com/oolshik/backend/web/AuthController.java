@@ -11,6 +11,7 @@ import com.oolshik.backend.service.AuthService;
 import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
+import com.oolshik.backend.service.SystemConfigService;
 import com.oolshik.backend.service.UserService;
 import com.oolshik.backend.util.PhoneUtil;
 import com.oolshik.backend.web.dto.AuthDtos.*;
@@ -45,6 +46,7 @@ public class AuthController {
     private final CurrentUserService currentUserService;
     private final MessageSource messageSource;
     private final AuthProperties authProperties;
+    private final SystemConfigService systemConfigService;
 
     public AuthController(
             OtpService otp,
@@ -55,7 +57,8 @@ public class AuthController {
             GoogleAuthService googleAuthService,
             CurrentUserService currentUserService,
             MessageSource messageSource,
-            AuthProperties authProperties
+            AuthProperties authProperties,
+            SystemConfigService systemConfigService
     ) {
         this.otp = otp;
         this.userService = userService;
@@ -66,6 +69,7 @@ public class AuthController {
         this.currentUserService = currentUserService;
         this.messageSource = messageSource;
         this.authProperties = authProperties;
+        this.systemConfigService = systemConfigService;
     }
 
     @PostMapping("/otp/request")
@@ -167,6 +171,23 @@ public class AuthController {
             @RequestBody Map<String, Object> patch
     ) {
         UserEntity u = requireCurrentUser(principal);
+
+        // Validate phase gate before applying any mutations so a 403 never causes partial saves.
+        OnboardingPhase requestedPhase = null;
+        if (patch.containsKey("onboardingPhase")) {
+            try {
+                requestedPhase = OnboardingPhase.valueOf(String.valueOf(patch.get("onboardingPhase")));
+                OnboardingPhase current = u.getOnboardingPhase() != null ? u.getOnboardingPhase() : OnboardingPhase.FRESH;
+                if (current == OnboardingPhase.FRESH && requestedPhase == OnboardingPhase.INTENT_SET
+                        && systemConfigService.isZoneGateEnabled() && !u.isZoneConfirmed()) {
+                    return ResponseEntity.status(403).body(Map.of("error", "zone_not_confirmed"));
+                }
+            } catch (IllegalArgumentException ignored) {
+                log.warn("PATCH /auth/me: unrecognised onboardingPhase value '{}'", patch.get("onboardingPhase"));
+                requestedPhase = null;
+            }
+        }
+
         if (patch.containsKey("displayName")) u.setDisplayName(String.valueOf(patch.get("displayName")));
         if (patch.containsKey("languages")) u.setLanguages(String.valueOf(patch.get("languages")));
         if (patch.containsKey("preferredLanguage")) {
@@ -188,17 +209,12 @@ public class AuthController {
                 u.setEmailVerified(false);
             }
         }
-        if (patch.containsKey("onboardingPhase")) {
-            try {
-                OnboardingPhase requested = OnboardingPhase.valueOf(String.valueOf(patch.get("onboardingPhase")));
-                OnboardingPhase current = u.getOnboardingPhase() != null ? u.getOnboardingPhase() : OnboardingPhase.FRESH;
-                if (current.isBefore(requested)) {
-                    u.setOnboardingPhase(requested);
-                }
-                // Silently ignore backwards transitions — idempotent by design.
-            } catch (IllegalArgumentException ignored) {
-                log.warn("PATCH /auth/me: unrecognised onboardingPhase value '{}'", patch.get("onboardingPhase"));
+        if (requestedPhase != null) {
+            OnboardingPhase current = u.getOnboardingPhase() != null ? u.getOnboardingPhase() : OnboardingPhase.FRESH;
+            if (current.isBefore(requestedPhase)) {
+                u.setOnboardingPhase(requestedPhase);
             }
+            // Silently ignore backwards transitions — idempotent by design.
         }
         if (u.getPreferredLanguage() == null || u.getPreferredLanguage().isBlank()) {
             u.setPreferredLanguage(LocaleSupport.EN_IN_TAG);

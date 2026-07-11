@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.oolshik.backend.domain.HelpRequestStatus;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.notification.NotificationEventContext;
 import com.oolshik.backend.notification.NotificationEventType;
@@ -92,7 +95,7 @@ public class TranscriptionResultService {
             return;
         }
 
-        String transcript = transcriptText.strip();
+        String transcript = collapseRepeatedTranscript(transcriptText.strip());
         if (titleMissing) {
             task.setTitle(buildTitle(transcript));
         }
@@ -137,5 +140,44 @@ public class TranscriptionResultService {
             }
         }
         return -1;
+    }
+
+    // Detects Whisper hallucination loops where the same sentence is repeated many times
+    // and collapses the transcript down to the unique first occurrence.
+    private String collapseRepeatedTranscript(String text) {
+        if (text == null || text.isBlank() || text.length() < 20) return text;
+
+        // Split on sentence-ending punctuation (includes Devanagari danda ।)
+        String[] parts = text.split("(?<=[.!?।])\\s+");
+        if (parts.length < 3) return text;
+
+        String first = parts[0].strip();
+        if (first.isEmpty()) return text;
+
+        // If 70%+ of all sentences are identical to the first, it's a hallucination loop
+        long matches = Arrays.stream(parts)
+                .filter(p -> p.strip().equalsIgnoreCase(first))
+                .count();
+        if (matches * 10 >= parts.length * 7) {
+            log.warn("Collapsed repeated transcript: {} occurrences of '{}' in {} parts",
+                    matches, first.length() > 60 ? first.substring(0, 60) + "…" : first, parts.length);
+            return first;
+        }
+
+        // More general case: stop at the first repeated sentence
+        Set<String> seen = new LinkedHashSet<>();
+        StringBuilder result = new StringBuilder();
+        for (String part : parts) {
+            if (!seen.add(part.strip().toLowerCase())) break;
+            if (!result.isEmpty()) result.append(" ");
+            result.append(part.strip());
+        }
+        String collapsed = result.toString().strip();
+        // Only use collapsed version if it's meaningfully shorter (at least 40% shorter)
+        if (collapsed.length() < text.length() * 0.6) {
+            log.warn("Collapsed repeated transcript from {} to {} chars", text.length(), collapsed.length());
+            return collapsed;
+        }
+        return text;
     }
 }

@@ -53,6 +53,15 @@ public class UserEntity {
     @Column(name = "onboarding_phase", length = 32)
     private OnboardingPhase onboardingPhase;
 
+    @Column(name = "zone_confirmed", nullable = false)
+    private boolean zoneConfirmed;
+
+    @Column(name = "confirmed_zone_id")
+    private UUID confirmedZoneId;
+
+    @Column(name = "zone_confirmed_at")
+    private OffsetDateTime zoneConfirmedAt;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -134,4 +143,10 @@ public class UserEntity {
         this.onboardingPhase = onboardingPhase;
     }
 
+    public boolean isZoneConfirmed() { return zoneConfirmed; }
+    public void setZoneConfirmed(boolean zoneConfirmed) { this.zoneConfirmed = zoneConfirmed; }
+    public UUID getConfirmedZoneId() { return confirmedZoneId; }
+    public void setConfirmedZoneId(UUID confirmedZoneId) { this.confirmedZoneId = confirmedZoneId; }
+    public OffsetDateTime getZoneConfirmedAt() { return zoneConfirmedAt; }
+    public void setZoneConfirmedAt(OffsetDateTime zoneConfirmedAt) { this.zoneConfirmedAt = zoneConfirmedAt; }
 }
