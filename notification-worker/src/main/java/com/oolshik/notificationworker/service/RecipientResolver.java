@@ -69,9 +69,13 @@ public class RecipientResolver {
             case TASK_RELEASED -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
             }
-            case TASK_REASSIGNED, TASK_TIMEOUT -> {
+            case TASK_REASSIGNED -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
-                addIfPresent(recipients, helperId(payload));
+                addIfPresent(recipients, payload.getPreviousHelperId());
+            }
+            case TASK_TIMEOUT -> {
+                addIfPresent(recipients, payload.getRequesterUserId());
+                addIfPresent(recipients, helperUserId(payload));
             }
             case WORK_MARKED_DONE, COMPLETION_REMINDER_50, COMPLETION_REMINDER_80 -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
@@ -107,6 +111,9 @@ public class RecipientResolver {
             case PAYMENT_DISPUTED -> {
                 addIfPresent(recipients, payload.getRequesterUserId());
                 addIfPresent(recipients, helperUserId(payload));
+                if (payload.getActorUserId() != null) {
+                    recipients.remove(payload.getActorUserId());
+                }
             }
             case PAYMENT_EXPIRED -> {
                 addIfPresent(recipients, payload.getPayerUserId());

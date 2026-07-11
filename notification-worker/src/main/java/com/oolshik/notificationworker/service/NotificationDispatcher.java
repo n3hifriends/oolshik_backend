@@ -250,16 +250,18 @@ public class NotificationDispatcher {
         if (payload.getOfferAmount() == null) {
             return body;
         }
-        String offerLabel = LocaleSupport.isMarathi(localeTag) ? "ऑफर" : "Offer";
         String currency = payload.getOfferCurrency() == null ? "INR" : payload.getOfferCurrency();
-        String suffix = " " + offerLabel + ": " + currency + " " + payload.getOfferAmount().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        String amount = payload.getOfferAmount().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        String offerLabel = LocaleSupport.isMarathi(localeTag) ? "ऑफर" : "Offer";
+        String formatted = "INR".equals(currency) ? "₹" + amount : currency + " " + amount;
+        String suffix = offerLabel + ": " + formatted;
         if (body == null || body.isBlank()) {
-            return suffix.trim();
+            return suffix;
         }
-        if (body.contains("Offer:") || body.contains("ऑफर:")) {
+        if (body.contains(offerLabel + ":")) {
             return body;
         }
-        return body + suffix;
+        return body + " " + suffix;
     }
 
     private NotificationDeliveryLogEntity buildLog(
@@ -312,10 +314,35 @@ public class NotificationDispatcher {
     }
 
     private NotificationTemplateService.RecipientRole roleForRecipient(NotificationEventPayload payload, UUID recipientId) {
-        if (payload.getRequesterUserId() != null && payload.getRequesterUserId().equals(recipientId)) {
-            return NotificationTemplateService.RecipientRole.REQUESTER;
-        }
-        return NotificationTemplateService.RecipientRole.HELPER;
+        NotificationEventType type = NotificationEventType.valueOf(payload.getEventType());
+        return switch (type) {
+            case TASK_CREATED, TASK_RADIUS_EXPANDED, OFFER_UPDATED ->
+                    NotificationTemplateService.RecipientRole.CANDIDATE_HELPER;
+            case PAYMENT_ACTION_REQUIRED ->
+                    NotificationTemplateService.RecipientRole.PAYER;
+            case PAYMENT_INITIATED, PAYMENT_MARKED_PAID ->
+                    payload.getPayerUserId() != null && payload.getPayerUserId().equals(recipientId)
+                            ? NotificationTemplateService.RecipientRole.PAYER
+                            : NotificationTemplateService.RecipientRole.PAYEE;
+            case PAYMENT_REQUEST_CREATED -> {
+                boolean isPayer = payload.getPayerUserId() != null
+                        ? payload.getPayerUserId().equals(recipientId)
+                        : payload.getRequesterUserId() != null && payload.getRequesterUserId().equals(recipientId);
+                yield isPayer ? NotificationTemplateService.RecipientRole.PAYER
+                             : NotificationTemplateService.RecipientRole.PAYEE;
+            }
+            case PAYMENT_EXPIRED -> {
+                boolean isPayer = payload.getPayerUserId() != null
+                        ? payload.getPayerUserId().equals(recipientId)
+                        : payload.getRequesterUserId() != null && payload.getRequesterUserId().equals(recipientId);
+                yield isPayer ? NotificationTemplateService.RecipientRole.PAYER
+                             : NotificationTemplateService.RecipientRole.REQUESTER;
+            }
+            default ->
+                    payload.getRequesterUserId() != null && payload.getRequesterUserId().equals(recipientId)
+                            ? NotificationTemplateService.RecipientRole.REQUESTER
+                            : NotificationTemplateService.RecipientRole.HELPER;
+        };
     }
 
     private static class ExpoOutgoingMessage {
