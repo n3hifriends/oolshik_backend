@@ -74,7 +74,7 @@ services:
         scope: RUN_TIME
         type: SECRET
       - key: APP_CORS_ALLOWED_ORIGINS
-        value: https://your-frontend-domain.example
+        value: https://admin.oolshik.in,https://www.oolshik.in
         scope: RUN_TIME
         type: GENERAL
       - key: APP_DOCS_ENABLED

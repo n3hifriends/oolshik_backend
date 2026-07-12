@@ -131,6 +131,90 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
 
   @Query(
           value = """
+        SELECT
+          h.id,
+          h.title,
+          h.description,
+          ST_Y(h.location::geometry)       AS latitude,
+          ST_X(h.location::geometry)       AS longitude,
+          h.radius_meters                  AS radiusMeters,
+          h.status,
+          h.requester_id                   AS requesterId,
+          u.display_name                   AS createdByName,
+          u.phone_number                   AS createdByPhoneNumber,
+          hu.display_name                  AS helperName,
+          hu.phone_number                  AS helperPhoneNumber,
+          h.helper_id                      AS helperId,
+          h.pending_helper_id              AS pendingHelperId,
+          h.created_at                     AS createdAt,
+          h.updated_at                     AS updatedAt,
+          h.helper_accepted_at             AS helperAcceptedAt,
+          h.assignment_expires_at          AS assignmentExpiresAt,
+          h.pending_auth_expires_at        AS pendingAuthExpiresAt,
+          h.cancelled_at                   AS cancelledAt,
+          h.work_done_at                   AS workDoneAt,
+          h.completion_confirmation_expires_at AS completionConfirmationExpiresAt,
+          h.reassigned_count               AS reassignedCount,
+          h.released_count                 AS releasedCount,
+          h.radius_stage                   AS radiusStage,
+          h.next_escalation_at             AS nextEscalationAt,
+          h.audio_file_id                  AS audioFileId,
+          h.completion_mode                AS completionMode,
+          h.offer_amount                   AS offerAmount,
+          h.offer_currency                 AS offerCurrency,
+          h.offer_updated_at               AS offerUpdatedAt,
+          h.voice_url                      AS voiceUrl,
+          COALESCE((
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          ), (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          ))                               AS ratingValue,
+          (
+            SELECT AVG(r.rating_value)::numeric(3,2)
+            FROM help_request_rating r
+            WHERE r.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
+          )                                AS helperAvgRating,
+          (
+            SELECT AVG(r.rating_value)::numeric(3,2)
+            FROM help_request_rating r
+            WHERE r.target_user_id = h.requester_id
+          )                                AS requesterAvgRating,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.requester_id
+          )                                AS ratingByRequester,
+          (
+            SELECT r.rating_value
+            FROM help_request_rating r
+            WHERE r.request_id = h.id
+              AND r.rater_user_id = h.helper_id
+          )                                AS ratingByHelper,
+          NULL::double precision           AS distanceMtr
+        FROM help_request h
+        JOIN app_user u ON u.id = h.requester_id
+        LEFT JOIN app_user hu ON hu.id = COALESCE(h.helper_id, h.pending_helper_id)
+        WHERE h.requester_id = :requesterId
+          AND (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+        ORDER BY h.created_at DESC
+        LIMIT 50
+        """,
+          nativeQuery = true
+  )
+  List<HelpRequestRow> findByRequesterIdPaged(
+          @Param("requesterId") UUID requesterId,
+          @Param("statusesCsv") String statusesCsv
+  );
+
+  @Query(
+          value = """
         SELECT COUNT(*)
         FROM help_request h
         WHERE h.helper_id = :helperId

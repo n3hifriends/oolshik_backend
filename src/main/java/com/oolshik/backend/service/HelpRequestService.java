@@ -194,6 +194,13 @@ public class HelpRequestService {
         return repo.findTaskByTaskId(taskId);
     }
 
+    public List<HelpRequestRow> getMyRequests(UUID requesterId, List<String> statuses) {
+        String statusesCsv = (statuses == null || statuses.isEmpty())
+                ? ""
+                : String.join(",", statuses);
+        return repo.findByRequesterIdPaged(requesterId, statusesCsv);
+    }
+
     // Completion confirmation implementation plan:
     // 1. Helper marks work done with a guarded repository update.
     // 2. Requester can confirm or report an issue only from the pending-confirmation state.

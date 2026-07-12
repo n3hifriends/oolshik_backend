@@ -172,6 +172,18 @@ public class HelpRequestController {
                 .map(row -> view(row, viewerId));
     }
 
+    @GetMapping("/mine")
+    public List<HelpRequestRowView> mine(
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
+            @RequestParam(required = false) List<String> statuses
+    ) {
+        var requester = currentUserService.require(principal);
+        return service.getMyRequests(requester.getId(), statuses)
+                .stream()
+                .map(row -> view(row, requester.getId()))
+                .toList();
+    }
+
     @GetMapping("/active-summary")
     public ActiveRequestSummaryResponse activeSummary(
             @AuthenticationPrincipal AuthenticatedUserPrincipal principal

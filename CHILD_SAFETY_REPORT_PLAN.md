@@ -40,16 +40,16 @@ The goal is not just to add a label. The implemented flow must prove that:
 
 ## Decision Record
 
-| Topic | Decision |
-| --- | --- |
-| Use existing report system? | Yes. Extend `/api/reports` and admin Reports. |
-| New reason value | `CHILD_SAFETY` |
-| User-facing label | `Child safety concern` |
-| Backend priority | `CRITICAL` automatically |
-| Details required? | Yes for `CHILD_SAFETY` and `OTHER` |
-| Admin handling | Existing report detail plus audit notes/actions |
-| Separate child safety table? | No for v1 |
-| Anonymous/public reporting? | Out of scope for v1 |
+| Topic                               | Decision                                               |
+| ----------------------------------- | ------------------------------------------------------ |
+| Use existing report system?         | Yes. Extend `/api/reports` and admin Reports.          |
+| New reason value                    | `CHILD_SAFETY`                                         |
+| User-facing label                   | `Child safety concern`                                 |
+| Backend priority                    | `CRITICAL` automatically                               |
+| Details required?                   | Yes for `CHILD_SAFETY` and `OTHER`                     |
+| Admin handling                      | Existing report detail plus audit notes/actions        |
+| Separate child safety table?        | No for v1                                              |
+| Anonymous/public reporting?         | Out of scope for v1                                    |
 | Automated reporting to authorities? | Out of scope for v1; admins record manual action notes |
 
 ## Important Implementation Rule
@@ -69,8 +69,8 @@ Email/support can remain as a secondary support path.
 Before coding, confirm these two items:
 
 1. Final child safety contact email:
-   - Preferred: `safety@oolshik.in`
-   - Fallback: `support@oolshik.in`
+   - Preferred: `n3.hifriends@gmail.com`
+   - Fallback: `n3.hifriends@gmail.com`
 
 2. Final public URL:
    - Recommended: `https://www.oolshik.in/child-safety-standards`
@@ -454,11 +454,11 @@ Include:
 
 Prepare these values after implementation:
 
-| Console Field | Recommended Value |
-| --- | --- |
-| Published standards URL | `https://www.oolshik.in/child-safety-standards` |
-| In-app reporting mechanism | Yes. Users can report via Report -> Child safety concern. |
-| Child safety contact | `safety@oolshik.in` or approved fallback |
+| Console Field              | Recommended Value                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published standards URL    | `https://www.oolshik.in/child-safety-standards`                                                                                               |
+| In-app reporting mechanism | Yes. Users can report via Report -> Child safety concern.                                                                                     |
+| Child safety contact       | `n3.hifriends@gmail.com` or approved fallback                                                                                                 |
 | Legal compliance statement | Oolshik complies with applicable child safety laws and reports qualifying incidents to relevant regional/national authorities where required. |
 
 Before submitting:
@@ -548,14 +548,14 @@ Before submitting:
 
 ## Risks And Mitigations
 
-| Risk | Mitigation |
-| --- | --- |
-| DB rejects new reason | Add `V35` constraint migration before mobile rollout. |
-| Mobile sends new reason before backend deploy | Deploy backend first. |
-| Play reviewer cannot find child-safety report option | Make label explicit: `Child safety concern`. |
+| Risk                                                         | Mitigation                                                                                         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| DB rejects new reason                                        | Add `V35` constraint migration before mobile rollout.                                              |
+| Mobile sends new reason before backend deploy                | Deploy backend first.                                                                              |
+| Play reviewer cannot find child-safety report option         | Make label explicit: `Child safety concern`.                                                       |
 | App-level safety feedback is confused with report moderation | Keep Play wording focused on reportable user/task content, or add targetless report support later. |
-| Admin misses urgent reports | Auto-set `CRITICAL`; highlight in admin UI; default list can stay `OPEN`. |
-| Public policy over-promises | Use conservative wording tied to actual process. |
+| Admin misses urgent reports                                  | Auto-set `CRITICAL`; highlight in admin UI; default list can stay `OPEN`.                          |
+| Public policy over-promises                                  | Use conservative wording tied to actual process.                                                   |
 
 ## Implementation Can Proceed?
 
