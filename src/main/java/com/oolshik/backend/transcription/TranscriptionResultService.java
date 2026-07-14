@@ -142,41 +142,67 @@ public class TranscriptionResultService {
         return -1;
     }
 
-    // Detects Whisper hallucination loops where the same sentence is repeated many times
+    // Detects Whisper hallucination loops where the same phrase is repeated
     // and collapses the transcript down to the unique first occurrence.
     private String collapseRepeatedTranscript(String text) {
         if (text == null || text.isBlank() || text.length() < 20) return text;
 
-        // Split on sentence-ending punctuation (includes Devanagari danda ।)
+        // 1. Sentence-level dedup: works when text has terminal punctuation
         String[] parts = text.split("(?<=[.!?।])\\s+");
-        if (parts.length < 3) return text;
-
-        String first = parts[0].strip();
-        if (first.isEmpty()) return text;
-
-        // If 70%+ of all sentences are identical to the first, it's a hallucination loop
-        long matches = Arrays.stream(parts)
-                .filter(p -> p.strip().equalsIgnoreCase(first))
-                .count();
-        if (matches * 10 >= parts.length * 7) {
-            log.warn("Collapsed repeated transcript: {} occurrences of '{}' in {} parts",
-                    matches, first.length() > 60 ? first.substring(0, 60) + "…" : first, parts.length);
-            return first;
+        if (parts.length >= 3) {
+            String first = parts[0].strip();
+            if (!first.isEmpty()) {
+                long matches = Arrays.stream(parts)
+                        .filter(p -> p.strip().equalsIgnoreCase(first))
+                        .count();
+                if (matches * 10 >= parts.length * 7) {
+                    log.warn("Collapsed repeated transcript: {} occurrences of '{}' in {} parts",
+                            matches, first.length() > 60 ? first.substring(0, 60) + "…" : first, parts.length);
+                    return first;
+                }
+                Set<String> seen = new LinkedHashSet<>();
+                StringBuilder result = new StringBuilder();
+                for (String part : parts) {
+                    if (!seen.add(part.strip().toLowerCase())) break;
+                    if (!result.isEmpty()) result.append(" ");
+                    result.append(part.strip());
+                }
+                String collapsed = result.toString().strip();
+                if (collapsed.length() < text.length() * 0.6) {
+                    log.warn("Collapsed repeated transcript from {} to {} chars", text.length(), collapsed.length());
+                    return collapsed;
+                }
+            }
         }
 
-        // More general case: stop at the first repeated sentence
-        Set<String> seen = new LinkedHashSet<>();
-        StringBuilder result = new StringBuilder();
-        for (String part : parts) {
-            if (!seen.add(part.strip().toLowerCase())) break;
-            if (!result.isEmpty()) result.append(" ");
-            result.append(part.strip());
-        }
-        String collapsed = result.toString().strip();
-        // Only use collapsed version if it's meaningfully shorter (at least 40% shorter)
-        if (collapsed.length() < text.length() * 0.6) {
-            log.warn("Collapsed repeated transcript from {} to {} chars", text.length(), collapsed.length());
-            return collapsed;
+        // 2. Word-level dedup: handles unpunctuated repetition such as
+        //    "hey hi A B C A B C" where the same phrase appears back-to-back.
+        //    Whisper produces this when the gzip compression ratio stays below
+        //    the rejection threshold for short repeated phrases.
+        return collapseByWordRepeat(text);
+    }
+
+    private String collapseByWordRepeat(String text) {
+        String[] words = text.split("\\s+");
+        int n = words.length;
+        if (n < 10) return text;
+        String[] lower = new String[n];
+        for (int i = 0; i < n; i++) lower[i] = words[i].toLowerCase();
+        // Check if the last `span` words are a near-repeat of the `span` words immediately before them.
+        // Iterate from the largest possible span down so we find the earliest repeat.
+        for (int span = n / 2; span >= 5; span--) {
+            int s = n - span;
+            int prevStart = s - span;
+            if (prevStart < 0) continue;
+            int matches = 0;
+            for (int i = 0; i < span; i++) {
+                if (lower[prevStart + i].equals(lower[s + i])) matches++;
+            }
+            if (matches >= (int) (span * 0.85)) {
+                String collapsed = String.join(" ", Arrays.copyOfRange(words, 0, s)).strip();
+                log.warn("Collapsed word-level repeated transcript from {} to {} chars", text.length(), collapsed.length());
+                return collapsed;
+            }
         }
         return text;
     }

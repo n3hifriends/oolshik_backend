@@ -16,7 +16,7 @@ from transformers import AutoConfig, AutoModel
 from transformers.dynamic_module_utils import get_class_from_dynamic_module
 
 from stt_worker.language import SUPPORTED_LANGUAGES, is_supported_lang
-from stt_worker.transcribe.normalization import normalize_text
+from stt_worker.transcribe.normalization import deduplicate_repeated_text, normalize_text
 
 
 ENGINE_INDICCONFORMER = "indicconformer"
@@ -141,7 +141,7 @@ class FasterWhisperEngine(BaseEngine):
                     text_parts.append(seg_text)
                 segments_out.append(Segment(start=float(seg.start), end=float(seg.end), text=seg_text))
 
-            full_text = normalize_text(" ".join(text_parts))
+            full_text = deduplicate_repeated_text(normalize_text(" ".join(text_parts)))
             return {
                 "text": full_text,
                 "language": getattr(info, "language", None) if info else language,
