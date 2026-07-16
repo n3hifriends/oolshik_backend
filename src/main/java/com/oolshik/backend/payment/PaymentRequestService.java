@@ -48,12 +48,17 @@ public class PaymentRequestService {
     @Transactional
     public PaymentRequest create(UUID scannerUserId, String clientIp, CreatePaymentRequest in) throws NoSuchAlgorithmException {
         PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
-        PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(
-                        in.taskId(),
-                        ACTIVE_STATUSES)
+        PaymentRequest existing = repo.findFirstByTaskIdAndPaymentModeAndPayerRoleAndStatusInOrderByCreatedAtDesc(
+                        in.taskId(), PaymentMode.MERCHANT_QR, payerRole, ACTIVE_STATUSES)
                 .orElse(null);
         if (existing != null) {
-            return existing;
+            if (STATUS_INITIATED.equals(existing.getStatus())) {
+                return existing;
+            }
+            if (amountsMatch(existing.getAmountRequested(), in.amount())) {
+                return existing;
+            }
+            expireAndNotify(existing, scannerUserId);
         }
 
         HelpRequestEntity task = helpRequestRepository.findById(in.taskId())
@@ -145,21 +150,25 @@ public class PaymentRequestService {
         ensureTaskParticipant(task, actorUserId);
 
         PaymentPayerRole payerRole = in.payerRole() == null ? PaymentPayerRole.HELPER : in.payerRole();
+        PaymentMode paymentMode = payerRole == PaymentPayerRole.REQUESTER
+                ? PaymentMode.PAY_HELPER_DIRECT
+                : PaymentMode.PAY_REQUESTER_DIRECT;
 
-        PaymentRequest existing = repo.findFirstByTaskIdAndStatusInOrderByCreatedAtDesc(
-                        in.taskId(),
-                        ACTIVE_STATUSES)
+        PaymentRequest existing = repo.findFirstByTaskIdAndPaymentModeAndPayerRoleAndStatusInOrderByCreatedAtDesc(
+                        in.taskId(), paymentMode, payerRole, ACTIVE_STATUSES)
                 .orElse(null);
-        if (existing != null && existing.getPayerRole() == payerRole) {
-            return existing;
+        if (existing != null) {
+            if (STATUS_INITIATED.equals(existing.getStatus())) {
+                return existing;
+            }
+            if (amountsMatch(existing.getAmountRequested(), in.amount())) {
+                return existing;
+            }
+            expireAndNotify(existing, actorUserId);
         }
         UUID payerUser = resolvePayerUser(task, actorUserId, payerRole);
         UUID payeeUser = resolvePayeeUser(task, payerRole);
         PaymentProfileEntity payeeProfile = paymentProfileService.requireActiveProfile(payeeUser);
-        PaymentMode paymentMode =
-                payerRole == PaymentPayerRole.REQUESTER
-                        ? PaymentMode.PAY_HELPER_DIRECT
-                        : PaymentMode.PAY_REQUESTER_DIRECT;
         String currency = Optional.ofNullable(in.currency()).filter(PaymentRequestService::notBlank).orElse("INR");
         String payeeName = paymentProfileService.resolvePayeeLabel(payeeUser, payeeProfile);
         String note = Optional.ofNullable(in.note())
@@ -261,6 +270,9 @@ public class PaymentRequestService {
         }
         if (STATUS_PAID_MARKED.equals(pr.getStatus())) {
             return pr;
+        }
+        if (STATUS_EXPIRED.equals(pr.getStatus())) {
+            throw new ForbiddenOperationException("errors.payment.expired");
         }
         String previous = pr.getStatus();
         pr.setStatus(STATUS_PAID_MARKED);
@@ -417,5 +429,24 @@ public class PaymentRequestService {
         var sb = new StringBuilder();
         for (byte b : bytes) sb.append(String.format("%02x", b));
         return sb.toString();
+    }
+
+    private void expireAndNotify(PaymentRequest pr, UUID actorUserId) {
+        String previous = pr.getStatus();
+        pr.setStatus(STATUS_EXPIRED);
+        PaymentRequest saved = repo.saveAndFlush(pr);
+        paymentNotificationService.enqueuePaymentEvent(
+                NotificationEventType.PAYMENT_EXPIRED,
+                saved,
+                actorUserId,
+                previous,
+                STATUS_EXPIRED
+        );
+    }
+
+    private static boolean amountsMatch(java.math.BigDecimal a, java.math.BigDecimal b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.compareTo(b) == 0;
     }
 }

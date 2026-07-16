@@ -31,7 +31,17 @@
       "Bash(git -C /Users/nitinkalokhe/Ni3/Oolshik diff main -- app/screens/home-feed/hooks/useHomeFeedController.tsx)",
       "Bash(sort -t'_' -k1 -V)",
       "Bash(./mvnw test *)",
-      "Bash(./mvnw -Dtest=\"AdminServiceBlockUserTest,AdminServiceHelpRequestStatusOverrideTest,AdminRequestStatusControllerWebMvcTest\" test)"
+      "Bash(./mvnw -Dtest=\"AdminServiceBlockUserTest,AdminServiceHelpRequestStatusOverrideTest,AdminRequestStatusControllerWebMvcTest\" test)",
+      "Read(//Users/nitinkalokhe/.claude/**)",
+      "Bash(identify /Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable/notification_icon.png)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('expo', {}\\).get\\('notification', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('expo',{}\\), indent=2\\)\\)\")",
+      "Read(//Users/nitinkalokhe/Downloads/temp/**)",
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification-icon.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/assets/images/notification-icon.png\")",
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_xxxhdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable/notification_icon.png\")",
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_mdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-mdpi/notification_icon.png\")",
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_hdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-hdpi/notification_icon.png\")",
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_xhdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-xhdpi/notification_icon.png\")"
     ]
   }
 }
