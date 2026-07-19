@@ -41,7 +41,27 @@
       "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_xxxhdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable/notification_icon.png\")",
       "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_mdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-mdpi/notification_icon.png\")",
       "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_hdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-hdpi/notification_icon.png\")",
-      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_xhdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-xhdpi/notification_icon.png\")"
+      "Bash(cp \"/Users/nitinkalokhe/Downloads/temp/notification_icon_xhdpi.png\" \"/Users/nitinkalokhe/Ni3/Oolshik/android/app/src/main/res/drawable-xhdpi/notification_icon.png\")",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.infinite.red)",
+      "WebFetch(domain:expo.dev)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git log *)",
+      "Bash(env)",
+      "Bash(export PGPASSWORD='Ndroid11!')",
+      "Bash(psql \"host=oolshik-dev-ap-south-1-rds.c1acsg0uu5qk.ap-south-1.rds.amazonaws.com port=5432 dbname=oolshik user=oolshik_admin sslmode=require\" -c \"\\\\d app_user\")",
+      "Bash(aws sts *)",
+      "Bash(./db-rds.sh tunnel-start *)",
+      "Bash(./db-rds.sh user *)",
+      "Bash(./db-rds.sh run *)",
+      "Bash(xargs -I{} sh -c 'echo === {} ===; cat {}')",
+      "Bash(nc -z 127.0.0.1 5433)",
+      "Bash(./db-rds.sh tunnel-stop *)",
+      "Bash(./mvnw -q -o compile -DskipTests)",
+      "Bash(./mvnw -o compile -DskipTests)",
+      "Bash(./mvnw -o test -Dtest=HelpRequestServiceTest -DfailIfNoTests=false)",
+      "Bash(./mvnw -o test -Dtest=HelpRequestServiceTest#createWithOfferEnqueuesInitialTaskCreatedNotification+capTwoAllowsTwoCreatesAndBlocksThird+draftCreateSkipsCapEnforcement+capCheckUsesOnlyActiveStatuses -DfailIfNoTests=false)"
     ]
   }
 }

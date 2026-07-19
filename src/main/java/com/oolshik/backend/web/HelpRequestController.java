@@ -134,6 +134,7 @@ public class HelpRequestController {
                 req.offerAmount(),
                 req.offerCurrency()
         );
+        service.seedCandidatesAndNotify(created);
         TranscriptionJobEntity job = null;
         if (created.getAudioFileId() != null || (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank())) {
             String langHint = requester.getPreferredLanguage();

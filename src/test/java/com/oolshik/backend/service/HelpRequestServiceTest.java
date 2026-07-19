@@ -326,6 +326,9 @@ class HelpRequestServiceTest {
 
         assertEquals(new BigDecimal("250.00"), saved.getOfferAmount());
         assertEquals(new BigDecimal("250.00"), saved.getOfferLastNotifiedAmount());
+
+        service.seedCandidatesAndNotify(saved);
+
         verify(candidateService).seedCandidatesForNewRequest(any(), any());
         verify(notificationService).enqueueTaskEvent(eq(com.oolshik.backend.notification.NotificationEventType.TASK_CREATED), any(), any());
     }

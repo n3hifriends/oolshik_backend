@@ -93,7 +93,7 @@ public class HelpRequestService {
         this.userService = userService;
     }
 
-    @Transactional
+    @Transactional(timeout = 10)
     public HelpRequestEntity create(
             UUID requesterId,
             String title,
@@ -158,22 +158,31 @@ public class HelpRequestService {
         } catch (Exception ex) {
             log.warn("onboarding phase advance failed userId={}: {}", requesterId, ex.getMessage());
         }
-        if (saved.getStatus() == HelpRequestStatus.OPEN) {
-            candidateService.seedCandidatesForNewRequest(saved, now);
-            NotificationEventContext context = buildContext(
-                    requesterId,
-                    null,
-                    HelpRequestStatus.OPEN,
-                    AssignmentChange.NONE,
-                    null,
-                    null,
-                    0,
-                    saved.getRadiusMeters(),
-                    now
-            );
-            notificationService.enqueueTaskEvent(NotificationEventType.TASK_CREATED, saved, context);
-        }
         return saved;
+    }
+
+    // Deliberately its own transaction, called after create()'s transaction has committed and released
+    // the requester row lock — candidate seeding / notification enqueueing don't need that lock held,
+    // and doing them here keeps the lock's window as short as possible.
+    @Transactional(timeout = 10)
+    public void seedCandidatesAndNotify(HelpRequestEntity saved) {
+        if (saved.getStatus() != HelpRequestStatus.OPEN) {
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        candidateService.seedCandidatesForNewRequest(saved, now);
+        NotificationEventContext context = buildContext(
+                saved.getRequesterId(),
+                null,
+                HelpRequestStatus.OPEN,
+                AssignmentChange.NONE,
+                null,
+                null,
+                0,
+                saved.getRadiusMeters(),
+                now
+        );
+        notificationService.enqueueTaskEvent(NotificationEventType.TASK_CREATED, saved, context);
     }
 
     public Page<HelpRequestRow> nearby(
