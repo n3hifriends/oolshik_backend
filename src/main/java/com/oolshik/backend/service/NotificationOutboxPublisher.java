@@ -10,12 +10,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -23,69 +25,95 @@ import java.util.concurrent.TimeUnit;
 public class NotificationOutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationOutboxPublisher.class);
+    private static final int SEND_TIMEOUT_SECONDS = 5;
+    private static final long CLAIM_LEASE_BUFFER_SECONDS = 30;
 
     private final NotificationOutboxRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final KafkaTopicProperties topics;
     private final NotificationProperties properties;
+    private final TransactionTemplate transactionTemplate;
 
     public NotificationOutboxPublisher(
             NotificationOutboxRepository outboxRepository,
             @Qualifier("notificationKafkaTemplate") KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicProperties topics,
-            NotificationProperties properties
+            NotificationProperties properties,
+            PlatformTransactionManager transactionManager
     ) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.topics = topics;
         this.properties = properties;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
+    // Runs with no open DB transaction: claimBatch()/finalizeStatus() each take their own
+    // short-lived transaction, so the blocking Kafka send below never holds a Hikari
+    // connection or a FOR UPDATE row lock while waiting on the network.
     @Scheduled(fixedDelayString = "${app.notification.outboxPublishIntervalMs:2000}")
-    @Transactional
     public void publishPending() {
+        for (NotificationOutboxEntity outbox : claimBatch()) {
+            publishOne(outbox);
+        }
+    }
+
+    private List<NotificationOutboxEntity> claimBatch() {
+        return transactionTemplate.execute(txStatus -> {
+            OffsetDateTime now = OffsetDateTime.now();
+            List<NotificationOutboxEntity> batch = outboxRepository.lockNextBatch(
+                    List.of(NotificationOutboxStatus.PENDING.name(), NotificationOutboxStatus.FAILED.name()),
+                    now,
+                    properties.getOutboxBatchSize()
+            );
+            // Lease the claimed rows past the worst-case send time for this batch so a crash
+            // between claim and finalize self-heals once the lease expires, instead of
+            // needing a separate reaper.
+            OffsetDateTime lease = now.plusSeconds(
+                    (long) properties.getOutboxBatchSize() * SEND_TIMEOUT_SECONDS + CLAIM_LEASE_BUFFER_SECONDS
+            );
+            for (NotificationOutboxEntity outbox : batch) {
+                outboxRepository.updateStatus(
+                        outbox.getId(),
+                        outbox.getStatus(),
+                        outbox.getAttemptCount(),
+                        lease,
+                        outbox.getLastError(),
+                        now
+                );
+            }
+            return batch;
+        });
+    }
+
+    private void publishOne(NotificationOutboxEntity outbox) {
         OffsetDateTime now = OffsetDateTime.now();
-        List<NotificationOutboxEntity> batch = outboxRepository.lockNextBatch(
-                List.of(NotificationOutboxStatus.PENDING.name(), NotificationOutboxStatus.FAILED.name()),
-                now,
-                properties.getOutboxBatchSize()
-        );
-        for (NotificationOutboxEntity outbox : batch) {
-            try {
-                kafkaTemplate
-                        .send(topics.getNotificationEvents(), outbox.getId().toString(), outbox.getPayloadJson())
-                        .get(5, TimeUnit.SECONDS);
-                outboxRepository.updateStatus(
-                        outbox.getId(),
-                        NotificationOutboxStatus.PUBLISHED.name(),
-                        outbox.getAttemptCount() + 1,
-                        now,
-                        null,
-                        now
-                );
-            } catch (Exception ex) {
-                int attempts = outbox.getAttemptCount() + 1;
-                NotificationOutboxStatus status = attempts >= properties.getOutboxMaxAttempts()
-                        ? NotificationOutboxStatus.DEAD
-                        : NotificationOutboxStatus.FAILED;
-                OffsetDateTime nextAttempt = attempts >= properties.getOutboxMaxAttempts()
-                        ? now
-                        : now.plusSeconds(backoffSeconds(attempts));
-                outboxRepository.updateStatus(
-                        outbox.getId(),
-                        status.name(),
-                        attempts,
-                        nextAttempt,
-                        safeMessage(ex),
-                        now
-                );
-                if (status == NotificationOutboxStatus.DEAD) {
-                    log.error("notification outbox dead id={} attempts={}", outbox.getId(), attempts);
-                } else {
-                    log.warn("notification outbox publish failed id={} attempts={}", outbox.getId(), attempts);
-                }
+        try {
+            kafkaTemplate
+                    .send(topics.getNotificationEvents(), outbox.getId().toString(), outbox.getPayloadJson())
+                    .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            finalizeStatus(outbox.getId(), NotificationOutboxStatus.PUBLISHED.name(), outbox.getAttemptCount() + 1, now, null);
+        } catch (Exception ex) {
+            int attempts = outbox.getAttemptCount() + 1;
+            NotificationOutboxStatus status = attempts >= properties.getOutboxMaxAttempts()
+                    ? NotificationOutboxStatus.DEAD
+                    : NotificationOutboxStatus.FAILED;
+            OffsetDateTime nextAttempt = attempts >= properties.getOutboxMaxAttempts()
+                    ? now
+                    : now.plusSeconds(backoffSeconds(attempts));
+            finalizeStatus(outbox.getId(), status.name(), attempts, nextAttempt, safeMessage(ex));
+            if (status == NotificationOutboxStatus.DEAD) {
+                log.error("notification outbox dead id={} attempts={}", outbox.getId(), attempts);
+            } else {
+                log.warn("notification outbox publish failed id={} attempts={}", outbox.getId(), attempts);
             }
         }
+    }
+
+    private void finalizeStatus(UUID id, String status, int attemptCount, OffsetDateTime nextAttemptAt, String lastError) {
+        transactionTemplate.execute(txStatus -> outboxRepository.updateStatus(
+                id, status, attemptCount, nextAttemptAt, lastError, OffsetDateTime.now()
+        ));
     }
 
     private long backoffSeconds(int attempt) {

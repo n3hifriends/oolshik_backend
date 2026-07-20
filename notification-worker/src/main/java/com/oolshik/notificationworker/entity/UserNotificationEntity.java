@@ -1,4 +1,4 @@
-package com.oolshik.backend.entity;
+package com.oolshik.notificationworker.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,9 +18,6 @@ public class UserNotificationEntity {
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
-
-    @Column(name = "broadcast_id")
-    private UUID broadcastId;
 
     @Column(name = "delivery_log_id")
     private UUID deliveryLogId;
@@ -47,8 +44,6 @@ public class UserNotificationEntity {
     public void setId(UUID id) { this.id = id; }
     public UUID getUserId() { return userId; }
     public void setUserId(UUID userId) { this.userId = userId; }
-    public UUID getBroadcastId() { return broadcastId; }
-    public void setBroadcastId(UUID broadcastId) { this.broadcastId = broadcastId; }
     public UUID getDeliveryLogId() { return deliveryLogId; }
     public void setDeliveryLogId(UUID deliveryLogId) { this.deliveryLogId = deliveryLogId; }
     public String getTitle() { return title; }

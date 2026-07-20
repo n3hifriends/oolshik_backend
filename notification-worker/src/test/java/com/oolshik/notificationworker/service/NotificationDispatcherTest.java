@@ -9,12 +9,14 @@ import com.oolshik.notificationworker.model.NotificationEventPayload;
 import com.oolshik.notificationworker.repo.HelpRequestCandidateRepository;
 import com.oolshik.notificationworker.repo.NotificationDeliveryLogRepository;
 import com.oolshik.notificationworker.repo.UserDeviceRepository;
+import com.oolshik.notificationworker.repo.UserNotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -43,11 +45,15 @@ class NotificationDispatcherTest {
     @Mock
     private NotificationDeliveryLogRepository deliveryLogRepository;
     @Mock
+    private UserNotificationRepository userNotificationRepository;
+    @Mock
     private HelpRequestCandidateRepository candidateRepository;
     @Mock
     private NotificationTemplateService templateService;
     @Mock
     private ExpoPushClient expoPushClient;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private NotificationDispatcher dispatcher;
 
@@ -59,11 +65,13 @@ class NotificationDispatcherTest {
                 recipientResolver,
                 userDeviceRepository,
                 deliveryLogRepository,
+                userNotificationRepository,
                 candidateRepository,
                 templateService,
                 expoPushClient,
                 Optional.empty(),
-                properties
+                properties,
+                transactionManager
         );
     }
 
@@ -80,7 +88,6 @@ class NotificationDispatcherTest {
         NotificationDeliveryLogEntity existing = new NotificationDeliveryLogEntity();
         existing.setStatus("SENT");
         when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.of(existing));
-        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of());
 
         dispatcher.dispatch(payload);
 
@@ -114,6 +121,7 @@ class NotificationDispatcherTest {
         UserDeviceEntity device = new UserDeviceEntity();
         device.setUserId(userId);
         device.setToken("ExponentPushToken[abc]");
+        device.setProvider("EXPO");
         when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
 
         when(templateService.templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN")))
@@ -132,7 +140,7 @@ class NotificationDispatcherTest {
 
         String expectedHash = HashUtil.sha256(device.getToken());
         verify(userDeviceRepository).deactivateByTokenHash(eq(expectedHash));
-        verify(deliveryLogRepository).updateStatus(any(), eq("FAILED"), any(), any(OffsetDateTime.class));
+        verify(deliveryLogRepository).updateStatusAndProvider(any(), eq("FAILED"), eq("EXPO"), eq("DeviceNotRegistered"), any(OffsetDateTime.class));
         verify(templateService).templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN"));
     }
 
@@ -167,6 +175,7 @@ class NotificationDispatcherTest {
         UserDeviceEntity device = new UserDeviceEntity();
         device.setUserId(helperId);
         device.setToken("ExponentPushToken[mr]");
+        device.setProvider("EXPO");
         when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
 
         when(templateService.templateFor(eq("OFFER_UPDATED"), any(), eq("mr-IN")))
@@ -183,7 +192,7 @@ class NotificationDispatcherTest {
         ArgumentCaptor<List<ExpoPushMessage>> sentMessages = ArgumentCaptor.forClass(List.class);
         verify(expoPushClient).send(sentMessages.capture());
         String body = sentMessages.getValue().get(0).getBody();
-        assertTrue(body.contains("ऑफर: INR 100.00"));
+        assertTrue(body.contains("ऑफर: ₹100.00"));
         assertFalse(body.contains("Offer:"));
     }
 
@@ -218,6 +227,7 @@ class NotificationDispatcherTest {
         UserDeviceEntity device = new UserDeviceEntity();
         device.setUserId(helperId);
         device.setToken("ExponentPushToken[en]");
+        device.setProvider("EXPO");
         when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of(device));
 
         when(templateService.templateFor(eq("OFFER_UPDATED"), any(), eq("en-IN")))
@@ -234,7 +244,7 @@ class NotificationDispatcherTest {
         ArgumentCaptor<List<ExpoPushMessage>> sentMessages = ArgumentCaptor.forClass(List.class);
         verify(expoPushClient).send(sentMessages.capture());
         String body = sentMessages.getValue().get(0).getBody();
-        assertTrue(body.contains("Offer: INR 100.00"));
+        assertTrue(body.contains("Offer: ₹100.00"));
         assertFalse(body.contains("ऑफर:"));
     }
 }

@@ -3,6 +3,7 @@ package com.oolshik.notificationworker.service;
 import com.oolshik.notificationworker.config.NotificationWorkerProperties;
 import com.oolshik.notificationworker.entity.NotificationDeliveryLogEntity;
 import com.oolshik.notificationworker.entity.UserDeviceEntity;
+import com.oolshik.notificationworker.entity.UserNotificationEntity;
 import com.oolshik.notificationworker.model.ExpoPushMessage;
 import com.oolshik.notificationworker.model.ExpoPushResponse;
 import com.oolshik.notificationworker.model.NotificationEventPayload;
@@ -10,11 +11,14 @@ import com.oolshik.notificationworker.model.NotificationEventType;
 import com.oolshik.notificationworker.repo.HelpRequestCandidateRepository;
 import com.oolshik.notificationworker.repo.NotificationDeliveryLogRepository;
 import com.oolshik.notificationworker.repo.UserDeviceRepository;
+import com.oolshik.notificationworker.repo.UserNotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -33,30 +37,37 @@ public class NotificationDispatcher {
     private final RecipientResolver recipientResolver;
     private final UserDeviceRepository userDeviceRepository;
     private final NotificationDeliveryLogRepository deliveryLogRepository;
+    private final UserNotificationRepository userNotificationRepository;
     private final HelpRequestCandidateRepository candidateRepository;
     private final NotificationTemplateService templateService;
     private final ExpoPushClient expoPushClient;
     private final Optional<WorkerFcmSender> fcmSender;
     private final NotificationWorkerProperties properties;
+    private final TransactionTemplate requiresNewTransactionTemplate;
 
     public NotificationDispatcher(
             RecipientResolver recipientResolver,
             UserDeviceRepository userDeviceRepository,
             NotificationDeliveryLogRepository deliveryLogRepository,
+            UserNotificationRepository userNotificationRepository,
             HelpRequestCandidateRepository candidateRepository,
             NotificationTemplateService templateService,
             ExpoPushClient expoPushClient,
             Optional<WorkerFcmSender> fcmSender,
-            NotificationWorkerProperties properties
+            NotificationWorkerProperties properties,
+            PlatformTransactionManager transactionManager
     ) {
         this.recipientResolver = recipientResolver;
         this.userDeviceRepository = userDeviceRepository;
         this.deliveryLogRepository = deliveryLogRepository;
+        this.userNotificationRepository = userNotificationRepository;
         this.candidateRepository = candidateRepository;
         this.templateService = templateService;
         this.expoPushClient = expoPushClient;
         this.fcmSender = fcmSender;
         this.properties = properties;
+        this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional
@@ -109,16 +120,20 @@ public class NotificationDispatcher {
 
         for (Map.Entry<UUID, NotificationDeliveryLogEntity> entry : logs.entrySet()) {
             UUID recipientId = entry.getKey();
+            String localeTag = localesByUser.getOrDefault(recipientId, LocaleSupport.EN_IN_TAG);
+            NotificationTemplateService.NotificationTemplate template =
+                    templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId), localeTag);
+            String body = enrichBodyWithOffer(template.body(), payload, localeTag);
+            // In-app inbox entry is independent of push deliverability, so create it
+            // whether or not the recipient has a registered device.
+            saveInboxEntry(recipientId, entry.getValue().getId(), template.title(), body);
+
             List<UserDeviceEntity> userDevices = devicesByUser.get(recipientId);
             if (userDevices == null || userDevices.isEmpty()) {
                 deliveryLogRepository.updateStatusAndProvider(
                         entry.getValue().getId(), "FAILED", "EXPO", "no active tokens", now);
                 continue;
             }
-            String localeTag = localesByUser.getOrDefault(recipientId, LocaleSupport.EN_IN_TAG);
-            NotificationTemplateService.NotificationTemplate template =
-                    templateService.templateFor(payload.getEventType(), roleForRecipient(payload, recipientId), localeTag);
-            String body = enrichBodyWithOffer(template.body(), payload, localeTag);
             Map<String, Object> data = buildDataMap(payload);
 
             for (UserDeviceEntity device : userDevices) {
@@ -211,6 +226,24 @@ public class NotificationDispatcher {
         NotificationEventType type = NotificationEventType.valueOf(payload.getEventType());
         if (!notifiedRecipients.isEmpty() && (type == NotificationEventType.TASK_CREATED || type == NotificationEventType.TASK_RADIUS_EXPANDED)) {
             candidateRepository.updateStates(payload.getTaskId(), notifiedRecipients, "NOTIFIED");
+        }
+    }
+
+    // Committed in its own REQUIRES_NEW transaction so the inbox row survives even if
+    // dispatch()'s outer transaction later rolls back (e.g. a push-provider or bookkeeping
+    // failure after this point) — the push itself may already be irreversibly sent by then.
+    private void saveInboxEntry(UUID userId, UUID deliveryLogId, String title, String body) {
+        try {
+            requiresNewTransactionTemplate.executeWithoutResult(status -> {
+                UserNotificationEntity entity = new UserNotificationEntity();
+                entity.setUserId(userId);
+                entity.setDeliveryLogId(deliveryLogId);
+                entity.setTitle(title.length() > 100 ? title.substring(0, 100) : title);
+                entity.setBody(body);
+                userNotificationRepository.saveAndFlush(entity);
+            });
+        } catch (DataIntegrityViolationException e) {
+            // inbox row already created for this delivery log on a prior dispatch attempt
         }
     }
 

@@ -90,7 +90,9 @@ public class AdminBroadcastScheduler {
         int pushSent = 0, pushFailed = 0, smsSent = 0, smsFailed = 0, inAppCreated = 0;
 
         for (List<UUID> batch : partition(recipientIds, props.getBatchSize())) {
-            if (channels.contains("IN_APP")) {
+            // PUSH implies an in-app inbox entry too, independent of actual push delivery
+            // success, so the inbox stays the authoritative record of what was sent.
+            if (channels.contains("IN_APP") || channels.contains("PUSH")) {
                 inAppCreated += processInApp(broadcast, batch);
             }
             if (channels.contains("PUSH")) {

@@ -38,7 +38,7 @@ class NotificationCoalescerTest {
         private String lastEventType;
 
         CapturingDispatcher() {
-            super(null, null, null, null, null, null, Optional.empty(), new NotificationWorkerProperties());
+            super(null, null, null, null, null, null, null, Optional.empty(), new NotificationWorkerProperties(), null);
         }
 
         @Override
