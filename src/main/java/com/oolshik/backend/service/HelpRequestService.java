@@ -154,7 +154,10 @@ public class HelpRequestService {
         HelpRequestEntity saved = repo.save(e);
         log.info("task created taskId={} requesterId={} status={}", saved.getId(), requesterId, saved.getStatus());
         try {
-            userService.advanceOnboardingPhase(requesterId, OnboardingPhase.FIRST_ACTION);
+            // requester is already locked (findByIdForUpdate above) in this transaction, so
+            // advance it in place rather than via the REQUIRES_NEW path - that would try to
+            // update the same row from a second connection and block on our own lock.
+            userService.advanceOnboardingPhaseIfNeeded(requester, OnboardingPhase.FIRST_ACTION);
         } catch (Exception ex) {
             log.warn("onboarding phase advance failed userId={}: {}", requesterId, ex.getMessage());
         }

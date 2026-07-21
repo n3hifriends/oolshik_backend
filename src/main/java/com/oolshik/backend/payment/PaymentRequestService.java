@@ -53,10 +53,12 @@ public class PaymentRequestService {
                 .orElse(null);
         if (existing != null) {
             if (STATUS_INITIATED.equals(existing.getStatus())) {
+                // Payer has already started paying against the existing identity - don't let a
+                // rescan change the destination out from under a payment in flight.
                 return existing;
             }
             if (amountsMatch(existing.getAmountRequested(), in.amount())) {
-                return existing;
+                return refreshScannedIdentityIfChanged(existing, payerRole, in);
             }
             expireAndNotify(existing, scannerUserId);
         }
@@ -73,8 +75,17 @@ public class PaymentRequestService {
         UUID paymentProfileUser = null;
         String resolvedNote = in.note();
         String currency = Optional.ofNullable(in.currency()).orElse("INR");
+        // The scanned QR's own VPA, kept alongside the resolved payee below (only for the
+        // REQUESTER-pays branch, where it would otherwise be discarded) so the payer can
+        // later be offered a choice between the helper's profile and the scanned QR.
+        String scannedPayeeVpa = null;
+        String scannedPayeeName = null;
 
         if (payerRole == PaymentPayerRole.REQUESTER && task.getHelperId() != null) {
+            if (notBlank(in.payeeVpa())) {
+                scannedPayeeVpa = in.payeeVpa();
+                scannedPayeeName = notBlank(in.payeeName()) ? in.payeeName() : null;
+            }
             PaymentProfileEntity helperProfile = paymentProfileService.requireActiveProfile(task.getHelperId());
             resolvedPayeeVpa = helperProfile.getUpiId();
             resolvedPayeeName = paymentProfileService.resolvePayeeLabel(task.getHelperId(), helperProfile);
@@ -103,6 +114,8 @@ public class PaymentRequestService {
                 .format(in.format())
                 .payeeVpa(resolvedPayeeVpa)
                 .payeeName(resolvedPayeeName)
+                .scannedPayeeVpa(scannedPayeeVpa)
+                .scannedPayeeName(scannedPayeeName)
                 .mcc(in.mcc())
                 .merchantId(in.merchantId())
                 .txnRef(in.txnRef())
@@ -448,5 +461,29 @@ public class PaymentRequestService {
         if (a == null && b == null) return true;
         if (a == null || b == null) return false;
         return a.compareTo(b) == 0;
+    }
+
+    // A re-scan that lands on the amount-match dedup path (below) would otherwise leave a
+    // stale scanned VPA on the existing request — harmless before scannedPayeeVpa was surfaced
+    // to the payer, but now it's a real payment destination, so keep it current.
+    private PaymentRequest refreshScannedIdentityIfChanged(
+            PaymentRequest existing, PaymentPayerRole payerRole, CreatePaymentRequest in) {
+        if (payerRole != PaymentPayerRole.REQUESTER || !notBlank(in.payeeVpa())) {
+            return existing;
+        }
+        if (normalizedVpaEquals(in.payeeVpa(), existing.getScannedPayeeVpa())) {
+            return existing;
+        }
+        existing.setScannedPayeeVpa(in.payeeVpa());
+        existing.setScannedPayeeName(notBlank(in.payeeName()) ? in.payeeName() : null);
+        return repo.save(existing);
+    }
+
+    // UPI VPAs are case-insensitive; the scanned VPA comes straight off a QR code (unnormalized)
+    // while the payment-profile VPA is lowercased at save time, so a same-account comparison must
+    // ignore case or two identical destinations get treated as distinct.
+    public static boolean normalizedVpaEquals(String a, String b) {
+        if (a == null || b == null) return false;
+        return a.trim().equalsIgnoreCase(b.trim());
     }
 }

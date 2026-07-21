@@ -144,16 +144,32 @@ public class UserService {
     /**
      * Advances a user's onboarding phase to the target only if they haven't reached it yet.
      * Runs in its own transaction (REQUIRES_NEW) so a failure here never rolls back the
-     * caller's business transaction (task creation, auth-request, completion).
+     * caller's business transaction. Only safe when the caller does NOT already hold a
+     * pessimistic lock on this same user row - use {@link #advanceOnboardingPhaseIfNeeded}
+     * instead when the caller already has the managed entity in hand.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean advanceOnboardingPhase(UUID userId, OnboardingPhase target) {
         return usersRepo.findById(userId).map(user -> {
-            OnboardingPhase current = user.getOnboardingPhase() != null ? user.getOnboardingPhase() : OnboardingPhase.FRESH;
-            if (!current.isBefore(target)) return false;
-            user.setOnboardingPhase(target);
-            usersRepo.save(user);
-            return true;
+            boolean advanced = advanceOnboardingPhaseIfNeeded(user, target);
+            if (advanced) {
+                usersRepo.save(user);
+            }
+            return advanced;
         }).orElse(false);
+    }
+
+    /**
+     * Advances the given (already loaded) user's onboarding phase to the target only if they
+     * haven't reached it yet. Mutates the entity in place - callers running inside their own
+     * transaction with a managed entity get the change flushed on commit without a separate
+     * REQUIRES_NEW transaction, which matters when they already hold a pessimistic lock on
+     * this row (a REQUIRES_NEW call would block on that lock until the outer transaction ends).
+     */
+    public boolean advanceOnboardingPhaseIfNeeded(UserEntity user, OnboardingPhase target) {
+        OnboardingPhase current = user.getOnboardingPhase() != null ? user.getOnboardingPhase() : OnboardingPhase.FRESH;
+        if (!current.isBefore(target)) return false;
+        user.setOnboardingPhase(target);
+        return true;
     }
 }

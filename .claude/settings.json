@@ -97,7 +97,10 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(mvn -q -o test-compile)",
       "Bash(mvn -o clean test-compile)",
-      "Bash(mvn -o clean test)"
+      "Bash(mvn -o clean test)",
+      "Bash(awk '/payment:/,0' /Users/nitinkalokhe/Ni3/Oolshik/app/i18n/en.ts)",
+      "Bash(mvn -q -o test -Dtest=PaymentRequestServiceTest)",
+      "Bash(mvn -q compile)"
     ]
   }
 }

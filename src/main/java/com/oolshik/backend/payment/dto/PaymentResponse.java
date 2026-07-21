@@ -15,6 +15,9 @@ public class PaymentResponse {
         public String payeeMaskedVpa;
         public String payeeName;
         public String payeePhoneNumber;
+        public String scannedPayeeVpa;
+        public String scannedPayeeMaskedVpa;
+        public String scannedPayeeName;
         public String mcc;
         public String merchantId;
         public String txnRef;
@@ -32,6 +35,7 @@ public class PaymentResponse {
     public PaymentMode paymentMode;
     public Snapshot snapshot;
     public String upiIntent;
+    public String scannedUpiIntent;
     public UUID payerUserId;
     public UUID payeeUserId;
     public PaymentPayerRole payerRole;

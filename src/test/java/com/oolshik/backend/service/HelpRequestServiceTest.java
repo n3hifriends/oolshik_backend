@@ -334,6 +334,27 @@ class HelpRequestServiceTest {
     }
 
     @Test
+    void createAdvancesOnboardingPhaseOnLockedRequesterWithoutRequiresNew() {
+        UUID requesterId = UUID.randomUUID();
+        com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
+        requester.setId(requesterId);
+        requester.setOnboardingPhase(com.oolshik.backend.domain.OnboardingPhase.INTENT_SET);
+
+        when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
+        when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.create(requesterId, "Need help", "desc", null, 1000, null, null, null, null);
+
+        // create() already holds a pessimistic lock on requester (findByIdForUpdate above), so
+        // onboarding advancement must happen in-place on that entity, not via the REQUIRES_NEW
+        // path - that would try to update the same locked row from a second connection and hang.
+        verify(userService).advanceOnboardingPhaseIfNeeded(requester, com.oolshik.backend.domain.OnboardingPhase.FIRST_ACTION);
+        verify(userService, never()).advanceOnboardingPhase(any(), any());
+    }
+
+    @Test
     void capTwoAllowsTwoCreatesAndBlocksThird() {
         UUID requesterId = UUID.randomUUID();
         com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();

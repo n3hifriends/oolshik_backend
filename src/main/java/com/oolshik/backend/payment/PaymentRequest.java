@@ -59,6 +59,13 @@ public class PaymentRequest {
 
     private String payeeVpa;
     private String payeeName;
+
+    @Column(name = "scanned_payee_vpa")
+    private String scannedPayeeVpa;
+
+    @Column(name = "scanned_payee_name")
+    private String scannedPayeeName;
+
     private String mcc;
     private String merchantId;
 

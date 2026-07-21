@@ -211,6 +211,15 @@ public class PaymentRequestController {
                     .map(u -> (u.getPhoneNumber() != null && !u.getPhoneNumber().isBlank()) ? u.getPhoneNumber() : null)
                     .orElse(null);
         }
+        if (Boolean.TRUE.equals(out.canPay)
+                && pr.getScannedPayeeVpa() != null
+                && !PaymentRequestService.normalizedVpaEquals(pr.getScannedPayeeVpa(), pr.getPayeeVpa())) {
+            out.scannedUpiIntent = PaymentRequestService.buildUpiIntent(
+                    pr.getScannedPayeeVpa(), pr.getScannedPayeeName(), pr.getAmountRequested(), pr.getCurrency(), pr.getNote());
+            out.snapshot.scannedPayeeVpa = pr.getScannedPayeeVpa();
+            out.snapshot.scannedPayeeMaskedVpa = MaskingUtils.maskUpiId(pr.getScannedPayeeVpa());
+            out.snapshot.scannedPayeeName = pr.getScannedPayeeName();
+        }
         out.snapshot.mcc = pr.getMcc();
         out.snapshot.merchantId = pr.getMerchantId();
         out.snapshot.txnRef = pr.getTxnRef();
