@@ -18,6 +18,9 @@ Update this file whenever any of these change:
 - `/me` reads the authenticated principal and returns profile data.
 - `/me` resolves the principal to `UserEntity` through `service/CurrentUserService.java`.
 - `JwtAuthFilter` authenticates bearer access tokens into the Spring Security context.
+- `JwtAuthFilter` rejects (403) requests for users where `UserEntity.blocked` or `UserEntity.deleted` is true, re-checked from the DB on every request — no token blocklist/session table exists.
+- `AuthService.loginWithPassword` and `AuthService.refreshAccessToken` re-check `blocked`/`deleted`; `GoogleAuthService` re-checks `blocked`/`deleted` before linking/attaching an existing account. `AuthController#otpVerify` only re-checks `blocked` — a deleted user's `phoneNumber` is nulled by deletion, so OTP lookup by phone can never match a deleted row (an explicit `deleted` check there would be unreachable dead code).
+- `DELETE /api/auth/me` soft-deletes the caller's own account via `UserService.deleteOwnAccount`: sets `deleted=true`, `deletedAt=now()`, nulls `phoneNumber`/`email`/`firebaseUid`/`passwordHash`, and removes federated identity links so the same identifiers can be reused by a fresh signup. No cascade/anonymization of other tables happens yet (v1 scope).
 - `SecurityConfig` permits:
   - `/api/auth/otp/**`
   - `/api/auth/google`

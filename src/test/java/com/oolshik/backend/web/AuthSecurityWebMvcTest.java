@@ -13,6 +13,7 @@ import com.oolshik.backend.service.AuthService;
 import com.oolshik.backend.service.CurrentUserService;
 import com.oolshik.backend.service.GoogleAuthService;
 import com.oolshik.backend.service.OtpService;
+import com.oolshik.backend.service.SystemConfigService;
 import com.oolshik.backend.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,6 +78,9 @@ class AuthSecurityWebMvcTest {
     @MockBean
     private AuthProperties authProperties;
 
+    @MockBean
+    private SystemConfigService systemConfigService;
+
     @Test
     void meReturnsUnauthorizedWhenBearerTokenCannotBeParsed() throws Exception {
         when(jwtService.parse("expired-token")).thenThrow(new RuntimeException("expired"));
@@ -102,6 +106,41 @@ class AuthSecurityWebMvcTest {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentType("application/json"))
                 .andExpect(jsonPath("$.error").value("ACCOUNT_BLOCKED"));
+    }
+
+    @Test
+    void deletedUserJwtIsRejectedBeforeController() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setRoleSet(Set.of(Role.NETA));
+        user.setDeleted(true);
+        stubAccessToken("deleted-token", userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer deleted-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType("application/json"))
+                .andExpect(jsonPath("$.error").value("ACCOUNT_DELETED"));
+    }
+
+    @Test
+    void deleteMeInvokesUserServiceAndReturnsNoContent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setPhoneNumber("+919876543210");
+        user.setRoleSet(Set.of(Role.NETA));
+        stubAccessToken("delete-me-token", userId);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(currentUserService.require(org.mockito.ArgumentMatchers.any())).thenReturn(user);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/auth/me")
+                        .header("Authorization", "Bearer delete-me-token"))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(userService).deleteOwnAccount(userId);
     }
 
     @Test

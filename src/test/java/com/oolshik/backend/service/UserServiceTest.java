@@ -3,6 +3,7 @@ package com.oolshik.backend.service;
 import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
+import com.oolshik.backend.repo.FederatedIdentityRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +13,10 @@ import static org.mockito.Mockito.mock;
 
 class UserServiceTest {
 
-    private final UserService service = new UserService(mock(UserRepository.class));
+    private final UserService service = new UserService(
+            mock(UserRepository.class),
+            mock(FederatedIdentityRepository.class)
+    );
 
     @Test
     void advanceOnboardingPhaseIfNeededAdvancesFromNullToTarget() {

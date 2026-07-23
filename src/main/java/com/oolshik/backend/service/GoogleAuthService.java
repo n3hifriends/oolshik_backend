@@ -10,6 +10,7 @@ import com.oolshik.backend.security.JwtService;
 import com.oolshik.backend.util.PhoneUtil;
 import com.oolshik.backend.web.dto.AuthDtos.TokenResponse;
 import com.oolshik.backend.web.error.AccountBlockedException;
+import com.oolshik.backend.web.error.AccountDeletedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +68,7 @@ public class GoogleAuthService {
     ) {
         UserEntity user = userRepository.findById(identity.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("errors.auth.userNotRegistered"));
-        rejectIfBlocked(user);
+        rejectIfBlockedOrDeleted(user);
         maybeAssignPhone(user, phoneHint);
         if ((user.getEmail() == null || user.getEmail().isBlank()) && claims.email() != null) {
             user.setEmail(claims.email());
@@ -99,7 +100,7 @@ public class GoogleAuthService {
             GoogleIdTokenVerifierService.GoogleIdentityClaims claims,
             String phoneHint
     ) {
-        rejectIfBlocked(user);
+        rejectIfBlockedOrDeleted(user);
         if (!authProperties.getGoogle().isAutoLinkByEmail()) {
             throw new ConflictOperationException("errors.auth.googleLinkRequired");
         }
@@ -189,9 +190,12 @@ public class GoogleAuthService {
         }
     }
 
-    private void rejectIfBlocked(UserEntity user) {
+    private void rejectIfBlockedOrDeleted(UserEntity user) {
         if (user.isBlocked()) {
             throw new AccountBlockedException();
+        }
+        if (user.isDeleted()) {
+            throw new AccountDeletedException();
         }
     }
 

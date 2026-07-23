@@ -231,6 +231,13 @@ public class AuthController {
         ));
     }
 
+    @DeleteMapping("/me")
+    public ResponseEntity<?> deleteMe(@AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UserEntity u = requireCurrentUser(principal);
+        userService.deleteOwnAccount(u.getId());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/me/language")
     public ResponseEntity<?> getPreferredLanguage(
             @AuthenticationPrincipal AuthenticatedUserPrincipal principal

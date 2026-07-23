@@ -73,12 +73,14 @@ public class AdminController {
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String deleted,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return adminService.getUsers(
                 role,
                 search,
                 parseUserStatus(status),
+                parseDeletedStatus(deleted),
                 pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
     }
@@ -349,6 +351,13 @@ public class AdminController {
         if ("BLOCKED".equalsIgnoreCase(status.trim())) return Boolean.TRUE;
         if ("ACTIVE".equalsIgnoreCase(status.trim())) return Boolean.FALSE;
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + status + ". Must be ACTIVE or BLOCKED.");
+    }
+
+    private Boolean parseDeletedStatus(String deleted) {
+        if (deleted == null || deleted.isBlank() || "ALL".equalsIgnoreCase(deleted.trim())) return null;
+        if ("DELETED".equalsIgnoreCase(deleted.trim())) return Boolean.TRUE;
+        if ("ACTIVE".equalsIgnoreCase(deleted.trim())) return Boolean.FALSE;
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid deleted filter: " + deleted + ". Must be ACTIVE or DELETED.");
     }
 
     private HelpRequestStatus parseHelpRequestStatus(String status) {

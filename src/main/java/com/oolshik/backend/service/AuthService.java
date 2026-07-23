@@ -2,6 +2,7 @@ package com.oolshik.backend.service;
 
 import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.web.error.AccountBlockedException;
+import com.oolshik.backend.web.error.AccountDeletedException;
 import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.JwtService;
@@ -96,6 +97,9 @@ public class AuthService implements UserDetailsService {
         if (ue.isBlocked() && !ue.getRoleSet().contains(Role.ADMIN)) {
             throw new AccountBlockedException();
         }
+        if (ue.isDeleted()) {
+            throw new AccountDeletedException();
+        }
         String access = jwtService.generateAccessToken(ue.getId(), ue.getPhoneNumber());
         String refresh = jwtService.generateRefreshToken(ue.getId());
         return Map.of("userId", ue.getId(), "accessToken", access, "refreshToken", refresh);
@@ -109,6 +113,9 @@ public class AuthService implements UserDetailsService {
         UserEntity ue = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User missing"));
         if (ue.isBlocked()) {
             throw new AccountBlockedException();
+        }
+        if (ue.isDeleted()) {
+            throw new AccountDeletedException();
         }
         return jwtService.generateAccessToken(ue.getId(), ue.getPhoneNumber());
     }

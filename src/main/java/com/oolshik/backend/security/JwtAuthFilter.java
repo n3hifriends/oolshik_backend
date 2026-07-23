@@ -46,6 +46,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             response.getWriter().write("{\"error\":\"ACCOUNT_BLOCKED\",\"message\":\"Your account has been blocked. Contact support.\"}");
                             return;
                         }
+                        if (user.isDeleted()) {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"error\":\"ACCOUNT_DELETED\",\"message\":\"This account has been deleted.\"}");
+                            return;
+                        }
                         var authorities = user.getRoleSet().stream()
                                 .map(role -> new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.name()))
                                 .collect(Collectors.toList());

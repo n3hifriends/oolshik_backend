@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface FederatedIdentityRepository extends JpaRepository<FederatedIdentityEntity, UUID> {
     Optional<FederatedIdentityEntity> findByProviderAndProviderSubject(String provider, String providerSubject);
     Optional<FederatedIdentityEntity> findByUserIdAndProvider(UUID userId, String provider);
+    void deleteByUserId(UUID userId);
 }

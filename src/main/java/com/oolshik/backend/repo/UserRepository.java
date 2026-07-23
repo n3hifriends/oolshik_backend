@@ -32,15 +32,15 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID>, JpaSpec
     @Query("select u from UserEntity u where u.id = :id")
     Optional<UserEntity> findByIdForUpdate(@Param("id") UUID id);
 
-    default Page<UserEntity> findForAdmin(String role, String search, Boolean blocked, Pageable pageable) {
-        return findAll(adminSpec(role, search, blocked), pageable);
+    default Page<UserEntity> findForAdmin(String role, String search, Boolean blocked, Boolean deleted, Pageable pageable) {
+        return findAll(adminSpec(role, search, blocked, deleted), pageable);
     }
 
     default Page<UserEntity> findForAdminByRole(String role, Pageable pageable) {
-        return findForAdmin(role, null, null, pageable);
+        return findForAdmin(role, null, null, null, pageable);
     }
 
-    static Specification<UserEntity> adminSpec(String role, String search, Boolean blocked) {
+    static Specification<UserEntity> adminSpec(String role, String search, Boolean blocked, Boolean deleted) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (role != null && !role.isBlank()) {
@@ -57,6 +57,9 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID>, JpaSpec
             }
             if (blocked != null) {
                 predicates.add(cb.equal(root.get("blocked"), blocked));
+            }
+            if (deleted != null) {
+                predicates.add(cb.equal(root.get("deleted"), deleted));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };

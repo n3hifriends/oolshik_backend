@@ -157,8 +157,8 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AdminUserSummary> getUsers(String role, String search, Boolean blocked, Pageable pageable) {
-        Page<AdminUserSummary> page = userRepository.findForAdmin(blankToNull(role), blankToNull(search), blocked, pageable)
+    public PageResponse<AdminUserSummary> getUsers(String role, String search, Boolean blocked, Boolean deleted, Pageable pageable) {
+        Page<AdminUserSummary> page = userRepository.findForAdmin(blankToNull(role), blankToNull(search), blocked, deleted, pageable)
                 .map(this::toUserSummary);
         return PageResponse.from(page);
     }
@@ -704,7 +704,8 @@ public class AdminService {
                 user.getEmail(),
                 parseRoles(user.getRoles()),
                 user.getCreatedAt(),
-                user.isBlocked()
+                user.isBlocked(),
+                user.isDeleted()
         );
     }
 
@@ -731,7 +732,9 @@ public class AdminService {
                 user.isBlocked(),
                 user.getBlockedAt(),
                 user.getBlockReason(),
-                blockedByRef
+                blockedByRef,
+                user.isDeleted(),
+                user.getDeletedAt()
         );
     }
 

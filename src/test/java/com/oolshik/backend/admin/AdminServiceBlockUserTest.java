@@ -220,11 +220,11 @@ class AdminServiceBlockUserTest {
     void userListReturnsBlockedSummaryField() {
         UserEntity blockedUser = user(UUID.randomUUID(), "Blocked User", Role.NETA);
         blockedUser.setBlocked(true);
-        when(userRepository.findForAdmin(null, null, true, PageRequest.of(0, 20)))
+        when(userRepository.findForAdmin(null, null, true, null, PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(blockedUser), PageRequest.of(0, 20), 1));
 
         AdminDtos.PageResponse<AdminDtos.AdminUserSummary> page =
-                service.getUsers(null, null, true, PageRequest.of(0, 20));
+                service.getUsers(null, null, true, null, PageRequest.of(0, 20));
 
         assertEquals(1, page.content().size());
         assertTrue(page.content().getFirst().blocked());

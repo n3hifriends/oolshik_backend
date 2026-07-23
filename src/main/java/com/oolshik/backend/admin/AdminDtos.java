@@ -55,7 +55,8 @@ public final class AdminDtos {
             String email,
             List<String> roles,
             OffsetDateTime joinedAt,
-            boolean blocked
+            boolean blocked,
+            boolean deleted
     ) {
     }
 
@@ -75,7 +76,9 @@ public final class AdminDtos {
             boolean blocked,
             OffsetDateTime blockedAt,
             String blockReason,
-            UserRef blockedBy
+            UserRef blockedBy,
+            boolean deleted,
+            OffsetDateTime deletedAt
     ) {
     }
 

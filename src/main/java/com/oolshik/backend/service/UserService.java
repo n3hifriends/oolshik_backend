@@ -3,16 +3,21 @@ package com.oolshik.backend.service;
 import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.entity.UserEntity;
+import com.oolshik.backend.repo.FederatedIdentityRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.security.AuthenticatedUserPrincipal;
 import com.oolshik.backend.util.PhoneUtil;
+import com.oolshik.backend.web.error.ConflictOperationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import javax.annotation.Nullable;
+import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.*;
 import java.util.UUID;
@@ -23,9 +28,32 @@ public class UserService {
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository usersRepo;
+    private final FederatedIdentityRepository federatedIdentitiesRepo;
 
-    public UserService(UserRepository usersRepo) {
+    public UserService(
+            UserRepository usersRepo,
+            FederatedIdentityRepository federatedIdentitiesRepo
+    ) {
         this.usersRepo = usersRepo;
+        this.federatedIdentitiesRepo = federatedIdentitiesRepo;
+    }
+
+    @Transactional
+    public void deleteOwnAccount(UUID userId) {
+        UserEntity target = usersRepo.findByIdForUpdate(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (target.isDeleted()) {
+            throw new ConflictOperationException("errors.account.alreadyDeleted");
+        }
+        target.setDeleted(true);
+        target.setDeletedAt(OffsetDateTime.now());
+        target.setPhoneNumber(null);
+        target.setEmail(null);
+        target.setFirebaseUid(null);
+        target.setPasswordHash(null);
+        federatedIdentitiesRepo.deleteByUserId(userId);
+        usersRepo.save(target);
+        log.info("USER_AUDIT: account deleted user={}", userId);
     }
 
     @Transactional

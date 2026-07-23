@@ -49,6 +49,12 @@ public class UserEntity {
     @Column(name = "blocked_by")
     private UUID blockedBy;
 
+    @Column(nullable = false)
+    private boolean deleted;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "onboarding_phase", length = 32)
     private OnboardingPhase onboardingPhase;
@@ -123,6 +129,10 @@ public class UserEntity {
     public void setBlockedAt(OffsetDateTime blockedAt) { this.blockedAt = blockedAt; }
     public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
     public void setBlockedBy(UUID blockedBy) { this.blockedBy = blockedBy; }
+    public boolean isDeleted() { return deleted; }
+    public OffsetDateTime getDeletedAt() { return deletedAt; }
+    public void setDeleted(boolean deleted) { this.deleted = deleted; }
+    public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 

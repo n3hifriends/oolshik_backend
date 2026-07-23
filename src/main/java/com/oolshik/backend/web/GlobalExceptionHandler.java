@@ -3,6 +3,7 @@ package com.oolshik.backend.web;
 import com.oolshik.backend.config.LocaleSupport;
 import com.oolshik.backend.web.dto.ActiveRequestDtos.ActiveRequestCapReachedResponse;
 import com.oolshik.backend.web.error.AccountBlockedException;
+import com.oolshik.backend.web.error.AccountDeletedException;
 import com.oolshik.backend.web.error.ActiveRequestCapReachedException;
 import com.oolshik.backend.web.error.ConflictOperationException;
 import com.oolshik.backend.web.error.ForbiddenOperationException;
@@ -119,6 +120,16 @@ public class GlobalExceptionHandler {
         log.warn("[{}] 403 account_blocked", cid());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(cid(), "ACCOUNT_BLOCKED", ex.getMessage()));
+    }
+
+    /* ---------------------------
+     *  403 – Account deleted
+     * --------------------------- */
+    @ExceptionHandler(AccountDeletedException.class)
+    public ResponseEntity<ApiError> handleAccountDeleted(AccountDeletedException ex) {
+        log.warn("[{}] 403 account_deleted", cid());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(cid(), "ACCOUNT_DELETED", ex.getMessage()));
     }
 
     /* ---------------------------
