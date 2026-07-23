@@ -10,6 +10,7 @@ import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.HelpRequestOfferEventEntity;
+import com.oolshik.backend.payment.PaymentRequestService;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.UserRepository;
 import com.oolshik.backend.web.HelpRequestController;
@@ -70,6 +71,8 @@ class HelpRequestServiceTest {
     private ActiveRequestCapConfigService activeRequestCapConfigService;
     @Mock
     private UserService userService;
+    @Mock
+    private PaymentRequestService paymentRequestService;
 
     private TaskRecoveryProperties recoveryProperties;
     private HelpRequestService service;
@@ -77,7 +80,6 @@ class HelpRequestServiceTest {
     @BeforeEach
     void setUp() {
         recoveryProperties = new TaskRecoveryProperties();
-        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
 
         service = new HelpRequestService(
                 repo,
@@ -91,7 +93,8 @@ class HelpRequestServiceTest {
                 candidateService,
                 offerEventRepository,
                 activeRequestCapConfigService,
-                userService
+                userService,
+                paymentRequestService
         );
     }
 
@@ -104,7 +107,6 @@ class HelpRequestServiceTest {
         entity.setRequesterId(requesterId);
         entity.setStatus(HelpRequestStatus.OPEN);
         when(repo.findById(requestId)).thenReturn(Optional.of(entity));
-        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
 
         HelpRequestDtos.CancelRequest body =
                 new HelpRequestDtos.CancelRequest(HelpRequestCancelReason.OTHER, " ");
@@ -146,7 +148,6 @@ class HelpRequestServiceTest {
         entity.setStatus(HelpRequestStatus.ASSIGNED);
 
         when(repo.findById(requestId)).thenReturn(Optional.of(entity));
-        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
 
         assertThrows(ForbiddenOperationException.class, () -> service.release(requestId, helperId, null));
     }
@@ -304,6 +305,7 @@ class HelpRequestServiceTest {
         com.oolshik.backend.entity.UserEntity requester = new com.oolshik.backend.entity.UserEntity();
         requester.setId(requesterId);
         when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
         when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
         when(repo.save(any())).thenAnswer(inv -> {
@@ -341,6 +343,7 @@ class HelpRequestServiceTest {
         requester.setOnboardingPhase(com.oolshik.backend.domain.OnboardingPhase.INTENT_SET);
 
         when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
         when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -371,6 +374,7 @@ class HelpRequestServiceTest {
         newest.setCreatedAt(OffsetDateTime.now().minusMinutes(1));
 
         when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
         when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L, 1L, 2L);
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());
@@ -436,6 +440,7 @@ class HelpRequestServiceTest {
         requester.setId(requesterId);
 
         when(userRepo.findByIdForUpdate(requesterId)).thenReturn(Optional.of(requester));
+        when(activeRequestCapConfigService.getMaxActiveRequestsPerRequester()).thenReturn(2);
         when(repo.countByRequesterIdAndStatusIn(eq(requesterId), any())).thenReturn(0L);
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(radiusExpansionService.initialNextEscalationAt(any(), anyInt())).thenReturn(OffsetDateTime.now());

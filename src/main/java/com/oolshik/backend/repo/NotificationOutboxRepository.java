@@ -16,6 +16,13 @@ import java.util.UUID;
 public interface NotificationOutboxRepository extends JpaRepository<NotificationOutboxEntity, UUID> {
     long countByStatusIn(Collection<String> statuses);
 
+    @Query("""
+        select count(n) from NotificationOutboxEntity n
+        where n.status = 'FAILED'
+           or (n.status = 'DEAD' and n.acknowledgedAt is null)
+        """)
+    long countUnresolvedFailures();
+
     @Query(value = """
         select n from NotificationOutboxEntity n
         where (:status is null or n.status = :status)
@@ -42,7 +49,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             @Param("limit") int limit
     );
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         update NotificationOutboxEntity o
            set o.status = :status,
@@ -60,4 +67,38 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             @Param("lastError") String lastError,
             @Param("updatedAt") OffsetDateTime updatedAt
     );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        update NotificationOutboxEntity o
+           set o.acknowledgedAt = :acknowledgedAt,
+               o.acknowledgedBy = :acknowledgedBy,
+               o.resolutionNote = :resolutionNote,
+               o.updatedAt = :acknowledgedAt
+         where o.id = :id
+           and o.status = 'DEAD'
+           and o.acknowledgedAt is null
+        """)
+    int acknowledgeDead(
+            @Param("id") UUID id,
+            @Param("acknowledgedBy") UUID acknowledgedBy,
+            @Param("resolutionNote") String resolutionNote,
+            @Param("acknowledgedAt") OffsetDateTime acknowledgedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        update NotificationOutboxEntity o
+           set o.status = 'PENDING',
+               o.attemptCount = 0,
+               o.nextAttemptAt = :now,
+               o.lastError = null,
+               o.acknowledgedAt = null,
+               o.acknowledgedBy = null,
+               o.resolutionNote = null,
+               o.updatedAt = :now
+         where o.id = :id
+           and (o.status = 'DEAD' or (o.status = 'FAILED' and o.nextAttemptAt <= :now))
+        """)
+    int requeueFailure(@Param("id") UUID id, @Param("now") OffsetDateTime now);
 }

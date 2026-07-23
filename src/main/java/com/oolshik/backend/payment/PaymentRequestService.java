@@ -43,6 +43,7 @@ public class PaymentRequestService {
     public static final String STATUS_PAID_MARKED = "PAID_MARKED";
     public static final String STATUS_DISPUTED = "DISPUTED";
     public static final String STATUS_EXPIRED = "EXPIRED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
     private static final List<String> ACTIVE_STATUSES = List.of(STATUS_PENDING, STATUS_INITIATED);
 
     @Transactional
@@ -251,6 +252,24 @@ public class PaymentRequestService {
 
     public List<PaymentRequest> getActiveOptionsForTask(UUID taskId) {
         return repo.findByTaskIdAndStatusInOrderByCreatedAtDesc(taskId, ACTIVE_STATUSES);
+    }
+
+    // Called when a task loses its current helper (release, reassign, auto-release) so a
+    // pending payment request from that assignment can't resurface as "active" once the
+    // task is reassigned - actorUserId may be null for system-triggered unassignment.
+    @Transactional
+    public void expireActiveForTask(UUID taskId, UUID actorUserId) {
+        for (PaymentRequest pr : getActiveOptionsForTask(taskId)) {
+            // An initiated payment may already have been sent, so retain it as a historical
+            // record that can still be marked paid. CANCELLED is deliberately outside
+            // ACTIVE_STATUSES, allowing a new assignment to create its own payment request.
+            if (STATUS_INITIATED.equals(pr.getStatus())) {
+                pr.setStatus(STATUS_CANCELLED);
+                repo.save(pr);
+                continue;
+            }
+            expireAndNotify(pr, actorUserId);
+        }
     }
 
     @Transactional

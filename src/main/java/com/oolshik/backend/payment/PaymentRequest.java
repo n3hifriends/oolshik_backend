@@ -84,7 +84,7 @@ public class PaymentRequest {
     private Point scanLocation;
 
     @Column(nullable = false, length = 24)
-    private String status; // PENDING | INITIATED | PAID_MARKED | DISPUTED | CANCELLED
+    private String status; // PENDING | INITIATED | PAID_MARKED | DISPUTED | CANCELLED | EXPIRED
 
     @CreationTimestamp
     @Column(nullable = false)

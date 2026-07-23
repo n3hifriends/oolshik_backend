@@ -1,10 +1,14 @@
 package com.oolshik.backend.admin;
 
+import com.oolshik.backend.admin.AdminDtos.AddFeedbackActionRequest;
+import com.oolshik.backend.admin.AdminDtos.AcknowledgeNotificationRequest;
+import com.oolshik.backend.admin.AdminDtos.AddReportActionRequest;
+import com.oolshik.backend.admin.AdminDtos.AdminFeedbackDetail;
+import com.oolshik.backend.admin.AdminDtos.AdminFeedbackRow;
 import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
-import com.oolshik.backend.admin.AdminDtos.AddReportActionRequest;
 import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestDetail;
@@ -12,14 +16,20 @@ import com.oolshik.backend.admin.AdminDtos.AdminRequestSummary;
 import com.oolshik.backend.admin.AdminDtos.AdminTranscriptionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminUserDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminUserSummary;
+import com.oolshik.backend.admin.AdminDtos.AssignFeedbackRequest;
 import com.oolshik.backend.admin.AdminDtos.AssignReportRequest;
 import com.oolshik.backend.admin.AdminDtos.BlockUserRequest;
 import com.oolshik.backend.admin.AdminDtos.PageResponse;
 import com.oolshik.backend.admin.AdminDtos.RetryTranscriptionResponse;
 import com.oolshik.backend.admin.AdminDtos.StatsResponse;
+import com.oolshik.backend.admin.AdminDtos.UpdateFeedbackStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateHelpRequestStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateReportStatusRequest;
 import com.oolshik.backend.admin.AdminDtos.UpdateRolesRequest;
+import com.oolshik.backend.domain.FeedbackContextType;
+import com.oolshik.backend.domain.FeedbackPriority;
+import com.oolshik.backend.domain.FeedbackStatus;
+import com.oolshik.backend.domain.FeedbackType;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.domain.ReportReason;
 import com.oolshik.backend.domain.ReportStatus;
@@ -241,12 +251,83 @@ public class AdminController {
         return adminService.addReportAction(id, request.action(), request.note(), adminId);
     }
 
+    @GetMapping("/feedback")
+    public PageResponse<AdminFeedbackRow> listFeedback(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String contextType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return adminService.getFeedback(
+                parseFeedbackType(type),
+                parseFeedbackContextType(contextType),
+                parseFeedbackStatus(status),
+                parseFeedbackPriority(priority),
+                search,
+                pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
+    }
+
+    @GetMapping("/feedback/{id}")
+    public ResponseEntity<AdminFeedbackDetail> getFeedbackItem(@PathVariable UUID id) {
+        return adminService.getFeedbackItem(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PatchMapping("/feedback/{id}/status")
+    public AdminFeedbackDetail updateFeedbackStatus(
+            @PathVariable UUID id,
+            @RequestBody UpdateFeedbackStatusRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.updateFeedbackStatus(id, parseRequiredFeedbackStatus(request.status()), request.note(), adminId);
+    }
+
+    @PatchMapping("/feedback/{id}/assign")
+    public AdminFeedbackDetail assignFeedback(
+            @PathVariable UUID id,
+            @RequestBody AssignFeedbackRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        UUID assigneeId = request.adminUserId() == null ? adminId : request.adminUserId();
+        return adminService.assignFeedback(id, assigneeId, adminId);
+    }
+
+    @PostMapping("/feedback/{id}/actions")
+    public AdminFeedbackDetail addFeedbackAction(
+            @PathVariable UUID id,
+            @RequestBody AddFeedbackActionRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.addFeedbackAction(id, request.action(), request.note(), adminId);
+    }
+
     @GetMapping("/notifications")
     public PageResponse<AdminNotificationRow> listNotifications(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return adminService.getNotifications(status, pageRequest(page, size));
+    }
+
+    @PatchMapping("/notifications/{id}/acknowledge")
+    public AdminNotificationRow acknowledgeNotification(
+            @PathVariable UUID id,
+            @RequestBody(required = false) AcknowledgeNotificationRequest request,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        UUID adminId = requireAdmin(principal);
+        return adminService.acknowledgeNotification(id, request == null ? null : request.note(), adminId);
+    }
+
+    @PostMapping("/notifications/{id}/requeue")
+    public AdminNotificationRow requeueNotification(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal AuthenticatedUserPrincipal principal) {
+        requireAdmin(principal);
+        return adminService.requeueNotification(id);
     }
 
     private PageRequest pageRequest(int page, int size) {
@@ -296,6 +377,30 @@ public class AdminController {
 
     private ReportReason parseReportReason(String reason) {
         return parseEnum(reason, ReportReason.class, "report reason");
+    }
+
+    private FeedbackType parseFeedbackType(String type) {
+        return parseEnum(type, FeedbackType.class, "feedback type");
+    }
+
+    private FeedbackContextType parseFeedbackContextType(String contextType) {
+        return parseEnum(contextType, FeedbackContextType.class, "feedback context type");
+    }
+
+    private FeedbackStatus parseFeedbackStatus(String status) {
+        return parseEnum(status, FeedbackStatus.class, "feedback status");
+    }
+
+    private FeedbackStatus parseRequiredFeedbackStatus(String status) {
+        FeedbackStatus parsed = parseFeedbackStatus(status);
+        if (parsed == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback status is required");
+        }
+        return parsed;
+    }
+
+    private FeedbackPriority parseFeedbackPriority(String priority) {
+        return parseEnum(priority, FeedbackPriority.class, "feedback priority");
     }
 
     private UUID requireAdmin(AuthenticatedUserPrincipal principal) {

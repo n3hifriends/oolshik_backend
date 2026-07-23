@@ -1,6 +1,8 @@
 package com.oolshik.backend.entity;
 
 import com.oolshik.backend.domain.FeedbackContextType;
+import com.oolshik.backend.domain.FeedbackPriority;
+import com.oolshik.backend.domain.FeedbackStatus;
 import com.oolshik.backend.domain.FeedbackType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -63,9 +65,37 @@ public class FeedbackEventEntity {
     @Column(name = "retention_until", nullable = false)
     private OffsetDateTime retentionUntil;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private FeedbackStatus status = FeedbackStatus.OPEN;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false)
+    private FeedbackPriority priority = FeedbackPriority.MEDIUM;
+
+    @Column(name = "assigned_admin_user_id")
+    private UUID assignedAdminUserId;
+
+    @Column(name = "resolution_note")
+    private String resolutionNote;
+
+    @Column(name = "resolved_at")
+    private OffsetDateTime resolvedAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = OffsetDateTime.now();
+        if (updatedAt == null) updatedAt = createdAt;
+        if (status == null) status = FeedbackStatus.OPEN;
+        if (priority == null) priority = FeedbackPriority.MEDIUM;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = OffsetDateTime.now();
     }
 
     public UUID getId() {
@@ -186,5 +216,53 @@ public class FeedbackEventEntity {
 
     public void setRetentionUntil(OffsetDateTime retentionUntil) {
         this.retentionUntil = retentionUntil;
+    }
+
+    public FeedbackStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(FeedbackStatus status) {
+        this.status = status;
+    }
+
+    public FeedbackPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(FeedbackPriority priority) {
+        this.priority = priority;
+    }
+
+    public UUID getAssignedAdminUserId() {
+        return assignedAdminUserId;
+    }
+
+    public void setAssignedAdminUserId(UUID assignedAdminUserId) {
+        this.assignedAdminUserId = assignedAdminUserId;
+    }
+
+    public String getResolutionNote() {
+        return resolutionNote;
+    }
+
+    public void setResolutionNote(String resolutionNote) {
+        this.resolutionNote = resolutionNote;
+    }
+
+    public OffsetDateTime getResolvedAt() {
+        return resolvedAt;
+    }
+
+    public void setResolvedAt(OffsetDateTime resolvedAt) {
+        this.resolvedAt = resolvedAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(OffsetDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

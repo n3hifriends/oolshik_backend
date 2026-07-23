@@ -1,5 +1,8 @@
 package com.oolshik.backend.admin;
 
+import com.oolshik.backend.admin.AdminDtos.AdminFeedbackActionRow;
+import com.oolshik.backend.admin.AdminDtos.AdminFeedbackDetail;
+import com.oolshik.backend.admin.AdminDtos.AdminFeedbackRow;
 import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
@@ -28,10 +31,16 @@ import com.oolshik.backend.notification.NotificationEventContext;
 import com.oolshik.backend.notification.NotificationEventType;
 import com.oolshik.backend.service.HelpRequestEventService;
 import com.oolshik.backend.service.HelpRequestNotificationService;
+import com.oolshik.backend.domain.FeedbackContextType;
+import com.oolshik.backend.domain.FeedbackPriority;
+import com.oolshik.backend.domain.FeedbackStatus;
+import com.oolshik.backend.domain.FeedbackType;
 import com.oolshik.backend.domain.ReportPriority;
 import com.oolshik.backend.domain.ReportReason;
 import com.oolshik.backend.domain.ReportStatus;
 import com.oolshik.backend.domain.Role;
+import com.oolshik.backend.entity.FeedbackActionEntity;
+import com.oolshik.backend.entity.FeedbackEventEntity;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.NotificationOutboxEntity;
 import com.oolshik.backend.entity.OtpAuditLogEntity;
@@ -41,6 +50,8 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.payment.PaymentMode;
 import com.oolshik.backend.payment.PaymentRequest;
 import com.oolshik.backend.payment.PaymentRequestRepository;
+import com.oolshik.backend.repo.FeedbackActionRepository;
+import com.oolshik.backend.repo.FeedbackEventRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.NotificationOutboxRepository;
 import com.oolshik.backend.repo.OtpAuditLogRepository;
@@ -98,6 +109,8 @@ public class AdminService {
     private final PaymentRequestRepository paymentRequestRepository;
     private final ReportEventRepository reportEventRepository;
     private final ReportActionRepository reportActionRepository;
+    private final FeedbackEventRepository feedbackEventRepository;
+    private final FeedbackActionRepository feedbackActionRepository;
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     private final TranscriptionJobPublisher transcriptionJobPublisher;
@@ -122,7 +135,7 @@ public class AdminService {
         long reviewRequired = helpRequestRepository.countByStatus(HelpRequestStatus.REVIEW_REQUIRED);
         long completed = helpRequestRepository.countByStatus(HelpRequestStatus.COMPLETED);
         long sttFailures = transcriptionJobRepository.countByStatus(TranscriptionStatus.FAILED);
-        long notificationFailures = notificationOutboxRepository.countByStatusIn(List.of("FAILED", "DEAD"));
+        long notificationFailures = notificationOutboxRepository.countUnresolvedFailures();
         long openReports = reportEventRepository.countByStatusIn(List.of(ReportStatus.OPEN, ReportStatus.REVIEWING));
         BigDecimal captured = paymentRequestRepository.sumCapturedAmount();
 
@@ -542,8 +555,119 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<AdminFeedbackRow> getFeedback(
+            FeedbackType type,
+            FeedbackContextType contextType,
+            FeedbackStatus status,
+            FeedbackPriority priority,
+            String search,
+            Pageable pageable) {
+        Page<FeedbackEventEntity> page = feedbackEventRepository.findAll(
+                feedbackSpec(type, contextType, status, priority, search),
+                pageable
+        );
+        FeedbackRefs refs = loadFeedbackRefs(page.getContent());
+        return PageResponse.from(page.map(feedback -> toFeedbackRow(feedback, refs)));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AdminFeedbackDetail> getFeedbackItem(UUID id) {
+        return feedbackEventRepository.findById(id).map(feedback -> {
+            FeedbackRefs refs = loadFeedbackRefs(List.of(feedback));
+            List<FeedbackActionEntity> actions = feedbackActionRepository.findTop50ByFeedbackIdOrderByCreatedAtDesc(feedback.getId());
+            Set<UUID> adminIds = actions.stream()
+                    .map(FeedbackActionEntity::getAdminUserId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            Map<UUID, UserRef> actionAdmins = loadUserRefs(adminIds);
+            return toFeedbackDetail(feedback, refs, actions, actionAdmins);
+        });
+    }
+
+    @Transactional
+    public AdminFeedbackDetail updateFeedbackStatus(UUID id, FeedbackStatus status, String note, UUID adminUserId) {
+        FeedbackEventEntity feedback = feedbackEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback not found"));
+        FeedbackStatus fromStatus = feedback.getStatus();
+        feedback.setStatus(status);
+        feedback.setResolutionNote(cleanNote(note));
+        if (status == FeedbackStatus.RESOLVED || status == FeedbackStatus.DISMISSED) {
+            feedback.setResolvedAt(OffsetDateTime.now());
+        } else {
+            feedback.setResolvedAt(null);
+        }
+        feedback = feedbackEventRepository.save(feedback);
+        saveFeedbackAction(feedback.getId(), adminUserId, "STATUS_CHANGED", fromStatus, status, note);
+        return getFeedbackItem(feedback.getId()).orElseThrow();
+    }
+
+    @Transactional
+    public AdminFeedbackDetail assignFeedback(UUID id, UUID assigneeId, UUID adminUserId) {
+        FeedbackEventEntity feedback = feedbackEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback not found"));
+        if (assigneeId != null) {
+            UserEntity assignee = userRepository.findById(assigneeId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assigned admin not found"));
+            if (!assignee.getRoleSet().contains(Role.ADMIN)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback assignee must be an admin");
+            }
+        }
+        FeedbackStatus fromStatus = feedback.getStatus();
+        feedback.setAssignedAdminUserId(assigneeId);
+        if (feedback.getStatus() == FeedbackStatus.OPEN && assigneeId != null) {
+            feedback.setStatus(FeedbackStatus.REVIEWING);
+        }
+        feedback = feedbackEventRepository.save(feedback);
+        saveFeedbackAction(
+                feedback.getId(),
+                adminUserId,
+                assigneeId == null ? "UNASSIGNED" : "ASSIGNED",
+                fromStatus,
+                feedback.getStatus(),
+                assigneeId == null ? "Feedback unassigned" : "Feedback assigned to " + assigneeId
+        );
+        return getFeedbackItem(feedback.getId()).orElseThrow();
+    }
+
+    @Transactional
+    public AdminFeedbackDetail addFeedbackAction(UUID id, String action, String note, UUID adminUserId) {
+        FeedbackEventEntity feedback = feedbackEventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Feedback not found"));
+        String cleanAction = action == null || action.isBlank() ? "NOTE" : action.trim().toUpperCase();
+        saveFeedbackAction(feedback.getId(), adminUserId, cleanAction, feedback.getStatus(), feedback.getStatus(), note);
+        return getFeedbackItem(feedback.getId()).orElseThrow();
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<AdminNotificationRow> getNotifications(String status, Pageable pageable) {
         return PageResponse.from(notificationOutboxRepository.findForAdmin(blankToNull(status), pageable).map(this::toNotificationRow));
+    }
+
+    @Transactional
+    public AdminNotificationRow acknowledgeNotification(UUID id, String note, UUID adminUserId) {
+        NotificationOutboxEntity outbox = notificationOutboxRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Outbox message not found"));
+        if (!"DEAD".equals(outbox.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only dead outbox messages can be acknowledged");
+        }
+        int updated = notificationOutboxRepository.acknowledgeDead(
+                id, adminUserId, cleanNote(note), OffsetDateTime.now());
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Outbox message is already acknowledged");
+        }
+        return toNotificationRow(notificationOutboxRepository.findById(id).orElseThrow());
+    }
+
+    @Transactional
+    public AdminNotificationRow requeueNotification(UUID id) {
+        if (!notificationOutboxRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Outbox message not found");
+        }
+        int updated = notificationOutboxRepository.requeueFailure(id, OffsetDateTime.now());
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only failed or dead outbox messages can be requeued");
+        }
+        return toNotificationRow(notificationOutboxRepository.findById(id).orElseThrow());
     }
 
     private List<TrendPoint> trend(int days) {
@@ -797,6 +921,153 @@ public class AdminService {
         return entity.getHelpRequestId() != null ? entity.getHelpRequestId() : entity.getTargetUserId();
     }
 
+    private AdminFeedbackRow toFeedbackRow(FeedbackEventEntity entity, FeedbackRefs refs) {
+        return new AdminFeedbackRow(
+                entity.getId(),
+                refs.users().get(entity.getUserId()),
+                entity.getFeedbackType() == null ? null : entity.getFeedbackType().name(),
+                entity.getContextType() == null ? null : entity.getContextType().name(),
+                entity.getContextId(),
+                entity.getRating() == null ? null : entity.getRating().intValue(),
+                entity.getTags(),
+                entity.getMessage(),
+                feedbackStatusName(entity.getStatus()),
+                feedbackPriorityName(entity.getPriority()),
+                refs.users().get(entity.getAssignedAdminUserId()),
+                entity.getAppVersion(),
+                entity.getOs(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private AdminFeedbackDetail toFeedbackDetail(
+            FeedbackEventEntity entity,
+            FeedbackRefs refs,
+            List<FeedbackActionEntity> actions,
+            Map<UUID, UserRef> actionAdmins) {
+        HelpRequestEntity task = entity.getContextType() == FeedbackContextType.TASK && entity.getContextId() != null
+                ? refs.tasks().get(entity.getContextId())
+                : null;
+        return new AdminFeedbackDetail(
+                entity.getId(),
+                refs.users().get(entity.getUserId()),
+                entity.getFeedbackType() == null ? null : entity.getFeedbackType().name(),
+                entity.getContextType() == null ? null : entity.getContextType().name(),
+                entity.getContextId(),
+                task == null ? null : task.getTitle(),
+                entity.getRating() == null ? null : entity.getRating().intValue(),
+                entity.getTags(),
+                entity.getMessage(),
+                feedbackStatusName(entity.getStatus()),
+                feedbackPriorityName(entity.getPriority()),
+                refs.users().get(entity.getAssignedAdminUserId()),
+                entity.getLocale(),
+                entity.getAppVersion(),
+                entity.getOs(),
+                entity.getDeviceModel(),
+                entity.getResolutionNote(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getResolvedAt(),
+                actions.stream()
+                        .map(action -> new AdminFeedbackActionRow(
+                                action.getId(),
+                                actionAdmins.get(action.getAdminUserId()),
+                                action.getAction(),
+                                action.getFromStatus(),
+                                action.getToStatus(),
+                                action.getNote(),
+                                action.getCreatedAt()
+                        ))
+                        .toList()
+        );
+    }
+
+    private Specification<FeedbackEventEntity> feedbackSpec(
+            FeedbackType type,
+            FeedbackContextType contextType,
+            FeedbackStatus status,
+            FeedbackPriority priority,
+            String search) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            if (type != null) {
+                predicates.add(cb.equal(root.get("feedbackType"), type));
+            }
+            if (contextType != null) {
+                predicates.add(cb.equal(root.get("contextType"), contextType));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (priority != null) {
+                predicates.add(cb.equal(root.get("priority"), priority));
+            }
+            String cleanSearch = blankToNull(search);
+            if (cleanSearch != null) {
+                String like = "%" + cleanSearch.toLowerCase() + "%";
+                List<jakarta.persistence.criteria.Predicate> searchPredicates = new ArrayList<>();
+                searchPredicates.add(cb.like(cb.lower(root.get("message")), like));
+                try {
+                    UUID id = UUID.fromString(cleanSearch);
+                    searchPredicates.add(cb.equal(root.get("id"), id));
+                    searchPredicates.add(cb.equal(root.get("userId"), id));
+                    searchPredicates.add(cb.equal(root.get("contextId"), id));
+                } catch (IllegalArgumentException ignored) {
+                    // Non-UUID search still covers the message text.
+                }
+                predicates.add(cb.or(searchPredicates.toArray(jakarta.persistence.criteria.Predicate[]::new)));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
+    }
+
+    private FeedbackRefs loadFeedbackRefs(Collection<FeedbackEventEntity> feedbackEvents) {
+        Set<UUID> userIds = new LinkedHashSet<>();
+        Set<UUID> taskIds = new LinkedHashSet<>();
+        for (FeedbackEventEntity feedback : feedbackEvents) {
+            if (feedback.getUserId() != null) userIds.add(feedback.getUserId());
+            if (feedback.getAssignedAdminUserId() != null) userIds.add(feedback.getAssignedAdminUserId());
+            if (feedback.getContextType() == FeedbackContextType.TASK && feedback.getContextId() != null) {
+                taskIds.add(feedback.getContextId());
+            }
+        }
+        Map<UUID, HelpRequestEntity> tasks = taskIds.isEmpty()
+                ? Map.of()
+                : helpRequestRepository.findAllById(taskIds).stream()
+                        .collect(Collectors.toMap(HelpRequestEntity::getId, task -> task));
+        return new FeedbackRefs(loadUserRefs(userIds), tasks);
+    }
+
+    private void saveFeedbackAction(
+            UUID feedbackId,
+            UUID adminUserId,
+            String action,
+            FeedbackStatus fromStatus,
+            FeedbackStatus toStatus,
+            String note) {
+        FeedbackActionEntity entity = new FeedbackActionEntity();
+        entity.setFeedbackId(feedbackId);
+        entity.setAdminUserId(adminUserId);
+        entity.setAction(action);
+        entity.setFromStatus(feedbackStatusName(fromStatus));
+        entity.setToStatus(feedbackStatusName(toStatus));
+        entity.setNote(cleanNote(note));
+        feedbackActionRepository.save(entity);
+    }
+
+    private String feedbackStatusName(FeedbackStatus status) {
+        return status == null ? null : status.name();
+    }
+
+    private String feedbackPriorityName(FeedbackPriority priority) {
+        return priority == null ? null : priority.name();
+    }
+
+    private record FeedbackRefs(Map<UUID, UserRef> users, Map<UUID, HelpRequestEntity> tasks) {
+    }
+
     private AdminNotificationRow toNotificationRow(NotificationOutboxEntity entity) {
         return new AdminNotificationRow(
                 entity.getId(),
@@ -805,9 +1076,22 @@ public class AdminService {
                 entity.getStatus(),
                 entity.getAttemptCount(),
                 entity.getLastError(),
+                isNotificationRetryEligible(entity),
+                entity.getAcknowledgedAt(),
+                entity.getAcknowledgedBy(),
+                entity.getResolutionNote(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    private boolean isNotificationRetryEligible(NotificationOutboxEntity entity) {
+        if ("DEAD".equals(entity.getStatus())) {
+            return true;
+        }
+        return "FAILED".equals(entity.getStatus())
+                && entity.getNextAttemptAt() != null
+                && !entity.getNextAttemptAt().isAfter(OffsetDateTime.now());
     }
 
     private GeoPoint toGeo(Point point) {

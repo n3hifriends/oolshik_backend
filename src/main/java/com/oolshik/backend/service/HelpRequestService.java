@@ -17,6 +17,7 @@ import com.oolshik.backend.entity.UserEntity;
 import com.oolshik.backend.notification.AssignmentChange;
 import com.oolshik.backend.notification.NotificationEventContext;
 import com.oolshik.backend.notification.NotificationEventType;
+import com.oolshik.backend.payment.PaymentRequestService;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.HelpRequestRow;
 import com.oolshik.backend.repo.HelpRequestOfferEventRepository;
@@ -64,6 +65,7 @@ public class HelpRequestService {
     private final HelpRequestOfferEventRepository offerEventRepository;
     private final ActiveRequestCapConfigService activeRequestCapConfigService;
     private final UserService userService;
+    private final PaymentRequestService paymentRequestService;
 
     public HelpRequestService(
             HelpRequestRepository repo,
@@ -77,7 +79,8 @@ public class HelpRequestService {
             HelpRequestCandidateService candidateService,
             HelpRequestOfferEventRepository offerEventRepository,
             ActiveRequestCapConfigService activeRequestCapConfigService,
-            UserService userService
+            UserService userService,
+            PaymentRequestService paymentRequestService
     ) {
         this.repo = repo;
         this.userRepo = userRepo;
@@ -91,6 +94,7 @@ public class HelpRequestService {
         this.offerEventRepository = offerEventRepository;
         this.activeRequestCapConfigService = activeRequestCapConfigService;
         this.userService = userService;
+        this.paymentRequestService = paymentRequestService;
     }
 
     @Transactional(timeout = 10)
@@ -686,6 +690,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Request cannot be released");
         }
+        paymentRequestService.expireActiveForTask(requestId, helperId);
 
         eventService.record(
                 requestId,
@@ -749,6 +754,7 @@ public class HelpRequestService {
         if (updated == 0) {
             throw new ConflictOperationException("Reassign not allowed yet");
         }
+        paymentRequestService.expireActiveForTask(requestId, requesterId);
 
         eventService.record(
                 requestId,
@@ -797,6 +803,7 @@ public class HelpRequestService {
         if (updated == 0) {
             return false;
         }
+        paymentRequestService.expireActiveForTask(requestId, null);
         eventService.record(
                 requestId,
                 HelpRequestEventType.TIMEOUT,

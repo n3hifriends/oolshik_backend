@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -240,5 +241,45 @@ class PaymentRequestServiceTest {
         assertTrue(PaymentRequestService.normalizedVpaEquals(" Helper@YBL ", "helper@ybl"));
         assertFalse(PaymentRequestService.normalizedVpaEquals("helper@ybl", "other@ybl"));
         assertFalse(PaymentRequestService.normalizedVpaEquals(null, "helper@ybl"));
+    }
+
+    @Test
+    void unassignmentCancelsInitiatedPaymentWithoutExpiringIt() {
+        UUID taskId = UUID.randomUUID();
+        PaymentRequest initiated = PaymentRequest.builder()
+                .id(UUID.randomUUID())
+                .taskId(taskId)
+                .status(PaymentRequestService.STATUS_INITIATED)
+                .build();
+        when(repo.findByTaskIdAndStatusInOrderByCreatedAtDesc(taskId, List.of(
+                PaymentRequestService.STATUS_PENDING,
+                PaymentRequestService.STATUS_INITIATED
+        ))).thenReturn(List.of(initiated));
+        when(repo.save(initiated)).thenReturn(initiated);
+
+        PaymentRequestService service = new PaymentRequestService(
+                repo, helpRequestRepository, paymentNotificationService, paymentProfileService);
+        service.expireActiveForTask(taskId, UUID.randomUUID());
+
+        assertEquals(PaymentRequestService.STATUS_CANCELLED, initiated.getStatus());
+    }
+
+    @Test
+    void cancelledInitiatedPaymentCanStillBeMarkedPaid() {
+        UUID paymentId = UUID.randomUUID();
+        UUID payerId = UUID.randomUUID();
+        PaymentRequest detached = PaymentRequest.builder()
+                .id(paymentId)
+                .payerUser(payerId)
+                .status(PaymentRequestService.STATUS_CANCELLED)
+                .build();
+        when(repo.findById(paymentId)).thenReturn(Optional.of(detached));
+        when(repo.save(detached)).thenReturn(detached);
+
+        PaymentRequestService service = new PaymentRequestService(
+                repo, helpRequestRepository, paymentNotificationService, paymentProfileService);
+        PaymentRequest result = service.markPaid(paymentId, payerId, null, null);
+
+        assertEquals(PaymentRequestService.STATUS_PAID_MARKED, result.getStatus());
     }
 }

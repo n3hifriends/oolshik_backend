@@ -38,6 +38,15 @@ public class NotificationOutboxEntity {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
+    @Column(name = "acknowledged_at")
+    private OffsetDateTime acknowledgedAt;
+
+    @Column(name = "acknowledged_by")
+    private UUID acknowledgedBy;
+
+    @Column(name = "resolution_note", columnDefinition = "TEXT")
+    private String resolutionNote;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -128,6 +137,30 @@ public class NotificationOutboxEntity {
 
     public void setLastError(String lastError) {
         this.lastError = lastError;
+    }
+
+    public OffsetDateTime getAcknowledgedAt() {
+        return acknowledgedAt;
+    }
+
+    public void setAcknowledgedAt(OffsetDateTime acknowledgedAt) {
+        this.acknowledgedAt = acknowledgedAt;
+    }
+
+    public UUID getAcknowledgedBy() {
+        return acknowledgedBy;
+    }
+
+    public void setAcknowledgedBy(UUID acknowledgedBy) {
+        this.acknowledgedBy = acknowledgedBy;
+    }
+
+    public String getResolutionNote() {
+        return resolutionNote;
+    }
+
+    public void setResolutionNote(String resolutionNote) {
+        this.resolutionNote = resolutionNote;
     }
 
     public OffsetDateTime getCreatedAt() {

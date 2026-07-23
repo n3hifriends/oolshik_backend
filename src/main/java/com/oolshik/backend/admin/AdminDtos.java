@@ -255,6 +255,79 @@ public final class AdminDtos {
     ) {
     }
 
+    // ---- Feedback ----
+    public record AdminFeedbackRow(
+            UUID id,
+            UserRef submitter,
+            String feedbackType,
+            String contextType,
+            UUID contextId,
+            Integer rating,
+            List<String> tags,
+            String message,
+            String status,
+            String priority,
+            UserRef assignedAdmin,
+            String appVersion,
+            String os,
+            OffsetDateTime submittedAt,
+            OffsetDateTime updatedAt
+    ) {
+    }
+
+    public record AdminFeedbackDetail(
+            UUID id,
+            UserRef submitter,
+            String feedbackType,
+            String contextType,
+            UUID contextId,
+            String contextTitle,
+            Integer rating,
+            List<String> tags,
+            String message,
+            String status,
+            String priority,
+            UserRef assignedAdmin,
+            String locale,
+            String appVersion,
+            String os,
+            String deviceModel,
+            String resolutionNote,
+            OffsetDateTime submittedAt,
+            OffsetDateTime updatedAt,
+            OffsetDateTime resolvedAt,
+            List<AdminFeedbackActionRow> actions
+    ) {
+    }
+
+    public record AdminFeedbackActionRow(
+            UUID id,
+            UserRef admin,
+            String action,
+            String fromStatus,
+            String toStatus,
+            String note,
+            OffsetDateTime createdAt
+    ) {
+    }
+
+    public record UpdateFeedbackStatusRequest(
+            String status,
+            String note
+    ) {
+    }
+
+    public record AssignFeedbackRequest(
+            UUID adminUserId
+    ) {
+    }
+
+    public record AddFeedbackActionRequest(
+            String action,
+            String note
+    ) {
+    }
+
     public record UpdateHelpRequestStatusRequest(String status, String note) {
     }
 
@@ -265,8 +338,15 @@ public final class AdminDtos {
             String status,
             int attempts,
             String lastError,
+            boolean retryEligible,
+            OffsetDateTime acknowledgedAt,
+            UUID acknowledgedBy,
+            String resolutionNote,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt
     ) {
+    }
+
+    public record AcknowledgeNotificationRequest(String note) {
     }
 }

@@ -7,6 +7,8 @@ import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.media.AudioPlaybackUrlResolver;
 import com.oolshik.backend.payment.PaymentRequestRepository;
+import com.oolshik.backend.repo.FeedbackActionRepository;
+import com.oolshik.backend.repo.FeedbackEventRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.NotificationOutboxRepository;
 import com.oolshik.backend.repo.OtpAuditLogRepository;
@@ -49,6 +51,8 @@ class AdminServiceHelpRequestStatusOverrideTest {
     @Mock private PaymentRequestRepository paymentRequestRepository;
     @Mock private ReportEventRepository reportEventRepository;
     @Mock private ReportActionRepository reportActionRepository;
+    @Mock private FeedbackEventRepository feedbackEventRepository;
+    @Mock private FeedbackActionRepository feedbackActionRepository;
     @Mock private NotificationOutboxRepository notificationOutboxRepository;
     @Mock private AudioPlaybackUrlResolver audioPlaybackUrlResolver;
     @Mock private TranscriptionJobPublisher transcriptionJobPublisher;
@@ -67,6 +71,8 @@ class AdminServiceHelpRequestStatusOverrideTest {
                 paymentRequestRepository,
                 reportEventRepository,
                 reportActionRepository,
+                feedbackEventRepository,
+                feedbackActionRepository,
                 notificationOutboxRepository,
                 audioPlaybackUrlResolver,
                 transcriptionJobPublisher,
