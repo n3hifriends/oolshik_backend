@@ -3,7 +3,6 @@ package com.oolshik.notificationworker.service;
 import com.oolshik.notificationworker.config.NotificationWorkerProperties;
 import com.oolshik.notificationworker.entity.NotificationDeliveryLogEntity;
 import com.oolshik.notificationworker.entity.UserDeviceEntity;
-import com.oolshik.notificationworker.entity.UserNotificationEntity;
 import com.oolshik.notificationworker.model.ExpoPushMessage;
 import com.oolshik.notificationworker.model.ExpoPushResponse;
 import com.oolshik.notificationworker.model.NotificationEventPayload;
@@ -16,9 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -43,7 +40,6 @@ public class NotificationDispatcher {
     private final ExpoPushClient expoPushClient;
     private final Optional<WorkerFcmSender> fcmSender;
     private final NotificationWorkerProperties properties;
-    private final TransactionTemplate requiresNewTransactionTemplate;
 
     public NotificationDispatcher(
             RecipientResolver recipientResolver,
@@ -54,8 +50,7 @@ public class NotificationDispatcher {
             NotificationTemplateService templateService,
             ExpoPushClient expoPushClient,
             Optional<WorkerFcmSender> fcmSender,
-            NotificationWorkerProperties properties,
-            PlatformTransactionManager transactionManager
+            NotificationWorkerProperties properties
     ) {
         this.recipientResolver = recipientResolver;
         this.userDeviceRepository = userDeviceRepository;
@@ -66,8 +61,6 @@ public class NotificationDispatcher {
         this.expoPushClient = expoPushClient;
         this.fcmSender = fcmSender;
         this.properties = properties;
-        this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
-        this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional
@@ -231,29 +224,24 @@ public class NotificationDispatcher {
         }
     }
 
-    // Committed in its own REQUIRES_NEW transaction so the inbox row survives even if
-    // dispatch()'s outer transaction later rolls back (e.g. a push-provider or bookkeeping
-    // failure after this point) — the push itself may already be irreversibly sent by then.
     private void saveInboxEntry(
             UUID userId, UUID deliveryLogId, String title, String body,
             String eventType, UUID taskId, UUID paymentRequestId, String route
     ) {
-        try {
-            requiresNewTransactionTemplate.executeWithoutResult(status -> {
-                UserNotificationEntity entity = new UserNotificationEntity();
-                entity.setUserId(userId);
-                entity.setDeliveryLogId(deliveryLogId);
-                entity.setTitle(title.length() > 100 ? title.substring(0, 100) : title);
-                entity.setBody(body);
-                entity.setEventType(eventType);
-                entity.setTaskId(taskId);
-                entity.setPaymentRequestId(paymentRequestId);
-                entity.setRoute(route);
-                userNotificationRepository.saveAndFlush(entity);
-            });
-        } catch (DataIntegrityViolationException e) {
-            // inbox row already created for this delivery log on a prior dispatch attempt
-        }
+        // Keep this insert in dispatch()'s transaction. New delivery-log rows are not
+        // committed yet, so a REQUIRES_NEW child insert cannot satisfy the FK reliably.
+        // ON CONFLICT makes retries safe without poisoning the current transaction.
+        userNotificationRepository.insertIgnore(
+                UUID.randomUUID(),
+                userId,
+                deliveryLogId,
+                eventType,
+                taskId,
+                paymentRequestId,
+                route,
+                title.length() > 100 ? title.substring(0, 100) : title,
+                body
+        );
     }
 
     private Map<String, Object> buildDataMap(NotificationEventPayload payload) {

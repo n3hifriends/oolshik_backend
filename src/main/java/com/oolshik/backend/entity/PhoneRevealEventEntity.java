@@ -1,5 +1,6 @@
 package com.oolshik.backend.entity;
 
+import com.oolshik.backend.domain.HelpRequestActorRole;
 import jakarta.persistence.*;
 import org.hibernate.annotations.UuidGenerator;
 
@@ -12,7 +13,8 @@ import java.util.*;
         indexes = {
                 @Index(name = "idx_pre_requester", columnList = "requester_user_id"),
                 @Index(name = "idx_pre_target", columnList = "target_user_id"),
-                @Index(name = "idx_pre_revealed_at", columnList = "revealed_at")
+                @Index(name = "idx_pre_revealed_at", columnList = "revealed_at"),
+                @Index(name = "idx_phone_reveal_event_help_request_id", columnList = "help_request_id")
         }
 )
 public class PhoneRevealEventEntity {
@@ -42,6 +44,28 @@ public class PhoneRevealEventEntity {
     /** Optional counter if you choose to increment per target/number */
     @Column(name = "reveal_count", nullable = false)
     private Integer revealCount = 0;
+
+    /** The task this reveal happened in. Nullable: historical rows predate this column. */
+    @Column(name = "help_request_id")
+    private UUID helpRequestId;
+
+    /** The revealer's role on the task at the time of the reveal. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "viewer_role", length = 20)
+    private HelpRequestActorRole viewerRole;
+
+    /** The target's role on the task at the time of the reveal. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_role", length = 20)
+    private HelpRequestActorRole targetRole;
+
+    /** Where the reveal was triggered from, e.g. MOBILE_TASK_DETAIL. */
+    @Column(name = "reveal_source", length = 40)
+    private String revealSource;
+
+    /** Masked snapshot of phoneNumber, safe for ordinary admin display. */
+    @Column(name = "masked_phone", length = 32)
+    private String maskedPhone;
 
     // ---- Optional read-only associations (handy for joins / projections) ----
     // They are read-only (insertable=false, updatable=false) because we persist via the *_user_id fields.
@@ -90,6 +114,21 @@ public class PhoneRevealEventEntity {
 
     public Integer getRevealCount() { return revealCount; }
     public void setRevealCount(Integer revealCount) { this.revealCount = revealCount; }
+
+    public UUID getHelpRequestId() { return helpRequestId; }
+    public void setHelpRequestId(UUID helpRequestId) { this.helpRequestId = helpRequestId; }
+
+    public HelpRequestActorRole getViewerRole() { return viewerRole; }
+    public void setViewerRole(HelpRequestActorRole viewerRole) { this.viewerRole = viewerRole; }
+
+    public HelpRequestActorRole getTargetRole() { return targetRole; }
+    public void setTargetRole(HelpRequestActorRole targetRole) { this.targetRole = targetRole; }
+
+    public String getRevealSource() { return revealSource; }
+    public void setRevealSource(String revealSource) { this.revealSource = revealSource; }
+
+    public String getMaskedPhone() { return maskedPhone; }
+    public void setMaskedPhone(String maskedPhone) { this.maskedPhone = maskedPhone; }
 
     public UserEntity getRequesterUser() { return requesterUser; }
     public UserEntity getTargetUser() { return targetUser; }

@@ -16,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -31,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,8 +52,6 @@ class NotificationDispatcherTest {
     private NotificationTemplateService templateService;
     @Mock
     private ExpoPushClient expoPushClient;
-    @Mock
-    private PlatformTransactionManager transactionManager;
 
     private NotificationDispatcher dispatcher;
 
@@ -70,8 +68,7 @@ class NotificationDispatcherTest {
                 templateService,
                 expoPushClient,
                 Optional.empty(),
-                properties,
-                transactionManager
+                properties
         );
     }
 
@@ -142,6 +139,35 @@ class NotificationDispatcherTest {
         verify(userDeviceRepository).deactivateByTokenHash(eq(expectedHash));
         verify(deliveryLogRepository).updateStatusAndProvider(any(), eq("FAILED"), eq("EXPO"), eq("DeviceNotRegistered"), any(OffsetDateTime.class));
         verify(templateService).templateFor(eq("TASK_CANCELLED"), any(), eq("mr-IN"));
+        verify(userNotificationRepository).insertIgnore(
+                any(), eq(userId), any(), eq("TASK_CANCELLED"), eq(taskId),
+                isNull(), eq("TaskDetail"), eq("t"), eq("b"));
+    }
+
+    @Test
+    void createsInboxEntryWhenRecipientHasNoPushDevice() {
+        UUID taskId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        NotificationEventPayload payload = new NotificationEventPayload();
+        payload.setEventId(UUID.randomUUID());
+        payload.setEventType("TASK_CANCELLED");
+        payload.setTaskId(taskId);
+
+        when(recipientResolver.resolve(payload)).thenReturn(List.of(userId));
+        when(deliveryLogRepository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(userDeviceRepository.findActiveByUserIds(anyList())).thenReturn(List.of());
+        when(userDeviceRepository.findPreferredLocalesByUserIds(anyList())).thenReturn(List.of());
+        when(templateService.templateFor(eq("TASK_CANCELLED"), any(), eq("en-IN")))
+                .thenReturn(new NotificationTemplateService.NotificationTemplate("Task cancelled", "The task was cancelled."));
+
+        dispatcher.dispatch(payload);
+
+        verify(userNotificationRepository).insertIgnore(
+                any(), eq(userId), any(), eq("TASK_CANCELLED"), eq(taskId),
+                isNull(), eq("TaskDetail"), eq("Task cancelled"), eq("The task was cancelled."));
+        verify(deliveryLogRepository).updateStatusAndProvider(
+                any(), eq("FAILED"), eq("EXPO"), eq("no active tokens"), any(OffsetDateTime.class));
+        verify(expoPushClient, never()).send(anyList());
     }
 
     @Test

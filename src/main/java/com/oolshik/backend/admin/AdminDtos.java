@@ -134,6 +134,19 @@ public final class AdminDtos {
     ) {
     }
 
+    public record AdminPhoneRevealRow(
+            UUID id,
+            UUID helpRequestId,
+            UserRef viewer,
+            String viewerRole,
+            UserRef target,
+            String targetRole,
+            String maskedPhone,
+            String revealSource,
+            Instant revealedAt
+    ) {
+    }
+
     public record AdminOtpAuditRow(
             UUID id,
             String maskedPhone,

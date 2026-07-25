@@ -9,6 +9,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
+import com.oolshik.backend.admin.AdminDtos.AdminPhoneRevealRow;
 import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestDetail;
@@ -149,6 +150,14 @@ public class AdminController {
         return adminService.getRequest(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/requests/{id}/phone-reveals")
+    public PageResponse<AdminPhoneRevealRow> getPhoneReveals(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return adminService.getPhoneReveals(id, pageRequest(page, size));
     }
 
     @PatchMapping("/requests/{id}/status")

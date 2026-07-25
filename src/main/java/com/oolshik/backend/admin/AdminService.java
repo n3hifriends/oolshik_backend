@@ -7,6 +7,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminNotificationRow;
 import com.oolshik.backend.admin.AdminDtos.AdminOtpAuditRow;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
+import com.oolshik.backend.admin.AdminDtos.AdminPhoneRevealRow;
 import com.oolshik.backend.admin.AdminDtos.AdminReportActionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
@@ -46,6 +47,7 @@ import com.oolshik.backend.entity.HelpRequestEntity;
 import com.oolshik.backend.entity.HelpRequestEventEntity;
 import com.oolshik.backend.entity.NotificationOutboxEntity;
 import com.oolshik.backend.entity.OtpAuditLogEntity;
+import com.oolshik.backend.entity.PhoneRevealEventEntity;
 import com.oolshik.backend.entity.ReportActionEntity;
 import com.oolshik.backend.entity.ReportEventEntity;
 import com.oolshik.backend.entity.UserEntity;
@@ -57,6 +59,7 @@ import com.oolshik.backend.repo.FeedbackEventRepository;
 import com.oolshik.backend.repo.HelpRequestRepository;
 import com.oolshik.backend.repo.NotificationOutboxRepository;
 import com.oolshik.backend.repo.OtpAuditLogRepository;
+import com.oolshik.backend.repo.PhoneRevealEventRepository;
 import com.oolshik.backend.repo.ReportActionRepository;
 import com.oolshik.backend.repo.ReportEventRepository;
 import com.oolshik.backend.repo.UserRepository;
@@ -118,6 +121,7 @@ public class AdminService {
     private final TranscriptionJobPublisher transcriptionJobPublisher;
     private final HelpRequestEventService helpRequestEventService;
     private final HelpRequestNotificationService helpRequestNotificationService;
+    private final PhoneRevealEventRepository phoneRevealEventRepository;
 
     @Transactional(readOnly = true)
     public StatsResponse getStats() {
@@ -422,6 +426,30 @@ public class AdminService {
     @Transactional(readOnly = true)
     public PageResponse<AdminOtpAuditRow> getOtpAudit(String status, Pageable pageable) {
         return PageResponse.from(otpAuditLogRepository.findForAdmin(blankToNull(status), pageable).map(this::toOtpAuditRow));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<AdminPhoneRevealRow> getPhoneReveals(UUID helpRequestId, Pageable pageable) {
+        Page<PhoneRevealEventEntity> page =
+                phoneRevealEventRepository.findByHelpRequestIdOrderByRevealedAtDesc(helpRequestId, pageable);
+        Map<UUID, UserRef> refs = loadUserRefs(page.getContent().stream()
+                .flatMap(event -> Stream.of(event.getRequesterUserId(), event.getTargetUserId()))
+                .toList());
+        return PageResponse.from(page.map(event -> toPhoneRevealRow(event, refs)));
+    }
+
+    private AdminPhoneRevealRow toPhoneRevealRow(PhoneRevealEventEntity event, Map<UUID, UserRef> refs) {
+        return new AdminPhoneRevealRow(
+                event.getId(),
+                event.getHelpRequestId(),
+                refs.get(event.getRequesterUserId()),
+                event.getViewerRole() == null ? null : event.getViewerRole().name(),
+                refs.get(event.getTargetUserId()),
+                event.getTargetRole() == null ? null : event.getTargetRole().name(),
+                event.getMaskedPhone(),
+                event.getRevealSource(),
+                event.getRevealedAt()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -836,6 +864,9 @@ public class AdminService {
             case RADIUS_EXPANDED -> "Search radius expanded";
             case CREATE_BLOCKED_CAP_REACHED -> "Blocked: active request cap reached";
             case ADMIN_STATUS_OVERRIDE -> "Admin overrode status";
+            case PHONE_REVEALED -> event.getActorRole() == HelpRequestActorRole.REQUESTER
+                    ? "Requester revealed helper's contact information"
+                    : "Helper revealed requester's contact information";
         };
         if (event.getReasonCode() == null || event.getReasonCode().isBlank()) {
             return base;
