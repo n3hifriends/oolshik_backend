@@ -49,6 +49,8 @@ public class UserNotificationService {
     }
 
     private UserNotificationResponse toResponse(UserNotificationEntity e) {
-        return new UserNotificationResponse(e.getId(), e.getTitle(), e.getBody(), e.getReadAt() != null, e.getCreatedAt());
+        return new UserNotificationResponse(
+                e.getId(), e.getTitle(), e.getBody(), e.getReadAt() != null, e.getCreatedAt(),
+                e.getBroadcastId(), e.getEventType(), e.getTaskId(), e.getPaymentRequestId(), e.getRoute());
     }
 }

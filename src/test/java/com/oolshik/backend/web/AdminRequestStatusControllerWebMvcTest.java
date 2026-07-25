@@ -98,7 +98,7 @@ class AdminRequestStatusControllerWebMvcTest {
                 new UserRef(UUID.randomUUID(), "Requester", "+91999"),
                 null,
                 new GeoPoint(12.9, 77.6),
-                500, null, "INR", OffsetDateTime.now(), null, null, null
+                500, null, "INR", OffsetDateTime.now(), null, null, null, java.util.List.of()
         );
         when(adminService.adminUpdateHelpRequestStatus(eq(requestId), eq("COMPLETED"), eq("Admin closed"), eq(adminId)))
                 .thenReturn(detail);

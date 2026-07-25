@@ -117,6 +117,8 @@ public class NotificationDispatcher {
         List<WorkerFcmSender.FcmMessage> fcmOutgoing = new ArrayList<>();
         Map<String, UUID> tokenToRecipient = new HashMap<>();
         Map<UUID, DeliveryOutcome> outcomes = new HashMap<>();
+        Map<String, Object> data = buildDataMap(payload);
+        String route = (String) data.get("route");
 
         for (Map.Entry<UUID, NotificationDeliveryLogEntity> entry : logs.entrySet()) {
             UUID recipientId = entry.getKey();
@@ -126,7 +128,8 @@ public class NotificationDispatcher {
             String body = enrichBodyWithOffer(template.body(), payload, localeTag);
             // In-app inbox entry is independent of push deliverability, so create it
             // whether or not the recipient has a registered device.
-            saveInboxEntry(recipientId, entry.getValue().getId(), template.title(), body);
+            saveInboxEntry(recipientId, entry.getValue().getId(), template.title(), body,
+                    payload.getEventType(), payload.getTaskId(), payload.getPaymentRequestId(), route);
 
             List<UserDeviceEntity> userDevices = devicesByUser.get(recipientId);
             if (userDevices == null || userDevices.isEmpty()) {
@@ -134,7 +137,6 @@ public class NotificationDispatcher {
                         entry.getValue().getId(), "FAILED", "EXPO", "no active tokens", now);
                 continue;
             }
-            Map<String, Object> data = buildDataMap(payload);
 
             for (UserDeviceEntity device : userDevices) {
                 String provider = device.getProvider();
@@ -232,7 +234,10 @@ public class NotificationDispatcher {
     // Committed in its own REQUIRES_NEW transaction so the inbox row survives even if
     // dispatch()'s outer transaction later rolls back (e.g. a push-provider or bookkeeping
     // failure after this point) — the push itself may already be irreversibly sent by then.
-    private void saveInboxEntry(UUID userId, UUID deliveryLogId, String title, String body) {
+    private void saveInboxEntry(
+            UUID userId, UUID deliveryLogId, String title, String body,
+            String eventType, UUID taskId, UUID paymentRequestId, String route
+    ) {
         try {
             requiresNewTransactionTemplate.executeWithoutResult(status -> {
                 UserNotificationEntity entity = new UserNotificationEntity();
@@ -240,6 +245,10 @@ public class NotificationDispatcher {
                 entity.setDeliveryLogId(deliveryLogId);
                 entity.setTitle(title.length() > 100 ? title.substring(0, 100) : title);
                 entity.setBody(body);
+                entity.setEventType(eventType);
+                entity.setTaskId(taskId);
+                entity.setPaymentRequestId(paymentRequestId);
+                entity.setRoute(route);
                 userNotificationRepository.saveAndFlush(entity);
             });
         } catch (DataIntegrityViolationException e) {

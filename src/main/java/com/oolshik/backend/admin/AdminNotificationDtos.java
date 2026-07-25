@@ -97,7 +97,12 @@ public final class AdminNotificationDtos {
             String title,
             String body,
             boolean read,
-            OffsetDateTime createdAt
+            OffsetDateTime createdAt,
+            UUID broadcastId,
+            String eventType,
+            UUID taskId,
+            UUID paymentRequestId,
+            String route
     ) {}
 
     public record UnreadCountResponse(long count) {}

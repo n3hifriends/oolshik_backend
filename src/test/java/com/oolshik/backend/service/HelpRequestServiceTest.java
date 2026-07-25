@@ -6,6 +6,7 @@ import com.oolshik.backend.domain.HelpRequestCancelReason;
 import com.oolshik.backend.domain.HelpRequestCompletionMode;
 import com.oolshik.backend.domain.HelpRequestEventType;
 import com.oolshik.backend.domain.HelpRequestIssueReason;
+import com.oolshik.backend.domain.HelpRequestReassignReason;
 import com.oolshik.backend.domain.HelpRequestRejectReason;
 import com.oolshik.backend.domain.HelpRequestStatus;
 import com.oolshik.backend.entity.HelpRequestEntity;
@@ -133,6 +134,62 @@ class HelpRequestServiceTest {
                 .thenReturn(0);
 
         assertThrows(ConflictOperationException.class, () -> service.reassign(requestId, requesterId));
+    }
+
+    @Test
+    void reassignRequiresReasonTextWhenOther() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity entity = new HelpRequestEntity();
+        entity.setId(requestId);
+        entity.setRequesterId(requesterId);
+        entity.setHelperId(helperId);
+        entity.setStatus(HelpRequestStatus.ASSIGNED);
+        entity.setHelperAcceptedAt(OffsetDateTime.now());
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(entity));
+
+        HelpRequestDtos.ReassignRequest body =
+                new HelpRequestDtos.ReassignRequest(HelpRequestReassignReason.OTHER, " ");
+
+        assertThrows(IllegalArgumentException.class, () -> service.reassign(requestId, requesterId, body));
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void reassignPersistsRealReasonOnEvent() {
+        UUID requestId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID helperId = UUID.randomUUID();
+
+        HelpRequestEntity entity = new HelpRequestEntity();
+        entity.setId(requestId);
+        entity.setRequesterId(requesterId);
+        entity.setHelperId(helperId);
+        entity.setStatus(HelpRequestStatus.ASSIGNED);
+        entity.setHelperAcceptedAt(OffsetDateTime.now());
+
+        when(repo.findById(requestId)).thenReturn(Optional.of(entity));
+        when(radiusExpansionService.findNextRadius(anyInt())).thenReturn(Optional.empty());
+        when(repo.updateReassign(any(), any(), any(), any(), anyInt(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        HelpRequestDtos.ReassignRequest body =
+                new HelpRequestDtos.ReassignRequest(HelpRequestReassignReason.HELPER_NOT_RESPONDING, null);
+
+        service.reassign(requestId, requesterId, body);
+
+        verify(eventService).record(
+                eq(requestId),
+                eq(HelpRequestEventType.REASSIGNED),
+                eq(com.oolshik.backend.domain.HelpRequestActorRole.REQUESTER),
+                eq(requesterId),
+                eq("HELPER_NOT_RESPONDING"),
+                eq((String) null),
+                eq((String) null)
+        );
     }
 
     @Test

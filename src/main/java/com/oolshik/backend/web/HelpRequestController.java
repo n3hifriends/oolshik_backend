@@ -23,6 +23,7 @@ import com.oolshik.backend.web.dto.HelpRequestDtos.CancelRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.ReleaseRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.RejectRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.ReportIssueRequest;
+import com.oolshik.backend.web.dto.HelpRequestDtos.ReassignRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateRequest;
 import com.oolshik.backend.web.dto.HelpRequestDtos.OfferUpdateResponse;
 import jakarta.validation.Valid;
@@ -169,7 +170,7 @@ public class HelpRequestController {
         @PageableDefault(size = 50) Pageable pageable
     ) {
         UUID viewerId = resolveViewerId(principal);
-        return service.nearby(lat, lng, radiusMeters, statuses, pageable)
+        return service.nearby(lat, lng, radiusMeters, statuses, viewerId, pageable)
                 .map(row -> view(row, viewerId));
     }
 
@@ -314,10 +315,11 @@ public class HelpRequestController {
     @PostMapping("/{id}/reassign")
     public ResponseEntity<?> reassign(
             @AuthenticationPrincipal AuthenticatedUserPrincipal principal,
-            @PathVariable UUID id
+            @PathVariable UUID id,
+            @RequestBody(required = false) @Valid ReassignRequest body
     ) {
         var requester = currentUserService.require(principal);
-        var updated = service.reassign(id, requester.getId());
+        var updated = service.reassign(id, requester.getId(), body);
         return ResponseEntity.ok(view(updated, null, requester.getId()));
     }
 

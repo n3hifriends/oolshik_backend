@@ -100,7 +100,9 @@ app:
     enabled: ${APP_DOCS_ENABLED:true}
   messaging:
     kafka:
-      enabled: ${APP_MESSAGING_KAFKA_ENABLED:false}
+      enabled: ${APP_MESSAGING_KAFKA_ENABLED:true}
+      stt:
+        enabled: ${APP_MESSAGING_KAFKA_STT_ENABLED:true}
   cors:
     allowedOrigins: ${APP_CORS_ALLOWED_ORIGINS:}
   otp:
@@ -182,6 +184,9 @@ management:
       show-details: never
       probes:
         enabled: true
+  health:
+    kafka:
+      enabled: false
 
 media:
   storage: ${MEDIA_STORAGE:local} # local | s3

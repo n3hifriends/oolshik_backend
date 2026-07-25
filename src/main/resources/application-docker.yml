@@ -25,7 +25,9 @@ app:
     identity-provider: local
   messaging:
     kafka:
-      enabled: ${APP_MESSAGING_KAFKA_ENABLED:false}
+      enabled: ${APP_MESSAGING_KAFKA_ENABLED:true}
+      stt:
+        enabled: ${APP_MESSAGING_KAFKA_STT_ENABLED:true}
   otp:
     provider: dev
     dev:

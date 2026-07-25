@@ -24,6 +24,8 @@ app:
   messaging:
     kafka:
       enabled: true
+      stt:
+        enabled: true
   docs:
     enabled: false
   admin:

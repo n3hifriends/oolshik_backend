@@ -25,6 +25,18 @@ public class UserNotificationEntity {
     @Column(name = "delivery_log_id")
     private UUID deliveryLogId;
 
+    @Column(name = "event_type", length = 64)
+    private String eventType;
+
+    @Column(name = "task_id")
+    private UUID taskId;
+
+    @Column(name = "payment_request_id")
+    private UUID paymentRequestId;
+
+    @Column(name = "route", length = 32)
+    private String route;
+
     @Column(nullable = false, length = 100)
     private String title;
 
@@ -51,6 +63,14 @@ public class UserNotificationEntity {
     public void setBroadcastId(UUID broadcastId) { this.broadcastId = broadcastId; }
     public UUID getDeliveryLogId() { return deliveryLogId; }
     public void setDeliveryLogId(UUID deliveryLogId) { this.deliveryLogId = deliveryLogId; }
+    public String getEventType() { return eventType; }
+    public void setEventType(String eventType) { this.eventType = eventType; }
+    public UUID getTaskId() { return taskId; }
+    public void setTaskId(UUID taskId) { this.taskId = taskId; }
+    public UUID getPaymentRequestId() { return paymentRequestId; }
+    public void setPaymentRequestId(UUID paymentRequestId) { this.paymentRequestId = paymentRequestId; }
+    public String getRoute() { return route; }
+    public void setRoute(String route) { this.route = route; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getBody() { return body; }

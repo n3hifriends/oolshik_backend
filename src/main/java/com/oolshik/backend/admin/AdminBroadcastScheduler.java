@@ -150,12 +150,18 @@ public class AdminBroadcastScheduler {
     }
 
     private int processInApp(AdminBroadcastEntity broadcast, List<UUID> userIds) {
+        String routeKey = broadcast.getRouteKey();
+        UUID routeTaskId = "TaskDetail".equals(routeKey) ? UUID.fromString(broadcast.getRouteTargetId()) : null;
+
         List<UserNotificationEntity> notifications = userIds.stream().map(userId -> {
             UserNotificationEntity n = new UserNotificationEntity();
             n.setUserId(userId);
             n.setBroadcastId(broadcast.getId());
             n.setTitle(broadcast.getTitle());
             n.setBody(broadcast.getBody());
+            n.setEventType("ADMIN_BROADCAST");
+            n.setRoute(routeKey);
+            n.setTaskId(routeTaskId);
             return n;
         }).toList();
         userNotificationRepository.saveAll(notifications);

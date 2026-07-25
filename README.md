@@ -8,12 +8,14 @@ A clean, extensible backend for **Oolshik Phase 1** with **mobile number + OTP l
 
 Four profiles cover every development and deployment scenario. Set `SPRING_PROFILES_ACTIVE` and `APP_DB_MODE` in your `.env` (copy `.env.example` to get started).
 
-| Profile | Use case | DB mode | OTP | Kafka | Media |
-|---------|----------|---------|-----|-------|-------|
-| `local` | IDE / no Docker | `local` (localhost:5432) | dev (code in log) | off | local disk |
-| `docker` | `docker compose up` | `local` (db service) | dev | optional (see below) | local disk |
-| `cloud-dev` | Cloud staging (Neon + S3) | `neon` | msg91 (real SMS) | off | S3 |
-| `prod` | AWS production | `rds` | msg91 | on | S3 |
+| Profile | Use case | DB mode | OTP | Kafka (notifications) | Kafka (STT jobs) | Media |
+|---------|----------|---------|-----|------------------------|-------------------|-------|
+| `local` | IDE / no Docker | `local` (localhost:5432) | dev (code in log) | on (needs a broker reachable at `localhost:9092`; disable with `APP_MESSAGING_KAFKA_ENABLED=false` if you don't have one running) | off | local disk |
+| `docker` | `docker compose up` | `local` (db service) | dev | on (Kafka + notification-worker start by default; see below) | off | local disk |
+| `cloud-dev` | Cloud staging (Neon + S3) | `neon` | msg91 (real SMS) | off | off | S3 |
+| `prod` | AWS production | `rds` | msg91 | on | on | S3 |
+
+`app.messaging.kafka.enabled` (notification outbox) and `app.messaging.kafka.stt.enabled` (voice-note transcription jobs) are independent flags — enabling one does not enable the other. This matters because `stt-worker`, the only consumer of STT jobs, stays behind `--profile full` (see below); STT stays off by default everywhere except `dev`/`prod` so jobs aren't published to a topic nothing is consuming.
 
 ### Local (IDE — no Docker)
 
@@ -24,7 +26,7 @@ cp .env.example .env
 ./mvnw spring-boot:run
 ```
 
-### Docker Compose — api + db only (fast, no Kafka)
+### Docker Compose — api + db + Kafka + notification worker (default)
 
 ```bash
 cp .env.example .env
@@ -32,11 +34,15 @@ cp .env.example .env
 docker compose up --build
 ```
 
-### Docker Compose — full stack (api + db + Kafka + STT worker + notification worker)
+Kafka and `notification-worker` start by default so task-related events (task created/reassigned/cancelled/etc.) reach the mobile notification inbox out of the box. If you don't need this and want a faster/lighter startup, set `APP_MESSAGING_KAFKA_ENABLED=false` and skip the `kafka`/`notification-worker` services with `docker compose up db api`.
+
+### Docker Compose — full stack (adds STT worker)
 
 ```bash
-APP_MESSAGING_KAFKA_ENABLED=true docker compose --profile full up --build
+docker compose --profile full up --build
 ```
+
+`--profile full` additionally starts `stt-worker`. Kafka and `notification-worker` no longer require this flag — they run in the default `docker compose up`.
 
 ### Cloud-dev / staging
 

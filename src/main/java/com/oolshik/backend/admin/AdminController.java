@@ -140,7 +140,7 @@ public class AdminController {
                 : statuses.stream().map(this::parseHelpRequestStatus).toList();
         return adminService.getRequests(
                 parsed,
-                pageRequest(page, size, Sort.by(Sort.Direction.DESC, "lastStateChangeAt"))
+                pageRequest(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         );
     }
 

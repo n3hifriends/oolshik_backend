@@ -22,7 +22,9 @@ app:
     identity-provider: local
   messaging:
     kafka:
-      enabled: false
+      enabled: true
+      stt:
+        enabled: true
   otp:
     provider: dev
     dev:

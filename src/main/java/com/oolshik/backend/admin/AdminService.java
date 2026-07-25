@@ -10,6 +10,7 @@ import com.oolshik.backend.admin.AdminDtos.AdminPaymentRow;
 import com.oolshik.backend.admin.AdminDtos.AdminReportActionRow;
 import com.oolshik.backend.admin.AdminDtos.AdminReportDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminReportRow;
+import com.oolshik.backend.admin.AdminDtos.AdminEventRow;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestDetail;
 import com.oolshik.backend.admin.AdminDtos.AdminRequestSummary;
 import com.oolshik.backend.admin.AdminDtos.AdminTranscriptionRow;
@@ -42,6 +43,7 @@ import com.oolshik.backend.domain.Role;
 import com.oolshik.backend.entity.FeedbackActionEntity;
 import com.oolshik.backend.entity.FeedbackEventEntity;
 import com.oolshik.backend.entity.HelpRequestEntity;
+import com.oolshik.backend.entity.HelpRequestEventEntity;
 import com.oolshik.backend.entity.NotificationOutboxEntity;
 import com.oolshik.backend.entity.OtpAuditLogEntity;
 import com.oolshik.backend.entity.ReportActionEntity;
@@ -770,6 +772,9 @@ public class AdminService {
         String audioUrl = transcription == null
                 ? null
                 : audioPlaybackUrlResolver.resolve(transcription.getAudioFileId(), transcription.getAudioUrl());
+        List<AdminEventRow> events = helpRequestEventService.listForRequest(request.getId()).stream()
+                .map(event -> toEventRow(event, refs))
+                .toList();
         return new AdminRequestDetail(
                 request.getId(),
                 request.getTitle(),
@@ -784,8 +789,73 @@ public class AdminService {
                 request.getCreatedAt(),
                 audioUrl,
                 transcription == null ? null : transcription.getTranscriptText(),
-                request.getAdminOverrideReason()
+                request.getAdminOverrideReason(),
+                events
         );
+    }
+
+    private AdminEventRow toEventRow(HelpRequestEventEntity event, Map<UUID, UserRef> refs) {
+        UserRef actorRef = event.getActorUserId() == null ? null : refs.get(event.getActorUserId());
+        String by = actorRef != null ? actorRef.displayName() : actorRoleLabel(event.getActorRole());
+        return new AdminEventRow(
+                event.getEventType() == null ? null : event.getEventType().name(),
+                eventLabel(event),
+                by,
+                event.getReasonCode(),
+                event.getReasonText(),
+                event.getCreatedAt()
+        );
+    }
+
+    private String actorRoleLabel(HelpRequestActorRole role) {
+        if (role == null) return "System";
+        return switch (role) {
+            case REQUESTER -> "Requester";
+            case HELPER -> "Helper";
+            case ADMIN -> "Admin";
+            case SYSTEM -> "System";
+        };
+    }
+
+    private String eventLabel(HelpRequestEventEntity event) {
+        String base = event.getEventType() == null ? "Event" : switch (event.getEventType()) {
+            case ACCEPTED -> "Helper accepted";
+            case AUTH_REQUESTED -> "Authorization requested";
+            case AUTH_APPROVED -> "Authorization approved";
+            case AUTH_REJECTED -> "Authorization rejected";
+            case AUTH_TIMEOUT -> "Authorization timed out";
+            case RELEASED -> "Helper released task";
+            case REASSIGNED -> "Requester reassigned task";
+            case CANCELLED -> "Requester cancelled task";
+            case TIMEOUT -> "Timed out";
+            case COMPLETED -> "Task completed";
+            case WORK_MARKED_DONE -> "Helper marked work done";
+            case COMPLETION_CONFIRMED -> "Requester confirmed completion";
+            case COMPLETION_ISSUE_REPORTED -> "Requester reported an issue";
+            case AUTO_COMPLETED_BY_TIMEOUT -> "Auto-completed on timeout";
+            case RADIUS_EXPANDED -> "Search radius expanded";
+            case CREATE_BLOCKED_CAP_REACHED -> "Blocked: active request cap reached";
+            case ADMIN_STATUS_OVERRIDE -> "Admin overrode status";
+        };
+        if (event.getReasonCode() == null || event.getReasonCode().isBlank()) {
+            return base;
+        }
+        String reason = humanizeReasonCode(event.getReasonCode());
+        if ("OTHER".equals(event.getReasonCode()) && event.getReasonText() != null && !event.getReasonText().isBlank()) {
+            return base + " — " + event.getReasonText();
+        }
+        return base + " — " + reason;
+    }
+
+    private String humanizeReasonCode(String reasonCode) {
+        String[] words = reasonCode.toLowerCase(java.util.Locale.ROOT).split("_");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            if (words[i].isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(words[i].charAt(0))).append(words[i].substring(1));
+        }
+        return sb.toString();
     }
 
     private AdminOtpAuditRow toOtpAuditRow(OtpAuditLogEntity entity) {

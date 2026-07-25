@@ -7,6 +7,7 @@ import com.oolshik.backend.repo.HelpRequestEventRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -37,5 +38,9 @@ public class HelpRequestEventService {
         event.setReasonText(reasonText);
         event.setMetadata(metadataJson);
         return repo.save(event);
+    }
+
+    public List<HelpRequestEventEntity> listForRequest(UUID requestId) {
+        return repo.findByRequestIdOrderByCreatedAtAsc(requestId);
     }
 }

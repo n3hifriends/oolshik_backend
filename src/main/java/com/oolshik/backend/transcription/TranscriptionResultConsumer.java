@@ -9,7 +9,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.messaging.kafka.stt.enabled", havingValue = "true")
 public class TranscriptionResultConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(TranscriptionResultConsumer.class);

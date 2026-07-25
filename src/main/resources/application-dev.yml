@@ -15,6 +15,8 @@ app:
   messaging:
     kafka:
       enabled: true
+      stt:
+        enabled: true
   otp:
     provider: dev
     dev:

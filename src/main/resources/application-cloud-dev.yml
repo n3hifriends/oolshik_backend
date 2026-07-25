@@ -31,6 +31,8 @@ app:
   messaging:
     kafka:
       enabled: false
+      stt:
+        enabled: false
   otp:
     provider: msg91
     dev:

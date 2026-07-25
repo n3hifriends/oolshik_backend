@@ -5,6 +5,7 @@ import com.oolshik.backend.domain.OnboardingPhase;
 import com.oolshik.backend.domain.HelpRequestActivityPolicy;
 import com.oolshik.backend.domain.HelpRequestActorRole;
 import com.oolshik.backend.domain.HelpRequestCancelReason;
+import com.oolshik.backend.domain.HelpRequestReassignReason;
 import com.oolshik.backend.domain.HelpRequestCompletionMode;
 import com.oolshik.backend.domain.HelpRequestEventType;
 import com.oolshik.backend.domain.HelpRequestIssueReason;
@@ -194,14 +195,14 @@ public class HelpRequestService {
 
     public Page<HelpRequestRow> nearby(
             double lat, double lng, int radiusMeters,
-            List<String> statuses, Pageable pageable
+            List<String> statuses, UUID viewerId, Pageable pageable
     ) {
 
         String statusesCsv = (statuses == null || statuses.isEmpty())
                 ? ""  // value ignored when statusesEmpty = true
                 : String.join(",", statuses);
         // call repo:
-        return repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, pageable);
+        return repo.findNearbyPaged(lat, lng, radiusMeters, statusesCsv, viewerId, pageable);
     }
 
     public HelpRequestRow findTaskByTaskId(
@@ -718,6 +719,11 @@ public class HelpRequestService {
 
     @Transactional
     public HelpRequestEntity reassign(UUID requestId, UUID requesterId) {
+        return reassign(requestId, requesterId, null);
+    }
+
+    @Transactional
+    public HelpRequestEntity reassign(UUID requestId, UUID requesterId, HelpRequestDtos.ReassignRequest body) {
         HelpRequestEntity existing = repo.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found"));
         if (!requesterId.equals(existing.getRequesterId())) {
@@ -729,6 +735,12 @@ public class HelpRequestService {
         }
         if (existing.getHelperAcceptedAt() == null) {
             throw new ConflictOperationException("Request not accepted yet");
+        }
+
+        HelpRequestReassignReason reason = body == null ? null : body.reasonCode();
+        String reasonText = body == null ? null : body.reasonText();
+        if (reason == HelpRequestReassignReason.OTHER && (reasonText == null || reasonText.isBlank())) {
+            throw new IllegalArgumentException("Reason is required when reasonCode is OTHER");
         }
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -761,8 +773,8 @@ public class HelpRequestService {
                 HelpRequestEventType.REASSIGNED,
                 HelpRequestActorRole.REQUESTER,
                 requesterId,
-                "TIMEOUT",
-                null,
+                reason == null ? null : reason.name(),
+                reasonText,
                 null
         );
         NotificationEventContext context = buildContext(

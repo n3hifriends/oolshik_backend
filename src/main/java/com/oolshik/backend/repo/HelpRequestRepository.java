@@ -98,13 +98,31 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         LEFT JOIN user_avg ha ON ha.target_user_id = COALESCE(h.helper_id, h.pending_helper_id)
         LEFT JOIN user_avg ra ON ra.target_user_id = h.requester_id
         WHERE
-          (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
-          AND ST_DWithin(
-            h.location,
-            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-            :radiusMeters
+          (
+            (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+            AND ST_DWithin(
+              h.location,
+              ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+              :radiusMeters
+            )
+          )
+          OR (
+            :viewerId IS NOT NULL
+            AND (h.status = 'OPEN' OR (h.status = 'PENDING_AUTH' AND h.pending_helper_id = :viewerId))
+            AND EXISTS (
+              SELECT 1 FROM help_request_candidate c
+              WHERE c.help_request_id = h.id
+                AND c.helper_user_id = :viewerId
+                AND c.state IN ('PENDING', 'NOTIFIED')
+            )
           )
         ORDER BY
+          CASE WHEN :viewerId IS NOT NULL AND EXISTS (
+            SELECT 1 FROM help_request_candidate c
+            WHERE c.help_request_id = h.id
+              AND c.helper_user_id = :viewerId
+              AND c.state IN ('PENDING', 'NOTIFIED')
+          ) THEN 0 ELSE 1 END ASC,
           distanceMtr ASC,
           h.created_at DESC
         """,
@@ -112,11 +130,23 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         SELECT COUNT(*)
         FROM help_request h
         WHERE
-          (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
-          AND ST_DWithin(
-            h.location,
-            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-            :radiusMeters
+          (
+            (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+            AND ST_DWithin(
+              h.location,
+              ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+              :radiusMeters
+            )
+          )
+          OR (
+            :viewerId IS NOT NULL
+            AND (h.status = 'OPEN' OR (h.status = 'PENDING_AUTH' AND h.pending_helper_id = :viewerId))
+            AND EXISTS (
+              SELECT 1 FROM help_request_candidate c
+              WHERE c.help_request_id = h.id
+                AND c.helper_user_id = :viewerId
+                AND c.state IN ('PENDING', 'NOTIFIED')
+            )
           )
         """,
           nativeQuery = true
@@ -126,6 +156,7 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
           @Param("lng") double lng,
           @Param("radiusMeters") int radiusMeters,
           @Param("statusesCsv") String statusesCsv,
+          @Param("viewerId") UUID viewerId,
           Pageable pageable
   );
 

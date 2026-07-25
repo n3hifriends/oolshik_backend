@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.OffsetDateTime;
 
 @Component
-@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.messaging.kafka.stt.enabled", havingValue = "true")
 public class KafkaTranscriptionJobPublisher implements TranscriptionJobPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaTranscriptionJobPublisher.class);

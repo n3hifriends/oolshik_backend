@@ -119,7 +119,18 @@ public final class AdminDtos {
             OffsetDateTime createdAt,
             String audioUrl,
             String transcript,
-            String adminOverrideReason
+            String adminOverrideReason,
+            List<AdminEventRow> events
+    ) {
+    }
+
+    public record AdminEventRow(
+            String kind,
+            String label,
+            String by,
+            String reasonCode,
+            String reasonText,
+            OffsetDateTime at
     ) {
     }
 

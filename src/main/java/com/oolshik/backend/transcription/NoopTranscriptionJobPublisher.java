@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "app.messaging.kafka.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.messaging.kafka.stt.enabled", havingValue = "false", matchIfMissing = true)
 public class NoopTranscriptionJobPublisher implements TranscriptionJobPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NoopTranscriptionJobPublisher.class);

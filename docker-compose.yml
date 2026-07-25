@@ -1,6 +1,5 @@
 services:
   kafka:
-    profiles: [full]
     image: confluentinc/cp-kafka:7.6.0
     environment:
       KAFKA_NODE_ID: 1
@@ -91,6 +90,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
   stt-worker:
     profiles: [full]
     build:
@@ -125,7 +126,6 @@ services:
     volumes:
       - ./models/hf:/models/hf
   notification-worker:
-    profiles: [full]
     build: ./notification-worker
     environment:
       APP_DB_MODE: local

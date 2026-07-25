@@ -98,4 +98,9 @@ public class HelpRequestDtos {
             @NotNull com.oolshik.backend.domain.HelpRequestIssueReason reasonCode,
             String reasonText
     ) {}
+
+    public record ReassignRequest(
+            @NotNull com.oolshik.backend.domain.HelpRequestReassignReason reasonCode,
+            String reasonText
+    ) {}
 }
