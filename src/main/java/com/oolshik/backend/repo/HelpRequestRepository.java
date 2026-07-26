@@ -100,6 +100,10 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         WHERE
           (
             (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+            AND (
+              h.status = 'OPEN'
+              OR (:viewerId IS NOT NULL AND (h.helper_id = :viewerId OR h.pending_helper_id = :viewerId))
+            )
             AND ST_DWithin(
               h.location,
               ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
@@ -132,6 +136,10 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequestEntity, 
         WHERE
           (
             (COALESCE(:statusesCsv, '') = '' OR h.status::text = ANY(string_to_array(:statusesCsv, ',')))
+            AND (
+              h.status = 'OPEN'
+              OR (:viewerId IS NOT NULL AND (h.helper_id = :viewerId OR h.pending_helper_id = :viewerId))
+            )
             AND ST_DWithin(
               h.location,
               ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
