@@ -44,11 +44,18 @@ Job message (topic `stt.jobs`, key `jobId`):
   "jobId": "uuid",
   "taskId": "uuid",
   "audioUrl": "https://...",
-  "languageHint": "mr-IN|hi-IN|en-IN|null",
+  "languageHint": "auto|detect|mr-IN|hi-IN|en-IN|null",
   "createdAt": "ISO-8601",
   "correlationId": "uuid-or-trace-id"
 }
 ```
+
+`languageHint` semantics:
+- `"auto"` / `"detect"` (explicit) — always forces real language auto-detection via the faster-whisper fallback engine, regardless of `STT_DEFAULT_LANG`.
+- Missing / `null` / blank — falls back to the configured `STT_DEFAULT_LANG` (itself `"auto"` by default).
+- An explicit supported language code (e.g. `mr-IN`, `ta`) — honored directly; no detection is run.
+- Auto-detected English always stays on the faster-whisper transcript — it is never routed to the IndicConformer primary engine, which is not meant to transcribe English.
+- An auto-detected language IndicConformer does support (e.g. Marathi, Hindi, Tamil, Telugu, ...) is routed to the primary engine using that same detected language code — not remapped to a fixed fallback language.
 
 Result message (topic `stt.results`, key `jobId`):
 ```json
@@ -108,7 +115,7 @@ payload = {
   "jobId": str(uuid.uuid4()),
   "taskId": str(uuid.uuid4()),
   "audioUrl": "https://github.com/samnaveenkumaroff/Indic-F5/raw/refs/heads/main/1.wav",
-  "languageHint": None,
+  "languageHint": "auto",
   "createdAt": datetime.now(timezone.utc).isoformat(),
   "correlationId": str(uuid.uuid4()),
 }

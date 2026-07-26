@@ -50,7 +50,13 @@ def is_supported_lang(lang: Optional[str]) -> bool:
 
 def resolve_requested_lang(raw_hint: Optional[str], default_hint: str) -> tuple[Optional[str], bool]:
     hint = (raw_hint or "").strip().lower()
-    if hint in {"", "auto", "detect"}:
+    # An explicit "auto"/"detect" hint always forces real detection, regardless of
+    # STT_DEFAULT_LANG: a caller that explicitly asks for detection must get it even in
+    # a deployment whose configured default isn't "auto". Only a genuinely missing/blank
+    # hint (the field wasn't sent at all) falls through to the configured default below.
+    if hint in {"auto", "detect"}:
+        return None, True
+    if hint == "":
         hint = (default_hint or "").strip().lower()
     if hint in {"", "auto", "detect"}:
         return None, True

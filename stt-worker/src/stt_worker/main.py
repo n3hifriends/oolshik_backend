@@ -27,7 +27,7 @@ from stt_worker.dlq import build_dlq_message
 from stt_worker.health import set_engine, set_ready, start_health_server
 from stt_worker.kafka_consumer import create_consumer, pause_consumer, resume_consumer
 from stt_worker.kafka_producer import create_producer, flush_producer, produce_json
-from stt_worker.language import canonical_lang_code, is_supported_lang, resolve_requested_lang
+from stt_worker.language import canonical_lang_code, resolve_requested_lang
 from stt_worker.logging import configure_logging, with_context
 from stt_worker.metrics import (
     STT_DOWNLOAD_SECONDS,
@@ -38,6 +38,7 @@ from stt_worker.metrics import (
     start_metrics,
 )
 from stt_worker.retry import ErrorInfo, backoff_ms, classify_error
+from stt_worker.routing import decide_auto_route_to_primary
 from stt_worker.schema import JobMessage, ResultMessage, ResultStatus
 from stt_worker.transcribe.engine import (
     ENGINE_FASTERWHISPER,
@@ -70,9 +71,7 @@ class RuntimeOptions:
     download_retries: int
     download_backoff_sec: float
     fallback_enabled: bool
-    auto_route_primary_langs: frozenset[str]
     auto_route_min_confidence: float
-    auto_route_indic_fallback_lang: Optional[str]
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -87,16 +86,6 @@ def _normalize_engine_name(value: str) -> str:
     if v in {"fasterwhisper", "faster-whisper"}:
         return ENGINE_FASTERWHISPER
     return ENGINE_INDICCONFORMER
-
-
-def _parse_lang_csv(value: str, default: tuple[str, ...]) -> frozenset[str]:
-    raw = value.strip()
-    if not raw:
-        items = default
-    else:
-        items = tuple(part.strip() for part in raw.split(","))
-    normalized = {canonical_lang_code(item) for item in items}
-    return frozenset(lang for lang in normalized if lang)
 
 
 def _env_float_clamped(name: str, default: float, *, minimum: float, maximum: float) -> float:
@@ -456,32 +445,21 @@ def process_message(
                     fallback_result["language"] = detected_lang
                 result = fallback_result
 
-                route_lang = detected_lang
-                route_reason = "language_not_routed"
+                # `primary_accepts_detected_lang` is a static SUPPORTED_LANGUAGES membership
+                # check (via BaseEngine.resolve_lang), not live model capability introspection.
+                # It's valid for the currently configured multilingual IndicConformer model, but
+                # note it evaluates true for "en" too -- English must be excluded explicitly below,
+                # since IndicConformer is not meant to transcribe English (see the selected_lang=="en"
+                # branch above, which always routes explicit English to the faster-whisper fallback).
                 primary_accepts_detected_lang = bool(detected_lang) and (
                     engine.resolve_lang(detected_lang, allow_auto=True) == detected_lang
                 )
-                should_route_to_primary = (
-                    detected_lang in options.auto_route_primary_langs
-                    and primary_accepts_detected_lang
-                    and detected_confidence is not None
-                    and detected_confidence >= options.auto_route_min_confidence
+                should_route_to_primary, route_reason = decide_auto_route_to_primary(
+                    detected_lang,
+                    detected_confidence,
+                    primary_accepts_detected_lang,
+                    options.auto_route_min_confidence,
                 )
-                if should_route_to_primary:
-                    route_reason = "detected_primary_language"
-                elif (
-                    detected_lang
-                    and detected_lang != "en"
-                    and is_supported_lang(detected_lang)
-                    and options.auto_route_indic_fallback_lang
-                    and detected_confidence is not None
-                    and detected_confidence >= options.auto_route_min_confidence
-                    and engine.resolve_lang(options.auto_route_indic_fallback_lang, allow_auto=True)
-                    == options.auto_route_indic_fallback_lang
-                ):
-                    route_lang = options.auto_route_indic_fallback_lang
-                    should_route_to_primary = True
-                    route_reason = "indic_fallback_language"
                 if should_route_to_primary:
                     log.info(
                         "Routing auto-detected language to primary engine",
@@ -498,10 +476,10 @@ def process_message(
                         },
                     )
                     try:
-                        routed_result = engine.transcribe(wav_tensor, route_lang)
+                        routed_result = engine.transcribe(wav_tensor, detected_lang)
                         if not routed_result.get("language"):
                             routed_result = dict(routed_result)
-                            routed_result["language"] = route_lang
+                            routed_result["language"] = detected_lang
                         result = routed_result
                         used_engine = engine
                     except TranscribeError as route_exc:
@@ -522,14 +500,6 @@ def process_message(
                         result = fallback_result
                         used_engine = fallback_engine
                 else:
-                    if not detected_lang:
-                        route_reason = "missing_detected_language"
-                    elif detected_lang in options.auto_route_primary_langs and not primary_accepts_detected_lang:
-                        route_reason = "unsupported_primary_language"
-                    elif detected_confidence is None:
-                        route_reason = "missing_detection_confidence"
-                    elif detected_confidence < options.auto_route_min_confidence:
-                        route_reason = "low_detection_confidence"
                     log.info(
                         "Keeping fallback transcript after auto-detect",
                         extra={
@@ -805,23 +775,18 @@ def initialize_engines(settings: Settings) -> Tuple[BaseEngine, Optional[BaseEng
     requested_engine = _normalize_engine_name(os.getenv("STT_ENGINE", ENGINE_INDICCONFORMER))
     default_lang = (os.getenv("STT_DEFAULT_LANG", "auto") or "auto").strip().lower()
     asr_revision = (os.getenv("ASR_MODEL_REVISION") or "").strip() or None
-    indic_fallback_lang = canonical_lang_code(os.getenv("STT_AUTO_ROUTE_INDIC_FALLBACK_LANG", "mr"))
-    if not is_supported_lang(indic_fallback_lang):
-        indic_fallback_lang = None
 
     options = RuntimeOptions(
         default_lang=default_lang,
         download_retries=max(0, int(os.getenv("AUDIO_DOWNLOAD_RETRIES", "2"))),
         download_backoff_sec=max(0.1, float(os.getenv("AUDIO_DOWNLOAD_BACKOFF_SEC", "0.5"))),
         fallback_enabled=_env_bool("STT_ENABLE_FALLBACK", True),
-        auto_route_primary_langs=_parse_lang_csv(os.getenv("STT_AUTO_ROUTE_PRIMARY_LANGS", "mr,hi"), ("mr", "hi")),
         auto_route_min_confidence=_env_float_clamped(
             "STT_AUTO_ROUTE_MIN_CONFIDENCE",
             0.30,
             minimum=0.0,
             maximum=1.0,
         ),
-        auto_route_indic_fallback_lang=indic_fallback_lang,
     )
 
     if requested_engine == ENGINE_FASTERWHISPER:

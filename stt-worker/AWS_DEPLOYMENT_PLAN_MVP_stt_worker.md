@@ -97,9 +97,7 @@ AWS_REGION=ap-south-1
 STT_ENGINE=indicconformer
 STT_ENABLE_FALLBACK=true
 STT_DEFAULT_LANG=auto
-STT_AUTO_ROUTE_PRIMARY_LANGS=mr,hi
 STT_AUTO_ROUTE_MIN_CONFIDENCE=0.30
-STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=mr
 MODEL_SIZE=small
 WORKER_CONCURRENCY=1
 LOG_LEVEL=INFO
@@ -177,9 +175,7 @@ echo "ASR_MODEL_PATH=<$ASR_MODEL_PATH>"
 echo "ASR_MODEL_ID=<$ASR_MODEL_ID>"
 echo "HF_HOME=<$HF_HOME>"
 echo "STT_DEFAULT_LANG=<$STT_DEFAULT_LANG>"
-echo "STT_AUTO_ROUTE_PRIMARY_LANGS=<$STT_AUTO_ROUTE_PRIMARY_LANGS>"
 echo "STT_AUTO_ROUTE_MIN_CONFIDENCE=<$STT_AUTO_ROUTE_MIN_CONFIDENCE>"
-echo "STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=<$STT_AUTO_ROUTE_INDIC_FALLBACK_LANG>"
 echo "STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<$STT_ALLOW_RUNTIME_MODEL_DOWNLOAD>"
 echo "STT_ENABLE_FALLBACK=<$STT_ENABLE_FALLBACK>"
 echo "COMPUTE_VARIANT=<$COMPUTE_VARIANT>"
@@ -193,9 +189,7 @@ Expected:
 ASR_MODEL_ID=<ai4bharat/indic-conformer-600m-multilingual>
 HF_HOME=</models/hf>
 STT_DEFAULT_LANG=<auto>
-STT_AUTO_ROUTE_PRIMARY_LANGS=<mr,hi>
 STT_AUTO_ROUTE_MIN_CONFIDENCE=<0.30>
-STT_AUTO_ROUTE_INDIC_FALLBACK_LANG=<mr>
 STT_ALLOW_RUNTIME_MODEL_DOWNLOAD=<true>
 STT_ENABLE_FALLBACK=<true>
 COMPUTE_VARIANT=<cpu>
@@ -311,7 +305,7 @@ That is the only change required to switch from CPU to GPU.
 
 ## Notes
 
-- `STT_DEFAULT_LANG=auto` — unknown language jobs use a FasterWhisper pre-pass before routing Marathi/Hindi to IndicConformer.
+- `STT_DEFAULT_LANG=auto` — jobs without an explicit language hint use a FasterWhisper pre-pass to detect the spoken language, then route to IndicConformer whenever it supports that detected language (not limited to Marathi/Hindi); English stays on the FasterWhisper transcript.
 - `STT_ENABLE_FALLBACK=true` — FasterWhisper is used only when IndicConformer fails, not as default.
 - `COMPUTE_TYPE` — leave blank; engines auto-select `int8` on CPU and `float16` on CUDA.
 - First startup takes longer due to model download. Subsequent restarts are fast because `/opt/stt-worker/models` is persisted on the host.

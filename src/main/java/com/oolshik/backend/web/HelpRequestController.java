@@ -138,15 +138,15 @@ public class HelpRequestController {
         service.seedCandidatesAndNotify(created);
         TranscriptionJobEntity job = null;
         if (created.getAudioFileId() != null || (created.getVoiceUrl() != null && !created.getVoiceUrl().isBlank())) {
-            String langHint = requester.getPreferredLanguage();
-            if (langHint == null || langHint.isBlank() || langHint.equalsIgnoreCase("auto")) {
-                langHint = "mr";
-            }
+            // The user's UI display-language preference is not a signal for what language this
+            // specific recording is in, so it must not be used as the STT language hint. Always
+            // request auto-detection explicitly (not null) so the worker's outcome doesn't depend
+            // on a deployment's STT_DEFAULT_LANG default.
             job = transcriptionJobService.createOrGet(
                     created.getId(),
                     transcriptionAudioFileId,
                     transcriptionAudioUrl,
-                    langHint,
+                    "auto",
                     TRANSCRIPTION_ENGINE,
                     TRANSCRIPTION_MODEL_VERSION
             );
